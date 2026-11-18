@@ -3,17 +3,24 @@
  * INDULGE PLAYAS CLUB — contact API
  * ---------------------------------
  * Tiny zero-dependency Node server that relays "SEND US A MESSAGE" form
- * posts to EmailJS. Deploy it on Render (free plan works) and keep the three
- * EmailJS values in Render's Environment settings — they are never written
- * into this file, so nothing secret is ever pushed to GitHub.
+ * posts to EmailJS. Deploy it on Render or Google Cloud Run (both have free
+ * tiers that cover this easily) and keep the three EmailJS values in the
+ * host's Environment settings — they are never written into this file, so
+ * nothing secret is ever pushed to GitHub.
  *
- * Environment variables (Render dashboard → your service → Environment):
+ * Environment variables (Render → Environment, or Cloud Run → EDIT & DEPLOY
+ * NEW REVISION → Variables & Secrets):
  *   EMAILJS_PUBLIC_KEY    — EmailJS Account → API keys → Public Key
  *   EMAILJS_SERVICE_ID    — service_…
  *   EMAILJS_TEMPLATE_ID   — template_…
  *
  * Endpoints:
- *   GET  /              → { ok: true } (health check)
+ *   GET  /healthz       → { ok: true } (health check)
+ *   GET  /              → serves the website if a copy of index.html sits
+ *                         next to this file (Google Cloud Run "site + relay
+ *                         in one service" mode); otherwise returns the
+ *                         health-check JSON
+ *   GET  /index.html    → same as /
  *   POST /api/contact   → relays { from_name, reply_to, message } to EmailJS
  *   POST /contact       → same as /api/contact
  *
@@ -22,6 +29,8 @@
  */
 
 const http = require("node:http");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const PORT = process.env.PORT || 3000;
 const EMAILJS_URL = "https://api.emailjs.com/api/v1.0/email/send";
@@ -48,6 +57,28 @@ function rateLimited(ip) {
   return false;
 }
 
+/* Optional single-service mode: drop a copy of the site's index.html next to
+ * this file and GET / serves the whole website from this same service —
+ * site + contact API in one deploy, one URL (nice on Google Cloud Run).
+ * Without index.html the root simply answers the health-check JSON, exactly
+ * like the plain Render relay setup. */
+const INDEX_FILE = path.join(__dirname, "index.html");
+const HEALTH = { ok: true, service: "indulge playas club — contact api" };
+
+function serveIndex(res) {
+  try {
+    const html = fs.readFileSync(INDEX_FILE);
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=300",
+    });
+    res.end(html);
+    return true;
+  } catch {
+    return false; // no index.html here → caller falls back to the health JSON
+  }
+}
+
 function send(res, status, obj) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -64,7 +95,13 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === "GET") {
-    return send(res, 200, { ok: true, service: "indulge playas club — contact api" });
+    const p = (req.url || "").split("?")[0];
+    if (p === "/healthz") return send(res, 200, HEALTH);
+    if (p === "/" || p === "/index.html") {
+      if (serveIndex(res)) return;
+      return send(res, 200, HEALTH);
+    }
+    return send(res, 404, { ok: false, reason: "not_found" });
   }
 
   if (req.method !== "POST") {
