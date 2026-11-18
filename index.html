@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-18 10:43 -->
+<!-- IPC BUILD 2026-11-18 11:36 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -1026,12 +1026,50 @@ html:not(.js) .tex{animation:drift 90s linear infinite alternate}
 </footer>
 
 <script>
+/* BLOCK 1 — CORE + ANIMATIONS (runs first, fully standalone): footer year +
+   the scroll-reveal system. Nothing here depends on any other block, so the
+   content always reveals and the site always animates — even if every other
+   block on the page fails. */
 (function () {
+  try {
+    var $ = function (s, c) { return (c || document).querySelector(s); };
+    var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+
+    /* footer year */
+    $('#year').textContent = new Date().getFullYear();
+
+    /* scroll reveal */
+    if (!('IntersectionObserver' in window)) {
+      $$('.reveal,.reveal-sm,.reveal-x').forEach(function (el) { el.classList.add('in'); });
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add('in');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+      $$('.reveal,.reveal-sm,.reveal-x').forEach(function (el) { io.observe(el); });
+    }
+    window.__ipcRevealsWired = true;
+  } catch (err) {
+    if (window.console) console.error('IPC core init:', err);
+    /* worst case: show everything and let the CSS fallback handle it */
+    document.documentElement.classList.remove('js');
+  }
+})();
+</script>
+<script>
+/* BLOCK 2 — NAV + SCROLL: nav hide/show, scroll progress bar, parallax,
+   mobile menu, smooth scrolling, active nav link. Independent of the
+   animation block above and the message box below — if this block fails,
+   they still work. */
+(function () {
+  try {
   var $ = function (s, c) { return (c || document).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
-
-  /* footer year */
-  $('#year').textContent = new Date().getFullYear();
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* nav + parallax on scroll */
   var nav = $('#nav');
@@ -1165,6 +1203,19 @@ html:not(.js) .tex{animation:drift 90s linear infinite alternate}
     var s = document.getElementById(id);
     if (s) secObs.observe(s);
   });
+  } catch (err) {
+    if (window.console) console.error('IPC nav init:', err);
+  }
+})();
+</script>
+<script>
+/* BLOCK 3 — MESSAGE BOX: relays the form to the club's Render backend (the
+   contact server). Fully independent of the animation and nav code above —
+   if this block fails, nothing else on the page is affected, and whatever
+   fails anywhere else, the message box still works. */
+(function () {
+  try {
+  var $ = function (s, c) { return (c || document).querySelector(s); };
 
   /* ---- message box → club inbox (via the club's Render backend) ----
      The EmailJS keys live ONLY in the Render environment variables — they are
@@ -1237,22 +1288,19 @@ html:not(.js) .tex{animation:drift 90s linear infinite alternate}
       });
     });
   }
-
-  /* scroll reveal */
-  if (!('IntersectionObserver' in window)) {
-    $$('.reveal,.reveal-sm,.reveal-x').forEach(function (el) { el.classList.add('in'); });
-  } else {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) {
-          e.target.classList.add('in');
-          io.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-    $$('.reveal,.reveal-sm,.reveal-x').forEach(function (el) { io.observe(el); });
+  } catch (err) {
+    if (window.console) console.error('IPC form init:', err);
   }
 })();
+</script>
+<script>
+/* failsafe: if the main script ever dies before wiring the scroll reveals
+   (e.g. a truncated copy of this file got uploaded somewhere), drop the .js
+   class so every section shows and the CSS fallback takes over — content
+   can never stay invisible. */
+setTimeout(function () {
+  if (!window.__ipcRevealsWired) document.documentElement.classList.remove('js');
+}, 1200);
 </script>
 </body>
 </html>
