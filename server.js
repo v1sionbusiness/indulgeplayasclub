@@ -31,6 +31,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { checkConnection: checkSupabaseConnection } = require("./ipc-pay/supabase");
 
 const PORT = process.env.PORT || 3000;
 const EMAILJS_URL = "https://api.emailjs.com/api/v1.0/email/send";
@@ -96,6 +97,20 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET") {
     const p = (req.url || "").split("?")[0];
+    if (p === "/api/ipc-pay/health") {
+      return checkSupabaseConnection()
+        .then(() => send(res, 200, { ok: true, database: "connected" }))
+        .catch((err) => {
+          const status = err.code === "SUPABASE_NOT_CONFIGURED" ||
+            err.code === "SUPABASE_CONFIG_INVALID" ? 503 : 502;
+          console.error("IPC Pay database check failed:", err.message);
+          return send(res, status, {
+            ok: false,
+            database: "unavailable",
+            reason: err.code || "SUPABASE_REQUEST_FAILED",
+          });
+        });
+    }
     if (p === "/healthz") return send(res, 200, HEALTH);
     if (p === "/" || p === "/index.html") {
       if (serveIndex(res)) return;
