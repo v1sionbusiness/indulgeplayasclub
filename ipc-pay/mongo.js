@@ -1,0 +1,272 @@
+"use strict";
+/*
+ * INDULGE PLAYAS CLUB — MongoDB Atlas connection (IPC accounts + IPC Pay)
+ * -----------------------------------------------------------------------
+ * Everything the shop stores lives in MongoDB Atlas as collections and
+ * documents — no SQL, no tables, no migration scripts. One connection
+ * string (MONGODB_URI) is the whole setup.
+ *
+ * Collections (created automatically on first use):
+ *   users     — { email, name, salt, hash, role: "customer"|"admin", createdAt }
+ *   sessions  — { token, userId, email, expiresAt }   (auto-deleted when expired)
+ *   counters  — { _id: "order"|"payment", seq }        (reference numbers)
+ *   orders    — one document per order, money in integer centavos
+ *   payments  — one document per IPC Pay payment, money in integer centavos
+ *
+ * Environment variables:
+ *   MONGODB_URI       — Atlas → Connect → Drivers → the mongodb+srv://… string
+ *   MONGODB_DB        — database name (default: "ipc")
+ *   ADMIN_EMAIL       — admin account email  (seeded automatically on boot)
+ *   ADMIN_PASSWORD    — admin account password (seeded automatically on boot)
+ *   ADMIN_NAME        — admin display name (default: "Club Admin")
+ *   ADMIN_RESET_PASSWORD — set to "true" to force-reset the admin password
+ *                        to ADMIN_PASSWORD on boot (ignored otherwise)
+ *
+ * Security notes:
+ *   - Passwords are hashed with scrypt (node:crypto) + a per-user random
+ *     salt. No plaintext password is ever stored.
+ *   - Sessions are 48-hex-char random tokens with a 30-day expiry; the TTL
+ *     index makes MongoDB delete expired sessions automatically.
+ *   - NOTHING in this file can ever flip a payment to "paid" by itself.
+ *     Only POST /api/admin/decision — which requires a logged-in admin —
+ *     can approve or reject a payment. A customer uploading proof moves
+ *     their payment to "under_verification", never further.
+ */
+
+const crypto = require("node:crypto");
+const { MongoClient, ServerApiVersion } = require("mongodb");
+
+const URI = (process.env.MONGODB_URI || "").trim();
+const DB_NAME = (process.env.MONGODB_DB || "ipc").trim();
+
+let client = null;
+let database = null;
+let initPromise = null;
+
+/* ---------------------------------------------------------------- */
+/* Errors                                                           */
+/* ---------------------------------------------------------------- */
+
+function notConfiguredError() {
+  const err = new Error("MONGODB_URI is not set — IPC accounts are offline.");
+  err.code = "MONGO_NOT_CONFIGURED";
+  return err;
+}
+
+/* ---------------------------------------------------------------- */
+/* Connection                                                       */
+/* ---------------------------------------------------------------- */
+
+function connect() {
+  if (!URI) return Promise.reject(notConfiguredError());
+  if (database) return Promise.resolve(database);
+  if (!client) {
+    client = new MongoClient(URI, {
+      serverApi: { version: ServerApiVersion.v1, strict: false, deprecationErrors: false },
+      maxPoolSize: 5,
+    });
+  }
+  return client.connect().then(() => {
+    database = client.db(DB_NAME);
+    return database;
+  });
+}
+
+/** One-time boot: connect + indexes + admin seeding. Safe to call twice. */
+function initDatabase() {
+  if (!initPromise) {
+    initPromise = connect()
+      .then((d) => ensureIndexes(d))
+      .then((d) => seedAdmin(d))
+      .then((d) => d);
+  }
+  return initPromise;
+}
+
+async function ensureIndexes(d) {
+  /* one at a time — a hiccup on one index must never block the admin seed */
+  const specs = [
+    ["users", { email: 1 }, { unique: true }],
+    ["sessions", { token: 1 }, { unique: true }],
+    ["sessions", { expiresAt: 1 }, { expireAfterSeconds: 0 }], /* TTL — expired sessions delete themselves */
+    ["orders", { reference: 1 }, { unique: true }],
+    ["orders", { userId: 1, createdAt: -1 }, {}],
+    ["payments", { paymentReference: 1 }, { unique: true }],
+    ["payments", { orderReference: 1 }, {}],
+  ];
+  for (const [coll, key, opts] of specs) {
+    try {
+      await d.collection(coll).createIndex(key, opts);
+    } catch (err) {
+      /* index already exists with different options → fine to ignore,
+         anything else gets logged but does not stop the boot sequence */
+      console.log(`[ipc-pay] index ${coll}:${JSON.stringify(key)} skipped:`, err.message);
+    }
+  }
+  return d;
+}
+
+/** Health check for /api/ipc-pay/health. */
+function checkConnection() {
+  if (!URI) return Promise.reject(notConfiguredError());
+  return connect()
+    .then((d) => d.command({ ping: 1 }))
+    .then(() => undefined);
+}
+
+/* ---------------------------------------------------------------- */
+/* Password hashing (scrypt — built into Node, no extra packages)   */
+/* ---------------------------------------------------------------- */
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, hash) {
+  try {
+    const candidate = crypto.scryptSync(String(password), salt, 64);
+    const stored = Buffer.from(hash, "hex");
+    return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
+  } catch {
+    return false;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Sessions                                                         */
+/* ---------------------------------------------------------------- */
+
+const SESSION_DAYS = 30;
+
+function createSession(user) {
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  return connect().then((d) =>
+    d.collection("sessions").insertOne({
+      token,
+      userId: user._id,
+      email: user.email,
+      createdAt: now,
+      expiresAt,
+    })
+  ).then(() => token);
+}
+
+function findSession(token) {
+  return connect().then((d) =>
+    d.collection("sessions").findOne({
+      token,
+      expiresAt: { $gt: new Date() },
+    })
+  );
+}
+
+function deleteSession(token) {
+  return connect().then((d) => d.collection("sessions").deleteOne({ token }));
+}
+
+/* ---------------------------------------------------------------- */
+/* Users                                                            */
+/* ---------------------------------------------------------------- */
+
+function findUserByEmail(email) {
+  return connect().then((d) =>
+    d.collection("users").findOne({ email: String(email).toLowerCase() })
+  );
+}
+
+function findUserById(id) {
+  return connect().then((d) => d.collection("users").findOne({ _id: id }));
+}
+
+function insertUser({ email, name, password, role }) {
+  const { salt, hash } = hashPassword(password);
+  const doc = {
+    email: String(email).toLowerCase(),
+    name: String(name),
+    salt,
+    hash,
+    role: role === "admin" ? "admin" : "customer",
+    createdAt: new Date(),
+  };
+  return connect().then((d) => d.collection("users").insertOne(doc)).then(() => doc);
+}
+
+/**
+ * Admin account seeding — runs once on boot.
+ * Set ADMIN_EMAIL + ADMIN_PASSWORD in Render → Environment and the club's
+ * admin login exists automatically. An existing admin is left alone unless
+ * ADMIN_RESET_PASSWORD=true (then the password gets reset to ADMIN_PASSWORD).
+ */
+function seedAdmin(d) {
+  const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || "";
+  const name = (process.env.ADMIN_NAME || "Club Admin").trim();
+  if (!email || !password) {
+    console.log("[ipc-pay] ADMIN_EMAIL / ADMIN_PASSWORD not set — no admin account seeded.");
+    return Promise.resolve(d);
+  }
+  const users = d.collection("users");
+  return users
+    .findOne({ email })
+    .then((existing) => {
+      if (!existing) {
+        const { salt, hash } = hashPassword(password);
+        return users.insertOne({
+          email,
+          name,
+          salt,
+          hash,
+          role: "admin",
+          createdAt: new Date(),
+        }).then(() => console.log(`[ipc-pay] admin account created: ${email}`));
+      }
+      if (existing.role !== "admin") {
+        return users.updateOne({ _id: existing._id }, { $set: { role: "admin" } })
+          .then(() => console.log(`[ipc-pay] existing account promoted to admin: ${email}`));
+      }
+      if (String(process.env.ADMIN_RESET_PASSWORD).toLowerCase() === "true") {
+        const { salt, hash } = hashPassword(password);
+        return users.updateOne({ _id: existing._id }, { $set: { salt, hash } })
+          .then(() => console.log(`[ipc-pay] admin password reset: ${email}`));
+      }
+      console.log(`[ipc-pay] admin account ready: ${email}`);
+      return undefined;
+    })
+    .then(() => d);
+}
+
+/* ---------------------------------------------------------------- */
+/* Reference numbers — IPC-00001, IPCP-00001                        */
+/* ---------------------------------------------------------------- */
+
+function nextReference(prefix) {
+  return connect().then((d) =>
+    d.collection("counters").findOneAndUpdate(
+      { _id: prefix },
+      { $inc: { seq: 1 } },
+      { upsert: true, returnDocument: "after" }
+    )
+  ).then((r) => `${prefix === "order" ? "IPC" : "IPCP"}-${String(r.seq).padStart(5, "0")}`);
+}
+
+/* ---------------------------------------------------------------- */
+
+module.exports = {
+  connect,
+  initDatabase,
+  checkConnection,
+  hashPassword,
+  verifyPassword,
+  createSession,
+  findSession,
+  deleteSession,
+  findUserByEmail,
+  findUserById,
+  insertUser,
+  nextReference,
+  MONGO_NOT_CONFIGURED: "MONGO_NOT_CONFIGURED",
+};
