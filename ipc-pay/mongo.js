@@ -53,6 +53,44 @@ function notConfiguredError() {
   return err;
 }
 
+/* Plain-English sanity check for MONGODB_URI. Driver errors like
+   "bad auth : authentication failed" are cryptic — these hints print
+   the actual fix on the Render log and in /api/ipc-pay/health. */
+function uriHints(u) {
+  const hints = [];
+  if (!u) {
+    hints.push("MONGODB_URI is empty — paste the Atlas connection string in Render → Environment.");
+    return hints;
+  }
+  if (!/^mongodb(\+srv)?:\/\//.test(u)) {
+    hints.push('the URI must start with "mongodb+srv://" or "mongodb://" — copy it again from Atlas → Connect.');
+  }
+  if (u.indexOf("<db_password>") !== -1) {
+    hints.push('the URI still contains "<db_password>" — replace it (including the < > brackets) with your real database password.');
+  }
+  if (/[<>"'`\\ ]/.test(u)) {
+    hints.push('the URI contains <, >, quotes or spaces — remove them; angle brackets and quotes are template placeholders, never part of the password.');
+  }
+  if (u.indexOf("@") === -1) {
+    hints.push("the URI is missing the user:password part — use the connection string from Atlas → Connect.");
+  }
+  const m = u.match(/^mongodb(?:\+srv)?:\/\/([^:@]*):([^@]*)@/);
+  if (m && m[2]) {
+    let pw = m[2];
+    try {
+      pw = decodeURIComponent(pw);
+    } catch (e) {
+      hints.push("the password part is not valid URL-encoding — easiest fix: set a LETTERS+NUMBERS ONLY password in Atlas.");
+    }
+    if (m[2] === "<db_password>") {
+      /* already covered above */
+    } else if (/[ @#/?%&+:;"'<>\\]/.test(pw)) {
+      hints.push("the password contains special characters or brackets — Atlas → Database Access → Edit → Edit Password → use LETTERS+NUMBERS ONLY → Update User, then put that bare password (no < > brackets) into the URI.");
+    }
+  }
+  return hints;
+}
+
 /* ---------------------------------------------------------------- */
 /* Connection                                                       */
 /* ---------------------------------------------------------------- */
@@ -69,6 +107,9 @@ function connect() {
   return client.connect().then(() => {
     database = client.db(DB_NAME);
     return database;
+  }).catch((err) => {
+    err.hints = uriHints(URI); /* carry the plain-English fix with the error */
+    throw err;
   });
 }
 
@@ -259,6 +300,7 @@ module.exports = {
   connect,
   initDatabase,
   checkConnection,
+  uriHints,
   hashPassword,
   verifyPassword,
   createSession,
