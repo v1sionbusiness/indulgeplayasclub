@@ -56,7 +56,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const {
-  initDatabase, checkConnection,
+  initDatabase, checkConnection, uriHints,
   createSession, findSession, deleteSession,
   findUserByEmail, findUserById, insertUser,
   nextReference,
@@ -288,10 +288,12 @@ async function route(req, res) {
         .catch((err) => {
           const status = err.code === "MONGO_NOT_CONFIGURED" ? 503 : 502;
           console.error("IPC Pay database check failed:", err.message);
+          const hints = (err && err.hints && err.hints.length) ? err.hints : uriHints(process.env.MONGODB_URI);
           return send(res, status, {
             ok: false,
             database: "unavailable",
             reason: err.code || "MONGO_REQUEST_FAILED",
+            hints: hints,
           });
         });
     }
@@ -878,6 +880,8 @@ server.listen(PORT, () => {
         console.log("[ipc-pay] MONGODB_URI not set — contact relay only, accounts offline.");
       } else {
         console.error("[ipc-pay] Mongo init failed:", err && err.message);
+        const hints = (err && err.hints && err.hints.length) ? err.hints : uriHints(process.env.MONGODB_URI);
+        hints.forEach((h) => console.error("[ipc-pay] FIX: " + h));
       }
     });
 });
