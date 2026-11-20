@@ -118,20 +118,8 @@ const HEALTH = { ok: true, service: "indulge playas club — contact api" };
 function serveIndex(res) {
   try {
     let html = fs.readFileSync(INDEX_FILE, "utf8");
-    const packed = Buffer.from("/v9FlxC/wS6LpVnQbqP8ZI9rt1jPGmGl26skv4lC7BB8sW4xB/qqqqqq/gDstHr0APLdD/pQTrxzos1GOlOMlhTJcIsnBHJH0Wlsl60wiDYg/lesGuVokEj9f9khqYuVaoEWqlZE1r16cfukGMkmz9wZGrV+BwwDo74EKryAl3FBgIkAGCmr/uQGDVf9EdFEA7EU6oQiI22uzHWQEOlEm/EQMPC/woekAEoYg+AlADkg/mtIgAsNHqympFM+0otPvroeemrBCbomygjco02EsnWXDVitEAM01gYnjkXz5dkxkynrkkEm/sUbzrk9+BDhFkbVoIHid9P30PkAWnkeMkV/hk2s7+owRNNH85Erpkl+wg/d1ae60OXa6+p0iGEnBTaGAzEs/qy9hQlFgA==", "base64");
-    let pathData = "";
-    for (let y = 0; y < 49; y++) {
-      for (let x = 0; x < 49; x++) {
-        const bit = y * 49 + x;
-        if ((packed[Math.floor(bit / 8)] >> (7 - (bit % 8))) & 1) {
-          pathData += "M" + (x + 4) + " " + (y + 4) + "h1v1h-1z";
-        }
-      }
-    }
-    const qrSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 57 57" shape-rendering="crispEdges"><rect width="57" height="57" fill="#fff"/><path d="' + pathData + '" fill="#000"/></svg>';
-    const qrSrc = "data:image/svg+xml;base64," + Buffer.from(qrSvg).toString("base64");
-    html = html.replace(/(<img\b[^>]*class=["'][^"']*\bqr-img\b[^"']*["'][^>]*\bsrc=["'])[^"']*(["'])/gi, "$1" + qrSrc + "$2");
-    html = html.replace(/ipc-pay-qr\.jpg/gi, qrSrc);
+    /* Keep the checkout QR as a clearly marked placeholder until the
+       merchant's actual QR image is uploaded and installed. */
     const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){if(window.IPC){window.IPC.API="https://indulgeplayasclub.onrender.com";}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
     html = html.replace(/<\/body>/i, loginFix + "</body>");
     res.writeHead(200, {
