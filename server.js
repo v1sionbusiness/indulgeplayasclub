@@ -95,7 +95,7 @@ function rateLimited(ip, limit, windowMs, bucket) {
 /* --------------------------------------------------------------- */
 
 const PRODUCTS = [
-  { id: "hoodie-001",   name: "CLUB HOODIE 001",    priceCentavos: 145000, sizes: ["S","M","L","XL"],   colors: ["WASHED BLACK"] },
+  { id: "hoodie-001",   name: "OG LOGO HOODIE",     priceCentavos: 120000, sizes: ["S","M","L","XL"],   colors: ["JET BLACK"] },
   { id: "court-tee",    name: "COURT TEE",          priceCentavos:  75000, sizes: ["S","M","L","XL"],   colors: ["COURT WHITE"] },
   { id: "varsity-26",   name: "VARSITY '26",        priceCentavos: 280000, sizes: ["M","L","XL"],       colors: ["BLACK / WHITE"] },
   { id: "utility-cargo",name: "UTILITY CARGO",      priceCentavos: 180000, sizes: ["S","M","L","XL"],   colors: ["JET BLACK"] },
@@ -399,8 +399,12 @@ async function route(req, res) {
           });
         }
         if (p === "/api/admin/payments") {
+          /* ?scope=all → the full record (paid + failed + waiting). Nothing is
+             ever deleted — a failed purchase stays visible to the admins. */
+          const scopeAll = /([?&])scope=all(&|$)/.test(req.url || "");
+          const filter = scopeAll ? {} : { status: { $in: ["under_verification", "pending"] } };
           const pays = await d.collection("payments")
-            .find({ status: { $in: ["under_verification", "pending"] } })
+            .find(filter)
             .sort({ createdAt: -1 })
             .limit(200)
             .toArray();
