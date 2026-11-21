@@ -614,10 +614,9 @@ async function sendPaymentEmail(pay, order, status, detail) {
 /* CONTACT RELAY — behavior preserved exactly                       */
 /* --------------------------------------------------------------- */
 
+const recentContactSubmissions = new Map();
+
 function handleContact(req, res, ip) {
-  if (rateLimited(ip, 5, 60 * 60 * 1000, "contact")) {
-    return send(res, 429, { ok: false, reason: "rate_limited" });
-  }
   let raw = "";
   let dead = false;
   req.on("data", (chunk) => {
@@ -638,7 +637,7 @@ function handleContact(req, res, ip) {
       return send(res, 400, { ok: false, reason: "bad_request" });
     }
 
-    /* honeypot — bots get a fake success so they move on */
+    /* Honeypot — bots receive a fake success. */
     if (typeof body.cf_hp === "string" && body.cf_hp.trim() !== "") {
       return send(res, 200, { ok: true });
     }
@@ -655,14 +654,34 @@ function handleContact(req, res, ip) {
       return send(res, 422, { ok: false, reason: "invalid" });
     }
 
+    /* Ignore accidental double-clicks/retries for the same message. */
+    const duplicateKey = [ip, fromName.toLowerCase(), replyTo.toLowerCase(), message].join("|");
+    const lastSent = recentContactSubmissions.get(duplicateKey);
+    if (lastSent && Date.now() - lastSent < 90000) {
+      return send(res, 200, { ok: true, duplicate: true });
+    }
+
+    if (rateLimited(ip, 5, 60 * 60 * 1000, "contact")) {
+      return send(res, 429, { ok: false, reason: "rate_limited" });
+    }
+
     const publicKey = process.env.EMAILJS_PUBLIC_KEY || "";
     const serviceId = process.env.EMAILJS_SERVICE_ID || "";
     const templateId = process.env.EMAILJS_TEMPLATE_ID || "";
     const confirmationTemplateId = process.env.EMAILJS_CONFIRMATION_TEMPLATE_ID || "";
-    if (!publicKey || !serviceId || !templateId || !confirmationTemplateId) {
+    /* The business notification is the essential flow. A missing customer
+       confirmation template must never block a valid contact message. */
+    if (!publicKey || !serviceId || !templateId) {
+      console.error("[contact] missing required EmailJS configuration:", {
+        publicKey: Boolean(publicKey),
+        serviceId: Boolean(serviceId),
+        businessTemplateId: Boolean(templateId),
+      });
       return send(res, 503, { ok: false, reason: "not_configured" });
     }
 
+    const emailPattern = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+    const hasCustomerEmail = emailPattern.test(replyTo);
     const templateParams = {
       from_name: fromName,
       reply_to: replyTo,
@@ -682,22 +701,50 @@ function handleContact(req, res, ip) {
         }),
         signal: AbortSignal.timeout(15000),
       });
+      const detail = await response.text().catch(() => "");
       if (!response.ok) {
-        const detail = await response.text().catch(() => "");
-        throw new Error("EmailJS responded " + response.status + (detail ? ": " + detail.slice(0, 300) : ""));
+        throw new Error("EmailJS HTTP " + response.status + (detail ? ": " + detail.slice(0, 400) : ""));
       }
+      return detail;
     }
 
     try {
-      /* Notify IPC and send the customer an acknowledgement using the same
-         validated form fields. The confirmation template's To Email must be
-         set to {{reply_to}} in EmailJS. */
+      /* Send the IPC inbox notification first. This is the primary success
+         condition shown to the visitor. */
       await sendContactEmail(templateId);
-      await sendContactEmail(confirmationTemplateId);
-      return send(res, 200, { ok: true });
+      recentContactSubmissions.set(duplicateKey, Date.now());
+      if (recentContactSubmissions.size > 1000) {
+        const cutoff = Date.now() - 90000;
+        for (const [key, timestamp] of recentContactSubmissions) {
+          if (timestamp < cutoff) recentContactSubmissions.delete(key);
+        }
+      }
+
+      /* Send the customer acknowledgement only when an actual email address
+         was supplied. Facebook names/handles remain valid contact details
+         for the business notification but cannot receive email. */
+      let confirmationSent = false;
+      if (confirmationTemplateId && hasCustomerEmail) {
+        try {
+          await sendContactEmail(confirmationTemplateId);
+          confirmationSent = true;
+        } catch (err) {
+          console.error("[contact] customer confirmation failed after business email succeeded:", err.message);
+        }
+      } else if (!confirmationTemplateId) {
+        console.warn("[contact] customer confirmation skipped: EMAILJS_CONFIRMATION_TEMPLATE_ID is not configured.");
+      } else {
+        console.info("[contact] customer confirmation skipped: contact detail is not an email address.");
+      }
+
+      return send(res, 200, {
+        ok: true,
+        businessEmailSent: true,
+        customerConfirmationSent: confirmationSent,
+      });
     } catch (err) {
-      console.error("contact email flow failed:", err.message);
-      return send(res, 502, { ok: false, reason: "send_failed" });
+      console.error("[contact] business notification failed:", err.message);
+      return send(res, 502, { ok: false, reason: "business_email_failed" });
     }
   });
 }
