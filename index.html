@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-21 17:10 -->
+<!-- IPC BUILD 2026-11-21 19:20 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -1435,7 +1435,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   <div class="terms-wrap">
     <p class="kicker reveal-sm">THE PAPERWORK</p>
     <h2 class="terms-title reveal">Terms &amp;<br /><span class="ts">conditions.</span></h2>
-    <p class="terms-updated reveal-sm" style="--d:.15s">LAST UPDATED — NOVEMBER 2026 &middot; THE PLAIN-ENGLISH VERSION</p>
+    <p class="terms-updated reveal-sm" style="--d:.15s">LAST UPDATED — NOVEMBER 2026</p>
 
     <div class="terms-short reveal-sm" style="--d:.2s">
       <p>THE SHORT VERSION: buy through the shop, pay with IPC Pay (QR), the club verifies every payment by hand, and your order ships free anywhere in the Philippines. Pre-orders are produced in their window and ship when the run lands. Every verified purchase levels you up — ROOKIE, HOMIE, OG, VIP — with perks at each level. Be straight with us and we'll be straight with you.</p>
@@ -1912,18 +1912,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
      ================================================================ -->
 <div class="view" id="v-account">
   <div class="acct-wrap">
-    <div id="acctGate">
-      <p class="kicker reveal-sm">MY ACCOUNT</p>
-      <h2 class="acct-title reveal">Members only<span class="dim">.</span></h2>
-      <div class="auth-gate">
-        <h3>Log in to your account.</h3>
-        <p>ORDER HISTORY, IPC PAY STATUS AND THE ADMIN DASHBOARD LIVE HERE</p>
-        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-          <a href="#/login" class="btn-w" data-route="login">LOG IN</a>
-          <a href="#/signup" class="btn-o" data-route="signup">CREATE ACCOUNT</a>
-        </div>
-      </div>
-    </div>
+    <div id="acctGate" style="display:none" aria-hidden="true"></div>
     <div id="acctMain" style="display:none">
       <p class="kicker reveal-sm">MY ACCOUNT</p>
       <h2 class="acct-title reveal" id="acctHello">—</h2>
@@ -3246,6 +3235,14 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     try { return new Date(iso).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }); }
     catch (e) { return '—'; }
   }
+  /* customer-facing actor label — reviewer emails and internal system
+     strings always read as the club's team on anything a member sees */
+  IPC.teamLabel = function (by) {
+    if (!by) return '';
+    var s = String(by).toUpperCase();
+    if (s.indexOf('@') >= 0 || s.indexOf('ADMIN:') === 0 || s === 'IPC PAY AUTO READER' || s === 'MAYA WEBHOOK') return 'IPC TEAM';
+    return by;
+  };
   function payCardHTML(p) {
     var ord = p.order || {};
     var decided = p.status === 'paid' || p.status === 'failed';
@@ -3258,7 +3255,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         '<p class="pc-meta">' + IPC.fmtP(p.amountCentavos) + ' — ORDER ' + IPC.esc(p.orderReference) + ' — ' + fmtDate(p.createdAt) + '</p>' +
         '<p class="pc-meta">BUYER: ' + IPC.esc(ord.email || '—') + ' — ' + IPC.esc(ord.customerName || '') + ' — ' + IPC.esc(ord.city || '') + ', ' + IPC.esc(ord.province || '') + '</p>' +
         '<p class="pc-meta">E-WALLET REF: <b>' + IPC.esc(p.refNo || 'NOT SUBMITTED') + '</b>' +
-          (decided && p.reviewedBy ? ' — REVIEWED BY ' + IPC.esc(p.reviewedBy) + (p.verifiedAt ? ' · ' + fmtDate(p.verifiedAt) : '') : '') + '</p>' +
+          (decided && p.reviewedBy ? ' — REVIEWED BY ' + IPC.esc(IPC.teamLabel(p.reviewedBy)) + (p.verifiedAt ? ' · ' + fmtDate(p.verifiedAt) : '') : '') + '</p>' +
         '<div class="pc-items">' + (ord.items || []).map(function (it) {
           return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + '</span><span>' + IPC.fmtP(it.priceCentavos * it.qty) + '</span></p>';
         }).join('') + '</div>' +
@@ -3286,9 +3283,12 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 
   IPC.renderAccount = function () {
     var logged = Boolean(IPC.auth.user);
-    $('#acctGate').style.display = logged ? 'none' : 'block';
-    $('#acctMain').style.display = logged ? 'block' : 'none';
-    if (!logged) return;
+    /* the old inline login gate is retired — logged-out visitors go
+       straight to the real login/signup section and land back here
+       after signing in (?next=account) */
+    if (!logged) { location.hash = '#/login?next=account'; return; }
+    $('#acctGate').style.display = 'none';
+    $('#acctMain').style.display = 'block';
     var u = IPC.auth.user;
     $('#acctHello').innerHTML = IPC.esc(u.name || u.email).replace(/ /g, '<br />') + '<span class="dim">.</span>';
     $('#acName').textContent = u.name || '—';
@@ -4104,8 +4104,9 @@ setTimeout(function () {
     if (!hist.length) return '';
     return '<ul class="ipc-track-hist">' + hist.map(function (h) {
       var d = h.at ? new Date(h.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+      var by = IPC.teamLabel(h.by);
       return '<li><span class="tk-st">' + esc(STAGES[h.status] || h.status) + '</span>' +
-        '<span class="tk-note">' + esc(h.note ? h.note + (h.by ? ' · ' + h.by : '') : (h.by || '')) + '</span>' +
+        '<span class="tk-note">' + esc(h.note ? h.note + (by ? ' · ' + by : '') : by) + '</span>' +
         '<span class="tk-at">' + esc(d) + '</span></li>';
     }).join('') + '</ul>';
   }

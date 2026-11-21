@@ -457,7 +457,8 @@ function paymentView(p, order, includeProof) {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     verifiedAt: p.verifiedAt || null,
-    reviewedBy: p.reviewedBy || null,
+    /* customers read "IPC TEAM" — the reviewer's email stays admin-only */
+    reviewedBy: includeProof ? (p.reviewedBy || null) : (p.reviewedBy ? "IPC TEAM" : null),
   };
   if (includeProof) out.proofDataUrl = p.proofDataUrl || null;
   else out.proofPresent = Boolean(p.proofDataUrl);
@@ -527,18 +528,115 @@ async function ensureTracking(d, orderReference, source) {
   console.log("[ipc-pay] tracking opened for " + orderReference + " — " + number);
 }
 
-/** IPC PAY AUTO READER — verifies a screenshot-bearing proof by itself.
-    Reference-only claims never pass this path: they keep waiting for a
-    logged-in admin decision. Every step is guarded; on any error the
-    payment simply stays under_verification for manual review. */
+/** IPC PAY AUTO READER — actually READS the screenshot a member submits.
+    A proof is only auto-approved when the OCR finds ALL THREE of:
+      (1) a Maya/PayMaya marker in the screenshot,
+      (2) the exact order amount as a money figure,
+      (3) the Maya transaction reference the member typed in.
+    Anything else stays UNDER VERIFICATION for a human decision — a blurry
+    screenshot can never fail a customer, and a wrong screenshot can never
+    pass one. Reference-only claims never enter this path. The CAS guard
+    means the reader can never override an admin decision that lands
+    meanwhile. Runs in the background; on any error the payment simply
+    stays under_verification for manual review. */
+let __ocrWorker = null;
+async function getOcrWorker() {
+  if (__ocrWorker) return __ocrWorker;
+  const { createWorker } = require("tesseract.js");
+  __ocrWorker = await createWorker("eng", 1, { cachePath: "/tmp/ipc-ocr" });
+  return __ocrWorker;
+}
+
+/** OCR + strict gates. Never throws: { pass:false, reason } on any problem. */
+async function readMayaProof(payment) {
+  const summary = { pass: false, mayaOk: false, refOk: false, amountOk: false,
+                    nameOk: false, ocrChars: 0, reason: "" };
+  try {
+    const m = String(payment.proofDataUrl || "").match(/^data:image\/(?:jpeg|jpg|png);base64,([A-Za-z0-9+\/=\s]+)$/);
+    if (!m) { summary.reason = "no readable image"; return summary; }
+    const buf = Buffer.from(m[1], "base64");
+    if (buf.length < 2048) { summary.reason = "image too small to read"; return summary; }
+
+    /* OCR with a hard timeout — a slow reader falls back to manual review */
+    const work = (async () => {
+      try {
+        const worker = await getOcrWorker();
+        const { data } = await worker.recognize(buf);
+        return String((data && data.text) || "");
+      } catch (err) {
+        try { if (__ocrWorker) await __ocrWorker.terminate(); } catch (e) {}
+        __ocrWorker = null;
+        throw err;
+      }
+    })();
+    const text = await Promise.race([
+      work,
+      new Promise((resolve, reject) => setTimeout(() => reject(new Error("ocr timeout")), 45000)),
+    ]).catch((err) => { summary.reason = "ocr unavailable: " + (err && err.message); return null; });
+    if (text === null) return summary;
+
+    const norm = text.toUpperCase().replace(/\s+/g, " ");
+    summary.ocrChars = norm.length;
+
+    /* gate 1 — it has to be a Maya screenshot at all */
+    summary.mayaOk = /MAYA|PAYMAYA/.test(norm);
+
+    /* gate 2 — the submitted reference must appear in the screenshot */
+    const refNorm = String(payment.refNo || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const textNorm = norm.replace(/[^A-Z0-9]/g, "");
+    summary.refOk = refNorm.length >= 4 && textNorm.indexOf(refNorm) >= 0;
+
+    /* gate 3 — the exact order amount must appear as a money figure
+       (handles 1250.00 / 1,250.00 / P1250 / PHP 1,250.00 forms) */
+    const target = Math.round(Number(payment.amountCentavos) || 0);
+    if (target > 0) {
+      const tokens = norm.match(/(?:\u20b1|PHP|P)?\s?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?/g) || [];
+      for (const t of tokens) {
+        const cents = Math.round(parseFloat(t.replace(/[^0-9.]/g, "")) * 100) || 0;
+        if (cents === target) { summary.amountOk = true; break; }
+      }
+    }
+
+    /* extra signal for the admins — the account holder name on the QR */
+    summary.nameOk = /CLAUDIO|ANCEL JAMES/.test(norm);
+
+    summary.pass = summary.mayaOk && summary.refOk && summary.amountOk;
+    if (!summary.pass && !summary.reason) {
+      summary.reason = "mismatch: maya=" + summary.mayaOk + " ref=" + summary.refOk +
+                       " amount=" + summary.amountOk;
+    }
+    return summary;
+  } catch (err) {
+    summary.reason = "reader error: " + (err && err.message);
+    return summary;
+  }
+}
+
 async function autoVerifyPayment(d, pay) {
   try {
     const settings = await getPaySettings(d);
     if (!settings.autoVerify) return false;
-    if (!pay.proofDataUrl) return false;
+
+    /* fresh read — the payment may already have been decided by an admin */
+    const fresh = await d.collection("payments").findOne({ _id: pay._id });
+    if (!fresh || fresh.status !== "under_verification" || !fresh.proofDataUrl || !fresh.refNo) return false;
+
+    /* READ the screenshot — every gate must hold before anything is marked */
+    const read = await readMayaProof(fresh);
+    console.log("[ipc-pay] AUTO READER read " + fresh.paymentReference +
+      " — pass=" + read.pass + " maya=" + read.mayaOk + " ref=" + read.refOk +
+      " amount=" + read.amountOk + " name=" + read.nameOk +
+      (read.reason ? " (" + read.reason + ")" : ""));
+    await d.collection("payments").updateOne(
+      { _id: fresh._id },
+      { $set: { autoRead: { ...read, at: new Date() } } }
+    ).catch(() => {});
+    if (!read.pass) return false;   /* stays UNDER VERIFICATION for a human */
+
+    /* compare-and-set — never overrides an admin decision that landed meanwhile */
     const now = new Date();
     const decision = await d.collection("payments").updateOne(
-      { _id: pay._id, status: "under_verification" },
+      { _id: fresh._id, status: "under_verification" },
       { $set: {
         status: "paid",
         updatedAt: now,
@@ -549,18 +647,18 @@ async function autoVerifyPayment(d, pay) {
     );
     if (decision.modifiedCount !== 1) return false;
     await d.collection("orders").updateOne(
-      { reference: pay.orderReference },
+      { reference: fresh.orderReference },
       { $set: { status: "paid", updatedAt: now } }
     );
     await d.collection("users").updateOne(
-      { _id: pay.userId },
+      { _id: fresh.userId },
       { $set: { paymentRejections: [] }, $unset: { paymentCooldownUntil: "" } }
     );
-    await ensureTracking(d, pay.orderReference, "IPC PAY AUTO READER");
-    const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
-    await sendPaymentEmail({ ...pay, status: "paid" }, orderForEmail, "PAID",
-      "IPC Pay read your payment proof and verified it automatically. Your order is confirmed and order tracking is now live in your account.");
-    console.log("[ipc-pay] AUTO READER verified " + pay.paymentReference + " — tracking opened.");
+    await ensureTracking(d, fresh.orderReference, "IPC TEAM");
+    const orderForEmail = await d.collection("orders").findOne({ reference: fresh.orderReference });
+    await sendPaymentEmail({ ...fresh, status: "paid" }, orderForEmail, "PAID",
+      "IPC Pay read your payment screenshot — the Maya amount and transaction reference matched your order. Your order is confirmed and order tracking is now live in your account.");
+    console.log("[ipc-pay] AUTO READER verified " + fresh.paymentReference + " — tracking opened.");
     return true;
   } catch (err) {
     console.error("[ipc-pay] auto reader failed (falls back to manual review):", err && err.message);
@@ -1261,7 +1359,8 @@ async function handleValidateVoucher(req, res) {
 }
 
 /* Grant or revoke ADMIN for a member by email. The seeded club-owner
-   account (ADMIN_EMAIL) can never be demoted. */
+   account (ADMIN_EMAIL) and the developer account (ancel.claudio1@gmail.com)
+   can never be demoted. */
 async function handleAdminRole(req, res) {
   const found = await userFromReq(req).catch(() => null);
   if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
@@ -1279,8 +1378,13 @@ async function handleAdminRole(req, res) {
       return fail(res, 422, "invalid", "ROLE IS ADMIN OR MEMBER ONLY.");
     }
     const root = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-    if (root && email === root && role !== "admin") {
-      return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT STAYS ADMIN.");
+    /* ancel.claudio1@gmail.com is the club owner / developer account —
+       it can never be demoted to a member, even if ADMIN_EMAIL is unset
+       or points somewhere else. */
+    if (email === "ancel.claudio1@gmail.com" || (root && email === root)) {
+      if (role !== "admin") {
+        return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT STAYS ADMIN.");
+      }
     }
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
@@ -1635,33 +1739,26 @@ async function handleProof(req, res) {
       { $set: { status: "under_verification", updatedAt: now } }
     );
 
-    /* IPC PAY AUTO READER — screenshot proofs are read and confirmed
-       automatically when the switch is on. Reference-only claims always
-       wait for a human decision. */
+    /* IPC PAY AUTO READER — runs in the background (OCR takes seconds):
+       the response stays instant and the payment page's live poll picks up
+       the result. Screenshot proofs that do not match the order amount +
+       Maya reference simply stay UNDER VERIFICATION for a human decision.
+       Reference-only claims are never auto-read at all. */
     if (decoded) {
-      const autoVerified = await autoVerifyPayment(d, {
-        ...pay,
-        proofDataUrl: "data:" + proofMime + ";base64," + decoded.toString("base64"),
+      const proofDataUrl = "data:" + proofMime + ";base64," + decoded.toString("base64");
+      setImmediate(() => {
+        autoVerifyPayment(d, { ...pay, proofDataUrl })
+          .catch((e) => console.error("[ipc-pay] auto reader crashed (kept for manual review):", e && e.message));
       });
-      if (autoVerified) {
-        const orderNow = await d.collection("orders").findOne({ reference: pay.orderReference });
-        return send(res, 200, {
-          ok: true,
-          status: "paid",
-          autoVerified: true,
-          trackingNumber: orderNow && orderNow.tracking ? orderNow.tracking.number : null,
-          message: "PAYMENT READ AND VERIFIED — YOU'RE LOCKED IN. TRACKING IS LIVE IN YOUR ACCOUNT.",
-        });
-      }
     }
 
     const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
     await sendPaymentEmail(pay, orderForEmail, "UNDER VERIFICATION",
-      "We received your Maya transaction reference. IPC Pay reads submissions with a screenshot automatically — reference-only claims are reviewed by the club by hand.");
+      "We received your Maya transaction reference. IPC Pay reads screenshot proofs automatically — anything it can't match confidently goes to the club for a hand check.");
     return send(res, 200, {
       ok: true,
       status: "under_verification",
-      message: "PROOF RECEIVED — IPC PAY IS READING YOUR PAYMENT.",
+      message: "PROOF RECEIVED — IPC PAY IS READING YOUR PAYMENT. MOST PROOFS CONFIRM WITHIN MINUTES.",
     });
   } catch (err) {
     return mongoError(res, err, "proof upload failed");
@@ -1725,7 +1822,7 @@ async function handleDecision(req, res) {
       { $set: { status: newStatus, updatedAt: now } }
     );
     if (action === "approve") {
-      await ensureTracking(d, pay.orderReference, "admin:" + found.user.email);
+      await ensureTracking(d, pay.orderReference, "IPC TEAM");
     }
 
     if (action === "reject") {
@@ -1800,7 +1897,7 @@ async function handleAdminSettings(req, res) {
       ok: true,
       autoVerify: body.autoVerify,
       message: body.autoVerify
-        ? "AUTO READER ON — SCREENSHOT PROOFS ARE VERIFIED WITHOUT A TAP."
+        ? "AUTO READER ON — SCREENSHOT PROOFS THAT MATCH THE ORDER ARE VERIFIED WITHOUT A TAP; MISMATCHES GO TO THE QUEUE."
         : "AUTO READER OFF — EVERY PAYMENT NEEDS A MANUAL ADMIN DECISION.",
     });
   } catch (err) {
@@ -1835,7 +1932,7 @@ async function handleAdminTracking(req, res) {
     if (order.status !== "paid") {
       return fail(res, 422, "not_paid", "TRACKING OPENS ONLY AFTER THE PAYMENT IS ACCEPTED.");
     }
-    if (!order.tracking) await ensureTracking(d, reference, "admin:" + found.user.email);
+    if (!order.tracking) await ensureTracking(d, reference, "IPC TEAM");
     order = await d.collection("orders").findOne({ reference });
     if (order.tracking.status === "delivered") {
       return fail(res, 422, "already_delivered", "THIS ORDER IS ALREADY DELIVERED — THE JOURNEY IS CLOSED.");
@@ -1845,7 +1942,7 @@ async function handleAdminTracking(req, res) {
       status,
       note: String(body.note ?? "").trim().slice(0, 200),
       at: now,
-      by: found.user.email,
+      by: "IPC TEAM",
     };
     const update = await d.collection("orders").updateOne(
       { reference, "tracking.status": { $ne: "delivered" } },
@@ -1890,6 +1987,8 @@ async function handleMemberRemove(req, res) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
   if (confirm !== email) return fail(res, 422, "confirm_mismatch", "TYPE THE MEMBER'S EMAIL EXACTLY TO CONFIRM THE REMOVAL.");
   const root = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  /* the club owner / developer account can never be removed either */
+  if (email === "ancel.claudio1@gmail.com") return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT CAN NEVER BE REMOVED.");
   if (root && email === root) return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT CAN NEVER BE REMOVED.");
   if (email === found.user.email) return fail(res, 422, "self_remove", "YOU CANNOT REMOVE THE ACCOUNT YOU ARE LOGGED INTO.");
   try {
@@ -1975,7 +2074,7 @@ async function handleMayaWebhook(req, res) {
       { reference: pay.orderReference },
       { $set: { status: "paid", updatedAt: now } }
     );
-    await ensureTracking(d, pay.orderReference, "MAYA WEBHOOK");
+    await ensureTracking(d, pay.orderReference, "IPC TEAM");
     const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
     await sendPaymentEmail({ ...pay, status: "paid" }, orderForEmail, "PAID",
       "Maya confirmed your payment automatically. Your order is confirmed and order tracking is now live in your account.");
