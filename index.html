@@ -1362,7 +1362,7 @@ textarea.inp{min-height:110px;resize:vertical}
       <h3>03 — PAYMENT VERIFICATION</h3>
       <p>Every payment is checked by a human before anything ships. Submitting your reference number and screenshot moves your payment to UNDER VERIFICATION — it never marks itself PAID. A club admin verifies it against the club records and marks it PAID or FAILED from the dashboard.</p>
       <ul>
-        <li>If a payment is marked FAILED, double-check the reference number and screenshot, then resubmit — or message the club and we'll sort it out.</li>
+        <li>If a payment is marked FAILED, that payment reference is closed. Check your transaction details and start a fresh checkout from the items returned to your bag. Two payment rejections within ten minutes temporarily pause new payment requests for five minutes; contact the club if you believe a rejection was made in error.</li>
         <li>Every verification decision is recorded with the admin who made it and when.</li>
       </ul>
     </div>
@@ -2277,6 +2277,7 @@ textarea.inp{min-height:110px;resize:vertical}
   /* ---------------- THE BAG (localStorage) ---------------- */
   var CART_KEY = 'ipc-cart-v2';
   var PENDING_BAG_KEY = 'ipc-pending-bag-v1';
+  IPC.PENDING_BAG_KEY = PENDING_BAG_KEY;
   var bagItems = [];
   var bagReady = false;
 
@@ -2342,24 +2343,41 @@ textarea.inp{min-height:110px;resize:vertical}
     clear: function () { bagItems = []; bagSave(); bagEmit(); }
   };
   IPC.clearPendingBag = function () { try { localStorage.removeItem(PENDING_BAG_KEY); } catch (e) {} };
-  IPC.restorePendingBag = function () {
+  IPC.restorePendingBag = function (fallbackItems) {
     try {
       var raw = localStorage.getItem(PENDING_BAG_KEY);
-      if (!raw) return false;
-      var snapshot = JSON.parse(raw);
-      if (!snapshot || !Array.isArray(snapshot.items)) { IPC.clearPendingBag(); return false; }
+      var hasSnapshot = Boolean(raw);
+      var snapshot = hasSnapshot ? JSON.parse(raw) : { items: Array.isArray(fallbackItems) ? fallbackItems : [] };
+      if (!snapshot || !Array.isArray(snapshot.items) || !snapshot.items.length) {
+        if (hasSnapshot) IPC.clearPendingBag();
+        return false;
+      }
+      var changed = false;
       snapshot.items.forEach(function (it) {
         if (!it || !IPC.byId(it.productId) || !it.size || !it.color) return;
         var qty = Math.max(1, Math.min(99, Number(it.qty) || 1));
         var i = itemIdx(it.productId, it.size, it.color);
         var p = IPC.byId(it.productId);
-        if (i >= 0) bagItems[i].qty = Math.min(99, bagItems[i].qty + qty);
-        else bagItems.push({ productId: p.id, name: p.name, priceC: p.priceC, size: it.size, color: it.color, qty: qty });
+        if (hasSnapshot) {
+          if (i >= 0) bagItems[i].qty = Math.min(99, bagItems[i].qty + qty);
+          else bagItems.push({ productId: p.id, name: p.name, priceC: p.priceC, size: it.size, color: it.color, qty: qty });
+          changed = true;
+        } else {
+          var existingQty = i >= 0 ? bagItems[i].qty : 0;
+          var missingQty = Math.max(0, qty - existingQty);
+          if (missingQty > 0) {
+            if (i >= 0) bagItems[i].qty = Math.min(99, bagItems[i].qty + missingQty);
+            else bagItems.push({ productId: p.id, name: p.name, priceC: p.priceC, size: it.size, color: it.color, qty: missingQty });
+            changed = true;
+          }
+        }
       });
       IPC.clearPendingBag();
-      bagSave(); bagEmit();
-      IPC.toast('UNPAID ITEMS RETURNED TO YOUR BAG');
-      return true;
+      if (changed) {
+        bagSave(); bagEmit();
+        IPC.toast('UNPAID ITEMS RETURNED TO YOUR BAG');
+      }
+      return changed;
     } catch (e) { IPC.clearPendingBag(); return false; }
   };
   bagLoad();
@@ -2797,7 +2815,7 @@ textarea.inp{min-height:110px;resize:vertical}
     }
     if (IPC.bag.items.length === 0) { show('YOUR BAG IS EMPTY — ADD A PIECE BEFORE CHECKING OUT.', false); return; }
     var checkoutBagSnapshot = IPC.bag.items.map(function (it) { return { productId: it.productId, size: it.size, color: it.color, qty: it.qty }; });
-    try { localStorage.setItem(PENDING_BAG_KEY, JSON.stringify({ items: checkoutBagSnapshot, createdAt: Date.now() })); } catch (snapshotError) {}
+    try { localStorage.setItem(IPC.PENDING_BAG_KEY, JSON.stringify({ items: checkoutBagSnapshot, createdAt: Date.now() })); } catch (snapshotError) {}
     var btn = $('#coSubmit');
     btn.disabled = true;
     btn.textContent = 'PLACING ORDER…';
@@ -2855,6 +2873,7 @@ textarea.inp{min-height:110px;resize:vertical}
     var pay = data.payment;
     var order = data.order || {};
     poState.status = pay.status;
+    IPC.currentPaymentStatus = pay.status;
     var returnCart = $('#poReturnCart');
     if (returnCart) returnCart.style.display = 'none';
     $('#poNotfound').style.display = 'none';
@@ -2890,7 +2909,7 @@ textarea.inp{min-height:110px;resize:vertical}
       copy.textContent = 'The club verified your payment — the order is unlocked and being packed. Shipping is free, Metro Manila usually lands within a few days.';
       form.style.display = 'none';
     } else if (pay.status === 'failed') {
-      if (IPC.restorePendingBag) IPC.restorePendingBag();
+      if (IPC.restorePendingBag) IPC.restorePendingBag(order.items || []);
       headline.textContent = 'Payment rejected.';
       copy.textContent = 'The club could not verify this payment. Your unpaid items have been returned to your bag. Start a fresh checkout after checking your payment details.';
       if (returnCart) returnCart.style.display = 'inline-flex';
@@ -2925,6 +2944,7 @@ textarea.inp{min-height:110px;resize:vertical}
     });
   }
   IPC.renderPayOrder = function (ref) {
+    IPC.currentPaymentStatus = null;
     IPC.stopPayPoll();
     $('#poNotfound').style.display = 'none';
     $('#poMain').style.display = 'none';
@@ -3299,7 +3319,7 @@ textarea.inp{min-height:110px;resize:vertical}
     if (r.name === 'login' || r.name === 'signup') {
       IPC.nextRoute = (r.query && r.query.next) || null;
     }
-    if (activeRouteName === 'payorder' && r.name !== 'payorder' && IPC.restorePendingBag) IPC.restorePendingBag();
+    if (activeRouteName === 'payorder' && r.name !== 'payorder' && IPC.restorePendingBag && (IPC.currentPaymentStatus === 'pending' || IPC.currentPaymentStatus === 'failed')) IPC.restorePendingBag();
     activeRouteName = r.name;
     IPC.stopPayPoll();
     $('.view').forEach(function (v) { v.classList.remove('active'); });
@@ -3403,7 +3423,7 @@ setTimeout(function () {
   'use strict';
   var IPC = window.IPC = window.IPC || {};
   var $ = function (s, c) { return (c || document).querySelector(s); };
-  var $ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var all = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
   var esc = function (v) { return IPC.esc ? IPC.esc(v == null ? '' : String(v)) : String(v == null ? '' : v).replace(/[&<>"']/g, function (x) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]); }); };
   var appliedVoucher = null;
 
@@ -3606,8 +3626,8 @@ setTimeout(function () {
     }
 
     tab.addEventListener('click', function () {
-      $('.adm-tab').forEach(function (t) { t.classList.remove('active'); });
-      $('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
+      all('.adm-tab').forEach(function (t) { t.classList.remove('active'); });
+      all('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
       tab.classList.add('active');
       pane.classList.add('active');
       loadVouchers();
