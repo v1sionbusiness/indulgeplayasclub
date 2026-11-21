@@ -123,31 +123,56 @@ function serveIndex(res) {
     const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){if(window.IPC){window.IPC.API="https://indulgeplayasclub.onrender.com";}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
     html = html.replace(/<\/body>/i, loginFix + "</body>");
     const contactPolish = `<style id="ipc-contact-form-polish">
-      input, textarea, select {
+      .ipc-contact-glass {
+        color: #f5f5f5 !important;
+        background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.045)) !important;
+        border: 1px solid rgba(255,255,255,.22) !important;
+        border-radius: 22px !important;
+        padding: clamp(20px, 4vw, 34px) !important;
+        box-shadow: 0 18px 55px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12) !important;
+        -webkit-backdrop-filter: blur(18px) saturate(135%) !important;
+        backdrop-filter: blur(18px) saturate(135%) !important;
+      }
+      .ipc-contact-glass input, .ipc-contact-glass textarea, .ipc-contact-glass select {
+        box-sizing: border-box !important;
+        width: 100% !important;
         color: #171717 !important;
         -webkit-text-fill-color: #171717 !important;
-        background: #f7f7f7 !important;
-        border: 1px solid #a8a8a8 !important;
+        background: rgba(255,255,255,.94) !important;
+        border: 1px solid rgba(255,255,255,.7) !important;
+        border-radius: 11px !important;
+        padding: 13px 15px !important;
         caret-color: #171717 !important;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,.06) !important;
+        transition: border-color .2s ease, box-shadow .2s ease, background .2s ease !important;
       }
-      input::placeholder, textarea::placeholder {
+      .ipc-contact-glass input::placeholder, .ipc-contact-glass textarea::placeholder {
         color: #666 !important;
         -webkit-text-fill-color: #666 !important;
         opacity: 1 !important;
       }
-      input:focus, textarea:focus, select:focus {
-        outline: 2px solid #777 !important;
-        outline-offset: 2px;
-        border-color: #333 !important;
+      .ipc-contact-glass input:focus, .ipc-contact-glass textarea:focus, .ipc-contact-glass select:focus {
+        outline: none !important;
+        border-color: #fff !important;
+        box-shadow: 0 0 0 3px rgba(255,255,255,.22), 0 0 0 1px rgba(20,20,20,.12) inset !important;
+        background: #fff !important;
       }
-      label { color: #f3f3f3; }
-      input, textarea { box-sizing: border-box; }
+      .ipc-contact-glass label { color: #f5f5f5 !important; }
+      .ipc-contact-glass button, .ipc-contact-glass input[type="submit"] {
+        border-radius: 999px !important;
+        letter-spacing: .08em !important;
+        font-weight: 700 !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ipc-contact-glass input, .ipc-contact-glass textarea, .ipc-contact-glass select { transition: none !important; }
+      }
     </style>
     <script id="ipc-contact-copy-polish">
       (function () {
         var replacements = new Map([
           ["SEND US A MESSAGE", "CONTACT THE CLUB"],
-          ["DROP YOUR NAME, A WAY TO REACH YOU AND WHAT'S ON YOUR MIND — IT LANDS STRAIGHT IN THE CLUB INBOX. NO EMAIL SHOWN, NO DM NEEDED.", "Have a question or need assistance? Send us a message and our team will get back to you using the contact details you provide. Your email address will not be displayed publicly."],
+          ["DROP YOUR NAME, A WAY TO REACH YOU AND WHAT'S ON YOUR MIND — IT LANDS STRAIGHT IN THE CLUB INBOX. NO EMAIL SHOWN, NO DM NEEDED.", "Have a question or need assistance? Send us a message and our team will be in touch."],
+          ["Have a question or need assistance? Send us a message and our team will get back to you using the contact details you provide. Your email address will not be displayed publicly.", "Have a question or need assistance? Send us a message and our team will be in touch."],
           ["EMAIL OR FB NAME (FOR REPLY)", "EMAIL ADDRESS OR FACEBOOK NAME"],
           ["SEND MESSAGE", "SUBMIT MESSAGE"]
         ]);
@@ -157,6 +182,17 @@ function serveIndex(res) {
           while ((node = walker.nextNode())) {
             var value = node.nodeValue.trim();
             if (replacements.has(value)) node.nodeValue = node.nodeValue.replace(value, replacements.get(value));
+          }
+          var heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,p,div,span"))
+            .find(function (el) { return el.children.length === 0 && el.textContent.trim() === "CONTACT THE CLUB"; });
+          if (heading) {
+            var current = heading;
+            for (var depth = 0; current && depth < 7; depth++, current = current.parentElement) {
+              if (current.querySelector && current.querySelector("input, textarea, select")) {
+                current.classList.add("ipc-contact-glass");
+                break;
+              }
+            }
           }
         }
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", polish);
