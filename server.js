@@ -157,9 +157,14 @@ const PROOF_TYPES = { "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".
 /* --------------------------------------------------------------- */
 
 const INDEX_FILE = path.join(__dirname, "index.html");
-const HEALTH = { ok: true, service: "indulge playas club — contact api" };
+/* Build stamp: the frontend carries the same value (IPC.BUILD). The app
+   pings /api/ipc-pay/health when its tab wakes up and reloads itself when
+   this stamp changes — so no visitor can stay stuck on a stale build
+   (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
+const BUILD_STAMP = "ipc-v14-20261121-baglogin";
+const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
-function serveIndex(res) {
+function serveIndex(req, res) {
   try {
     let html = fs.readFileSync(INDEX_FILE, "utf8");
     /* The frontend still contains the retired API hostname. Since this
@@ -306,9 +311,22 @@ function serveIndex(res) {
     </script>`;
     html = html.replace(/<\/body>/i, navigationFix + "</body>");
 
+    /* Serve the SPA with no-cache + ETag: every reload revalidates for free
+       (304 when unchanged) and always picks up the newest build. The old
+       `public, max-age=300` let devices keep running a stale app after a
+       deploy — the source of "the site still shows the old login" reports. */
+    const etag = '"' + crypto.createHash("sha1").update(html).digest("hex").slice(0, 24) + '"';
+    if (req && req.headers["if-none-match"] === etag) {
+      res.writeHead(304, {
+        ETag: etag,
+        "Cache-Control": "no-cache",
+      });
+      return res.end();
+    }
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": "no-cache",
+      ETag: etag,
     });
     res.end(html);
     return true;
@@ -692,7 +710,7 @@ async function route(req, res) {
   if (req.method === "GET") {
     if (p === "/api/ipc-pay/health") {
       return checkConnection()
-        .then(() => send(res, 200, { ok: true, database: "connected" }))
+        .then(() => send(res, 200, { ok: true, database: "connected", build: BUILD_STAMP }))
         .catch((err) => {
           const status = err.code === "MONGO_NOT_CONFIGURED" ? 503 : 502;
           console.error("IPC Pay database check failed:", err.message);
@@ -707,7 +725,7 @@ async function route(req, res) {
     }
     if (p === "/healthz") return send(res, 200, HEALTH);
     if (p === "/" || p === "/index.html") {
-      if (serveIndex(res)) return;
+      if (serveIndex(req, res)) return;
       return send(res, 200, HEALTH);
     }
 

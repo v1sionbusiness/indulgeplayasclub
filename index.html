@@ -2466,6 +2466,50 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     if (ov) IPC.API = decodeURIComponent(ov).replace(/\/$/, '');
   } catch (e0c) {}
 
+  /* ---- build stamp + self-update: an SPA tab can stay open for days, and
+     a tab that booted on an old build keeps showing the old screens (the
+     old bag/login flow being the usual report). The app pings the server's
+     health endpoint when the tab wakes up; if the server's build stamp
+     differs from this one, the app refreshes itself so every visitor is
+     always on the build the club shipped. Bump BOTH stamps together —
+     this one and BUILD_STAMP in server.js. ---- */
+  var IPC_BUILD = 'ipc-v14-20261121-baglogin';
+  IPC.BUILD = IPC_BUILD;
+  var __ipcReloadGuard = 0;
+  function __ipcBuildCheck() {
+    if (!IPC.API || typeof fetch !== 'function') return;
+    try {
+      fetch(IPC.API + '/api/ipc-pay/health', { cache: 'no-store' })
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (h) {
+          if (!h || typeof h.build !== 'string' || !h.build) return;
+          if (h.build === IPC_BUILD) return;
+          try {
+            /* already reloaded for this exact server build once — never loop */
+            if (localStorage.getItem('ipc_build_seen') === h.build) return;
+            localStorage.setItem('ipc_build_seen', h.build);
+          } catch (e1) { /* storage blocked — the 60s guard below still caps us */ }
+          if (Date.now() - __ipcReloadGuard < 60000) return; /* at most one nudge a minute */
+          __ipcReloadGuard = Date.now();
+          var head = (location.hash || '#/').split('?')[0];
+          var midPayment = head === '#/checkout' || head === '#/payorder' || head.indexOf('#/pay/') === 0;
+          if (midPayment) {
+            /* never yank someone mid-payment — nudge only */
+            IPC.toast('THE CLUB SHIPPED AN UPDATE — IT LOADS AFTER THIS PAYMENT.');
+            return;
+          }
+          if (document.hidden) { location.reload(); return; }
+          IPC.toast('THE CLUB SHIPPED AN UPDATE — REFRESHING THE SITE.');
+          setTimeout(function () { location.reload(); }, 900);
+        })
+        .catch(function () { /* offline / cold server — ignore */ });
+    } catch (e) { /* ignore */ }
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) __ipcBuildCheck(); });
+  window.addEventListener('focus', __ipcBuildCheck);
+  setInterval(function () { if (!document.hidden) __ipcBuildCheck(); }, 120000);
+  setTimeout(__ipcBuildCheck, 6000);
+
   /* ---- money: integer centavos in, peso string out ---- */
   IPC.fmtP = function (c) {
     var pesos = c / 100;
