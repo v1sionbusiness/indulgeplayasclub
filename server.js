@@ -63,6 +63,12 @@ const {
   nextReference,
 } = require("./ipc-pay/mongo");
 
+const {
+  normalizePhilippineMobile,
+  normalizeVoucherCode,
+  calculateVoucherDiscount,
+} = require("./ipc-pay/promotions");
+
 const PORT = process.env.PORT || 3000;
 const EMAILJS_URL = "https://api.emailjs.com/api/v1.0/email/send";
 
@@ -281,7 +287,7 @@ function bearerToken(req) {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), email: u.email, name: u.name, role: u.role };
+  return { id: String(u._id), email: u.email, name: u.name, phone: u.phone || "", role: u.role };
 }
 
 /** Resolve the logged-in user from the Authorization header, or null. */
@@ -312,6 +318,8 @@ function orderView(o, payment) {
     notes: o.notes || "",
     items: o.items,
     subtotalCentavos: o.subtotalCentavos,
+    discountCentavos: o.discountCentavos || 0,
+    voucherCode: o.voucherCode || null,
     shippingCentavos: o.shippingCentavos,
     totalCentavos: o.totalCentavos,
     status: o.status,
@@ -354,6 +362,8 @@ function paymentView(p, order, includeProof) {
       notes: order.notes || "",
       items: order.items,
       subtotalCentavos: order.subtotalCentavos,
+      discountCentavos: order.discountCentavos || 0,
+      voucherCode: order.voucherCode || null,
       shippingCentavos: order.shippingCentavos,
       totalCentavos: order.totalCentavos,
       status: order.status,
@@ -469,7 +479,8 @@ async function route(req, res) {
 
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
-        p === "/api/admin/orders" || p === "/api/admin/users") {
+        p === "/api/admin/orders" || p === "/api/admin/users" ||
+        p === "/api/admin/vouchers") {
       const found = await userFromReq(req).catch(() => null);
       if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
       if (found.user.role !== "admin") {
@@ -478,6 +489,12 @@ async function route(req, res) {
       try {
         const { connect } = require("./ipc-pay/mongo");
         const d = await connect();
+        if (p === "/api/admin/vouchers") {
+          const vouchers = await d.collection("vouchers")
+            .find({}, { projection: { code: 1, label: 1, type: 1, value: 1, minSubtotalCentavos: 1, maxUses: 1, uses: 1, active: 1, firstOrderOnly: 1, startsAt: 1, expiresAt: 1, createdAt: 1 } })
+            .sort({ createdAt: -1 }).limit(200).toArray();
+          return send(res, 200, { ok: true, vouchers });
+        }
         if (p === "/api/admin/overview") {
           const [users, orders, payments, paidAgg] = await Promise.all([
             d.collection("users").countDocuments(),
@@ -567,6 +584,11 @@ async function route(req, res) {
   if (p === "/api/auth/register" || p === "/api/auth/login" || p === "/api/auth/logout") {
     return handleAuth(req, res, ip, p);
   }
+
+  /* --- voucher validation + admin voucher management: 20KB --- */
+  if (p === "/api/vouchers/validate") return handleValidateVoucher(req, res);
+  if (p === "/api/admin/vouchers") return handleAdminVoucherCreate(req, res);
+  if (p === "/api/admin/vouchers/toggle") return handleAdminVoucherToggle(req, res);
 
   /* --- orders: 20KB --- */
   if (p === "/api/orders") return handleCreateOrder(req, res);
@@ -777,6 +799,9 @@ async function handleAuth(req, res, ip, p) {
       const name = String(body.name ?? "").trim().slice(0, 80);
       const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
       const password = String(body.password ?? "");
+      let phone;
+      try { phone = normalizePhilippineMobile(body.phone); }
+      catch (err) { return fail(res, 422, "invalid_phone", err.message); }
       if (!name) return fail(res, 422, "invalid", "DROP YOUR NAME TO JOIN THE CLUB.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return fail(res, 422, "invalid", "THAT EMAIL DOESN'T LOOK RIGHT.");
@@ -788,7 +813,13 @@ async function handleAuth(req, res, ip, p) {
       if (existing) {
         return fail(res, 409, "email_taken", "EMAIL ALREADY REGISTERED — LOG IN INSTEAD.");
       }
-      const user = await insertUser({ email, name, password, role: "customer" });
+      const { connect } = require("./ipc-pay/mongo");
+      const d = await connect();
+      const phoneOwner = await d.collection("users").findOne({ phone });
+      if (phoneOwner) {
+        return fail(res, 409, "phone_taken", "THIS MOBILE NUMBER IS ALREADY LINKED TO AN IPC ACCOUNT. LOG IN INSTEAD.");
+      }
+      const user = await insertUser({ email, name, password, phone, role: "customer" });
       const token = await createSession(user);
       return send(res, 200, { ok: true, token, user: publicUser(user) });
     }
@@ -811,7 +842,180 @@ async function handleAuth(req, res, ip, p) {
     if (token) await deleteSession(token);
     return send(res, 200, { ok: true });
   } catch (err) {
+    if (err && err.code === 11000) {
+      return fail(res, 409, "account_already_exists",
+        "THAT EMAIL OR MOBILE NUMBER IS ALREADY LINKED TO AN IPC ACCOUNT.");
+    }
     return mongoError(res, err, "auth failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* VOUCHERS — server-side validation and one-per-customer redemption */
+/* --------------------------------------------------------------- */
+
+function subtotalFromCart(rawItems) {
+  if (!Array.isArray(rawItems) || rawItems.length < 1 || rawItems.length > 30) {
+    throw new Error("YOUR BAG IS EMPTY OR HAS TOO MANY ITEMS.");
+  }
+  let subtotal = 0;
+  for (const raw of rawItems) {
+    const product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+    if (!product) throw new Error("UNKNOWN PRODUCT IN YOUR BAG — REFRESH AND TRY AGAIN.");
+    const size = String(raw.size ?? "").trim();
+    const color = String(raw.color ?? "").trim();
+    const qty = Math.floor(Number(raw.qty ?? 0));
+    if (!product.sizes.includes(size) || !product.colors.includes(color) ||
+        !Number.isFinite(qty) || qty < 1 || qty > 99) {
+      throw new Error("CHECK YOUR PRODUCT OPTIONS AND QUANTITIES BEFORE APPLYING A VOUCHER.");
+    }
+    subtotal += product.priceCentavos * qty;
+  }
+  return subtotal;
+}
+
+async function linkAccountPhone(d, user, rawPhone) {
+  const phone = normalizePhilippineMobile(rawPhone);
+  if (user.phone && user.phone !== phone) {
+    throw new Error("USE THE MOBILE NUMBER LINKED TO YOUR IPC ACCOUNT.");
+  }
+  const owner = await d.collection("users").findOne({ phone, _id: { $ne: user._id } });
+  if (owner) throw new Error("THIS MOBILE NUMBER IS ALREADY LINKED TO ANOTHER IPC ACCOUNT.");
+  if (!user.phone) {
+    const update = await d.collection("users").updateOne(
+      { _id: user._id, $or: [{ phone: { $exists: false } }, { phone: null }, { phone: "" }] },
+      { $set: { phone } }
+    );
+    if (update.modifiedCount !== 1) {
+      const fresh = await d.collection("users").findOne({ _id: user._id });
+      if (!fresh || fresh.phone !== phone) throw new Error("COULD NOT LINK THIS MOBILE NUMBER TO YOUR ACCOUNT.");
+    }
+    user.phone = phone;
+  }
+  return phone;
+}
+
+async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos) {
+  const code = normalizeVoucherCode(codeInput);
+  const voucher = await d.collection("vouchers").findOne({ code });
+  if (!voucher || !voucher.active) throw new Error("THAT VOUCHER IS NOT ACTIVE OR DOES NOT EXIST.");
+  const now = new Date();
+  if (voucher.startsAt && now < new Date(voucher.startsAt)) throw new Error("THAT VOUCHER IS NOT AVAILABLE YET.");
+  if (voucher.expiresAt && now > new Date(voucher.expiresAt)) throw new Error("THAT VOUCHER HAS EXPIRED.");
+  if (voucher.maxUses > 0 && (voucher.uses || 0) >= voucher.maxUses) throw new Error("THAT VOUCHER HAS REACHED ITS USE LIMIT.");
+  if (subtotalCentavos < (voucher.minSubtotalCentavos || 0)) {
+    throw new Error("YOUR BAG DOES NOT MEET THE MINIMUM SPEND FOR THIS VOUCHER.");
+  }
+  const redeemed = await d.collection("voucherRedemptions").findOne({
+    code,
+    $or: [{ userId: user._id }, { phone }],
+  });
+  if (redeemed) throw new Error("THIS VOUCHER HAS ALREADY BEEN USED WITH YOUR ACCOUNT OR MOBILE NUMBER.");
+  if (voucher.firstOrderOnly) {
+    const priorOrder = await d.collection("orders").findOne({
+      $or: [{ userId: user._id }, { phoneNormalized: phone }],
+    });
+    if (priorOrder) throw new Error("THIS OFFER IS RESERVED FOR YOUR FIRST IPC ORDER.");
+  }
+  const discountCentavos = calculateVoucherDiscount(subtotalCentavos, voucher);
+  if (discountCentavos <= 0) throw new Error("THIS VOUCHER DOES NOT APPLY TO YOUR CURRENT BAG.");
+  return { voucher, code, discountCentavos };
+}
+
+async function handleValidateVoucher(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO APPLY A VOUCHER.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const phone = await linkAccountPhone(d, found.user, body.phone);
+    const subtotalCentavos = subtotalFromCart(body.items);
+    const result = await resolveVoucher(d, body.code, found.user, phone, subtotalCentavos);
+    return send(res, 200, {
+      ok: true,
+      code: result.code,
+      label: result.voucher.label || result.code,
+      subtotalCentavos,
+      discountCentavos: result.discountCentavos,
+      totalCentavos: Math.max(0, subtotalCentavos + SHIPPING_CENTAVOS - result.discountCentavos),
+      message: "VOUCHER APPLIED — YOUR DISCOUNT IS RESERVED WHEN YOU PLACE THE ORDER.",
+    });
+  } catch (err) {
+    return fail(res, 422, "voucher_invalid", err.message || "VOUCHER COULD NOT BE APPLIED.");
+  }
+}
+
+async function handleAdminVoucherCreate(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  try {
+    const code = normalizeVoucherCode(body.code);
+    const label = String(body.label || code).trim().slice(0, 80);
+    const type = String(body.type || "").toLowerCase();
+    const rawValue = Number(body.value);
+    const minOrderPhp = Number(body.minOrderPhp || 0);
+    const maxUses = Math.floor(Number(body.maxUses || 0));
+    if (type !== "percent" && type !== "fixed") return fail(res, 422, "invalid", "CHOOSE PERCENTAGE OR FIXED AMOUNT.");
+    if (!Number.isFinite(rawValue) || rawValue <= 0 ||
+        (type === "percent" && (!Number.isInteger(rawValue) || rawValue > 100)) ||
+        (type === "fixed" && rawValue > 100000)) {
+      return fail(res, 422, "invalid", "ENTER A VALID VOUCHER VALUE.");
+    }
+    if (!Number.isFinite(minOrderPhp) || minOrderPhp < 0 || minOrderPhp > 1000000 ||
+        !Number.isFinite(maxUses) || maxUses < 0 || maxUses > 1000000) {
+      return fail(res, 422, "invalid", "CHECK THE MINIMUM SPEND AND USE LIMIT.");
+    }
+    const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
+      return fail(res, 422, "invalid", "EXPIRY MUST BE A FUTURE DATE.");
+    }
+    const doc = {
+      code, label, type,
+      value: type === "fixed" ? Math.round(rawValue * 100) : rawValue,
+      minSubtotalCentavos: Math.round(minOrderPhp * 100),
+      maxUses,
+      uses: 0,
+      firstOrderOnly: body.firstOrderOnly !== false,
+      active: true,
+      startsAt: body.startsAt ? new Date(body.startsAt) : null,
+      expiresAt,
+      createdAt: new Date(),
+      createdBy: found.user.email,
+    };
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("vouchers").insertOne(doc);
+    return send(res, 201, { ok: true, voucher: doc });
+  } catch (err) {
+    if (err && err.code === 11000) return fail(res, 409, "voucher_exists", "THAT VOUCHER CODE ALREADY EXISTS.");
+    return fail(res, 422, "invalid", err.message || "COULD NOT CREATE VOUCHER.");
+  }
+}
+
+async function handleAdminVoucherToggle(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  try {
+    const code = normalizeVoucherCode(body.code);
+    if (typeof body.active !== "boolean") return fail(res, 422, "invalid", "ACTIVE MUST BE TRUE OR FALSE.");
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const result = await d.collection("vouchers").updateOne({ code }, { $set: { active: body.active, updatedAt: new Date() } });
+    if (!result.matchedCount) return fail(res, 404, "not_found", "VOUCHER NOT FOUND.");
+    return send(res, 200, { ok: true, code, active: body.active });
+  } catch (err) {
+    return fail(res, 422, "invalid", err.message || "COULD NOT UPDATE VOUCHER.");
   }
 }
 
@@ -867,22 +1071,51 @@ async function handleCreateOrder(req, res) {
 
   const c = body.customer ?? {};
   const name = String(c.name ?? "").trim().slice(0, 120);
-  const phone = String(c.phone ?? "").trim().slice(0, 40);
+  const rawPhone = String(c.phone ?? "").trim().slice(0, 40);
   const addressLine = String(c.addressLine ?? "").trim().slice(0, 240);
   const city = String(c.city ?? "").trim().slice(0, 80);
   const province = String(c.province ?? "").trim().slice(0, 80);
   const postalCode = String(c.postalCode ?? "").trim().slice(0, 12);
   const notes = String(c.notes ?? "").trim().slice(0, 400);
-  if (!name || !phone || !addressLine || !city || !province) {
+  if (!name || !rawPhone || !addressLine || !city || !province) {
     return fail(res, 422, "invalid", "COMPLETE THE DELIVERY DETAILS BEFORE PLACING THE ORDER.");
   }
 
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
+    const phone = await linkAccountPhone(d, found.user, rawPhone);
     const reference = await nextReference("order");
     const paymentReference = await nextReference("payment");
     const now = new Date();
+    const voucherCodeInput = String(body.voucherCode || "").trim();
+    let voucherResult = null;
+    if (voucherCodeInput) {
+      voucherResult = await resolveVoucher(d, voucherCodeInput, found.user, phone, subtotalCentavos);
+      const v = voucherResult.voucher;
+      const claimFilter = v.maxUses > 0
+        ? { _id: v._id, active: true, uses: { $lt: v.maxUses } }
+        : { _id: v._id, active: true };
+      const claimed = await d.collection("vouchers").updateOne(claimFilter, { $inc: { uses: 1 } });
+      if (claimed.modifiedCount !== 1) return fail(res, 409, "voucher_limit", "THAT VOUCHER HAS JUST REACHED ITS USE LIMIT.");
+      try {
+        await d.collection("voucherRedemptions").insertOne({
+          code: voucherResult.code,
+          userId: found.user._id,
+          phone,
+          orderReference: reference,
+          createdAt: now,
+        });
+      } catch (claimErr) {
+        await d.collection("vouchers").updateOne({ _id: v._id }, { $inc: { uses: -1 } });
+        if (claimErr && claimErr.code === 11000) {
+          return fail(res, 409, "voucher_used", "THIS VOUCHER HAS ALREADY BEEN USED WITH YOUR ACCOUNT OR MOBILE NUMBER.");
+        }
+        throw claimErr;
+      }
+    }
+    const discountCentavos = voucherResult ? voucherResult.discountCentavos : 0;
+    const totalCentavos = Math.max(0, subtotalCentavos + SHIPPING_CENTAVOS - discountCentavos);
 
     const orderDoc = {
       reference,
@@ -890,6 +1123,7 @@ async function handleCreateOrder(req, res) {
       email: found.user.email,
       customerName: name,
       phone,
+      phoneNormalized: phone,
       addressLine,
       city,
       province,
@@ -897,6 +1131,8 @@ async function handleCreateOrder(req, res) {
       notes,
       items: lines,
       subtotalCentavos,
+      discountCentavos,
+      voucherCode: voucherResult ? voucherResult.code : null,
       shippingCentavos: SHIPPING_CENTAVOS,
       totalCentavos,
       status: "awaiting_payment",
@@ -929,9 +1165,18 @@ async function handleCreateOrder(req, res) {
       paymentReference,
       amountCentavos: totalCentavos,
       subtotalCentavos,
+      discountCentavos,
+      voucherCode: voucherResult ? voucherResult.code : null,
       shippingCentavos: SHIPPING_CENTAVOS,
     });
   } catch (err) {
+    if (err && err.code === 11000) {
+      return fail(res, 409, "account_or_voucher_conflict",
+        "THIS MOBILE NUMBER OR VOUCHER HAS ALREADY BEEN USED. REFRESH AND TRY AGAIN.");
+    }
+    if (err && /mobile number|voucher|first ipc order|first order/i.test(err.message || "")) {
+      return fail(res, 422, "voucher_or_phone_invalid", err.message);
+    }
     return mongoError(res, err, "order creation failed");
   }
 }
