@@ -3371,8 +3371,10 @@ setTimeout(function () {
       if (path === '/api/auth/register') {
         opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { phone: ($('#suPhone') && $('#suPhone').value.trim()) || '' }) });
       }
-      if (path === '/api/orders' && appliedVoucher) {
+      if (path === '/api/orders' && appliedVoucher && IPC.auth && IPC.auth.user && appliedVoucher.userId === IPC.auth.user.id) {
         opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { voucherCode: appliedVoucher.code }) });
+      } else if (path === '/api/orders' && appliedVoucher) {
+        clearVoucher('ACCOUNT CHANGED — APPLY THE VOUCHER AGAIN.');
       }
       return originalApi.call(this, path, opts);
     };
@@ -3394,7 +3396,7 @@ setTimeout(function () {
     });
     IPC.api('/api/vouchers/validate', { method: 'POST', body: { code: code, phone: phone, items: items } })
       .then(function (d) {
-        appliedVoucher = { code: d.code, discountCentavos: d.discountCentavos };
+        appliedVoucher = { code: d.code, discountCentavos: d.discountCentavos, userId: IPC.auth && IPC.auth.user && IPC.auth.user.id };
         $('#ipcDiscountRow').style.display = 'flex';
         $('#ipcDiscountValue').textContent = '−' + IPC.fmtP(d.discountCentavos);
         $('#coTotal').textContent = IPC.fmtP(d.totalCentavos);
@@ -3419,7 +3421,8 @@ setTimeout(function () {
   });
   document.addEventListener('ipc:auth', function () {
     var user = IPC.auth && IPC.auth.user;
-    if (user && user.phone && $('#coPhone') && !$('#coPhone').value) $('#coPhone').value = user.phone;
+    if (appliedVoucher && (!user || appliedVoucher.userId !== user.id)) clearVoucher('ACCOUNT CHANGED — APPLY THE VOUCHER AGAIN.');
+    if (user && user.phone && $('#coPhone') && $('#coPhone').value !== user.phone) $('#coPhone').value = user.phone;
   });
 
   var admMain = $('#admMain');
