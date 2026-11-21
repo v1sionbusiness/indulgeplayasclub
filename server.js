@@ -122,6 +122,49 @@ function serveIndex(res) {
        merchant's actual QR image is uploaded and installed. */
     const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){if(window.IPC){window.IPC.API="https://indulgeplayasclub.onrender.com";}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
     html = html.replace(/<\/body>/i, loginFix + "</body>");
+    const contactPolish = `<style id="ipc-contact-form-polish">
+      input, textarea, select {
+        color: #171717 !important;
+        -webkit-text-fill-color: #171717 !important;
+        background: #f7f7f7 !important;
+        border: 1px solid #a8a8a8 !important;
+        caret-color: #171717 !important;
+      }
+      input::placeholder, textarea::placeholder {
+        color: #666 !important;
+        -webkit-text-fill-color: #666 !important;
+        opacity: 1 !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        outline: 2px solid #777 !important;
+        outline-offset: 2px;
+        border-color: #333 !important;
+      }
+      label { color: #f3f3f3; }
+      input, textarea { box-sizing: border-box; }
+    </style>
+    <script id="ipc-contact-copy-polish">
+      (function () {
+        var replacements = new Map([
+          ["SEND US A MESSAGE", "CONTACT THE CLUB"],
+          ["DROP YOUR NAME, A WAY TO REACH YOU AND WHAT'S ON YOUR MIND — IT LANDS STRAIGHT IN THE CLUB INBOX. NO EMAIL SHOWN, NO DM NEEDED.", "Have a question or need assistance? Send us a message and our team will get back to you using the contact details you provide. Your email address will not be displayed publicly."],
+          ["EMAIL OR FB NAME (FOR REPLY)", "EMAIL ADDRESS OR FACEBOOK NAME"],
+          ["SEND MESSAGE", "SUBMIT MESSAGE"]
+        ]);
+        function polish() {
+          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          var node;
+          while ((node = walker.nextNode())) {
+            var value = node.nodeValue.trim();
+            if (replacements.has(value)) node.nodeValue = node.nodeValue.replace(value, replacements.get(value));
+          }
+        }
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", polish);
+        else polish();
+        new MutationObserver(polish).observe(document.documentElement, { childList: true, subtree: true });
+      })();
+    </script>`;
+    html = html.replace(/<\/head>/i, contactPolish + "</head>");
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "public, max-age=300",
