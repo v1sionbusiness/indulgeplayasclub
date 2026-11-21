@@ -1067,7 +1067,6 @@ async function handleCreateOrder(req, res) {
   }
 
   const subtotalCentavos = lines.reduce((s, l) => s + l.priceCentavos * l.qty, 0);
-  const totalCentavos = subtotalCentavos + SHIPPING_CENTAVOS;
 
   const c = body.customer ?? {};
   const name = String(c.name ?? "").trim().slice(0, 120);
@@ -1115,7 +1114,8 @@ async function handleCreateOrder(req, res) {
       }
     }
     const discountCentavos = voucherResult ? voucherResult.discountCentavos : 0;
-    const totalCentavos = Math.max(0, subtotalCentavos + SHIPPING_CENTAVOS - discountCentavos);
+    const totalCentavos = subtotalCentavos + SHIPPING_CENTAVOS - discountCentavos;
+    if (totalCentavos < 100) return fail(res, 422, "voucher_too_large", "THE VOUCHER MUST LEAVE AT LEAST ₱1.00 TO PAY.");
 
     const orderDoc = {
       reference,
