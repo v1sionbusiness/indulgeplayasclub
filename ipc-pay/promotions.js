@@ -7,7 +7,7 @@ function normalizePhilippineMobile(input) {
   let digits = raw.replace(/[^0-9]/g, "");
   if (digits.startsWith("63")) digits = digits.slice(2);
   if (digits.startsWith("0")) digits = digits.slice(1);
-  if (!/^9\\d{9}$/.test(digits)) {
+  if (!/^9\d{9}$/.test(digits)) {
     throw new TypeError("ENTER A VALID PHILIPPINE MOBILE NUMBER (09XXXXXXXXX).");
   }
   return "+63" + digits;
