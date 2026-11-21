@@ -1362,7 +1362,7 @@ textarea.inp{min-height:110px;resize:vertical}
       <h3>03 — PAYMENT VERIFICATION</h3>
       <p>Every payment is checked by a human before anything ships. Submitting your reference number and screenshot moves your payment to UNDER VERIFICATION — it never marks itself PAID. A club admin verifies it against the club records and marks it PAID or FAILED from the dashboard.</p>
       <ul>
-        <li>If a payment is marked FAILED, double-check the reference number and screenshot, then resubmit — or message the club and we'll sort it out.</li>
+        <li>If a payment is marked FAILED, that payment reference is closed. Check your transaction details and start a fresh checkout from the items returned to your bag. Two payment rejections within ten minutes temporarily pause new payment requests for five minutes; contact the club if you believe a rejection was made in error.</li>
         <li>Every verification decision is recorded with the admin who made it and when.</li>
       </ul>
     </div>
@@ -2277,6 +2277,7 @@ textarea.inp{min-height:110px;resize:vertical}
   /* ---------------- THE BAG (localStorage) ---------------- */
   var CART_KEY = 'ipc-cart-v2';
   var PENDING_BAG_KEY = 'ipc-pending-bag-v1';
+  IPC.PENDING_BAG_KEY = PENDING_BAG_KEY;
   var bagItems = [];
   var bagReady = false;
 
@@ -2797,7 +2798,7 @@ textarea.inp{min-height:110px;resize:vertical}
     }
     if (IPC.bag.items.length === 0) { show('YOUR BAG IS EMPTY — ADD A PIECE BEFORE CHECKING OUT.', false); return; }
     var checkoutBagSnapshot = IPC.bag.items.map(function (it) { return { productId: it.productId, size: it.size, color: it.color, qty: it.qty }; });
-    try { localStorage.setItem(PENDING_BAG_KEY, JSON.stringify({ items: checkoutBagSnapshot, createdAt: Date.now() })); } catch (snapshotError) {}
+    try { localStorage.setItem(IPC.PENDING_BAG_KEY, JSON.stringify({ items: checkoutBagSnapshot, createdAt: Date.now() })); } catch (snapshotError) {}
     var btn = $('#coSubmit');
     btn.disabled = true;
     btn.textContent = 'PLACING ORDER…';
@@ -2855,6 +2856,7 @@ textarea.inp{min-height:110px;resize:vertical}
     var pay = data.payment;
     var order = data.order || {};
     poState.status = pay.status;
+    IPC.currentPaymentStatus = pay.status;
     var returnCart = $('#poReturnCart');
     if (returnCart) returnCart.style.display = 'none';
     $('#poNotfound').style.display = 'none';
@@ -2925,6 +2927,7 @@ textarea.inp{min-height:110px;resize:vertical}
     });
   }
   IPC.renderPayOrder = function (ref) {
+    IPC.currentPaymentStatus = null;
     IPC.stopPayPoll();
     $('#poNotfound').style.display = 'none';
     $('#poMain').style.display = 'none';
@@ -3299,7 +3302,7 @@ textarea.inp{min-height:110px;resize:vertical}
     if (r.name === 'login' || r.name === 'signup') {
       IPC.nextRoute = (r.query && r.query.next) || null;
     }
-    if (activeRouteName === 'payorder' && r.name !== 'payorder' && IPC.restorePendingBag) IPC.restorePendingBag();
+    if (activeRouteName === 'payorder' && r.name !== 'payorder' && IPC.restorePendingBag && (IPC.currentPaymentStatus === 'pending' || IPC.currentPaymentStatus === 'failed')) IPC.restorePendingBag();
     activeRouteName = r.name;
     IPC.stopPayPoll();
     $('.view').forEach(function (v) { v.classList.remove('active'); });
