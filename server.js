@@ -20,6 +20,7 @@
  * Environment variables:
  *   CONTACT RELAY (unchanged):
  *     EMAILJS_PUBLIC_KEY / EMAILJS_SERVICE_ID / EMAILJS_TEMPLATE_ID
+ *     EMAILJS_CONFIRMATION_TEMPLATE_ID — customer contact confirmation
  *   IPC ACCOUNTS (new):
  *     MONGODB_URI        — Atlas connection string (mongodb+srv://…)
  *     MONGODB_DB         — database name (default "ipc")
@@ -657,31 +658,45 @@ function handleContact(req, res, ip) {
     const publicKey = process.env.EMAILJS_PUBLIC_KEY || "";
     const serviceId = process.env.EMAILJS_SERVICE_ID || "";
     const templateId = process.env.EMAILJS_TEMPLATE_ID || "";
-    if (!publicKey || !serviceId || !templateId) {
+    const confirmationTemplateId = process.env.EMAILJS_CONFIRMATION_TEMPLATE_ID || "";
+    if (!publicKey || !serviceId || !templateId || !confirmationTemplateId) {
       return send(res, 503, { ok: false, reason: "not_configured" });
     }
 
-    try {
-      const r = await fetch(EMAILJS_URL, {
+    const templateParams = {
+      from_name: fromName,
+      reply_to: replyTo,
+      message: message,
+      sent_at: sentAt || new Date().toLocaleString("en-PH"),
+    };
+
+    async function sendContactEmail(targetTemplateId) {
+      const response = await fetch(EMAILJS_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           service_id: serviceId,
-          template_id: templateId,
+          template_id: targetTemplateId,
           user_id: publicKey,
-          template_params: {
-            from_name: fromName,
-            reply_to: replyTo,
-            message: message,
-            sent_at: sentAt || new Date().toLocaleString("en-PH"),
-          },
+          template_params: templateParams,
         }),
         signal: AbortSignal.timeout(15000),
       });
-      if (!r.ok) throw new Error("emailjs responded " + r.status);
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error("EmailJS responded " + response.status + (detail ? ": " + detail.slice(0, 300) : ""));
+      }
+    }
+
+    try {
+      /* Notify IPC and send the customer an acknowledgement using the same
+         validated form fields. The confirmation template's To Email must be
+         set to {{reply_to}} in EmailJS. */
+      await sendContactEmail(templateId);
+      await sendContactEmail(confirmationTemplateId);
       return send(res, 200, { ok: true });
     } catch (err) {
-      console.error("relay failed:", err.message);
+      console.error("contact email flow failed:", err.message);
       return send(res, 502, { ok: false, reason: "send_failed" });
     }
   });
