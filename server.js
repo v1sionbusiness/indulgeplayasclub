@@ -122,9 +122,9 @@ function serveIndex(res) {
     /* The frontend still contains the retired API hostname. Since this
        Render service now serves both the site and API, rewrite every
        occurrence before returning the page so browser requests stay same-origin. */
-    html = html.replace(/https?:\\/\\/ipc-contact-api\\.onrender\\.com/gi,
+    html = html.replace(/https?:\/\/ipc-contact-api\.onrender\.com/gi,
       "https://indulgeplayasclub.onrender.com");
-    html = html.replace(/ipc-contact-api\\.onrender\\.com/gi,
+    html = html.replace(/ipc-contact-api\.onrender\.com/gi,
       "indulgeplayasclub.onrender.com");
     /* Keep the checkout QR as a clearly marked placeholder until the
        merchant's actual QR image is uploaded and installed. */
