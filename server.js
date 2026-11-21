@@ -821,7 +821,8 @@ async function route(req, res) {
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
         p === "/api/admin/orders" || p === "/api/admin/users" ||
-        p === "/api/admin/vouchers") {
+        p === "/api/admin/vouchers" || p === "/api/admin/inquiries" ||
+        p === "/api/admin/inventory") {
       const found = await userFromReq(req).catch(() => null);
       if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
       if (found.user.role !== "admin") {
@@ -836,8 +837,33 @@ async function route(req, res) {
             .sort({ createdAt: -1 }).limit(200).toArray();
           return send(res, 200, { ok: true, vouchers });
         }
+        if (p === "/api/admin/inquiries") {
+          const rows = await d.collection("inquiries").find({})
+            .sort({ createdAt: -1 }).limit(200).toArray();
+          return send(res, 200, { ok: true, inquiries: rows });
+        }
+        if (p === "/api/admin/inventory") {
+          const sold = await d.collection("orders").aggregate([
+            { $match: { status: "paid" } },
+            { $unwind: "$items" },
+            { $group: { _id: "$items.productId", units: { $sum: "$items.qty" }, revenue: { $sum: { $multiply: ["$items.priceCentavos", "$items.qty"] } } } },
+          ]).toArray();
+          const soldMap = {};
+          sold.forEach((s) => { soldMap[s._id] = s; });
+          const inventory = PRODUCTS.map((p) => ({
+            id: p.id,
+            name: p.name,
+            priceCentavos: p.priceCentavos,
+            tag: p.tag || "",
+            sizes: p.sizes,
+            colors: p.colors,
+            unitsSold: (soldMap[p.id] && soldMap[p.id].units) || 0,
+            revenueCentavos: (soldMap[p.id] && soldMap[p.id].revenue) || 0,
+          }));
+          return send(res, 200, { ok: true, inventory });
+        }
         if (p === "/api/admin/overview") {
-          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions, trackAgg, paySettings] = await Promise.all([
+          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions, trackAgg, paySettings, dailyRevenue] = await Promise.all([
             d.collection("users").countDocuments(),
             d.collection("orders").countDocuments(),
             d.collection("payments").aggregate([
@@ -858,6 +884,7 @@ async function route(req, res) {
               { $group: { _id: "$tracking.status", n: { $sum: 1 } } },
             ]).toArray(),
             getPaySettings(d),
+            dailyPaidRevenue(d),
           ]);
           const trackingStages = {};
           trackAgg.forEach((s) => { trackingStages[s._id] = s.n; });
@@ -877,6 +904,7 @@ async function route(req, res) {
               activeVouchers,
               voucherRedemptions,
               tracking: trackingStages,
+              dailyRevenue,
               autoVerify: paySettings.autoVerify,
               rootAdmin: (process.env.ADMIN_EMAIL || "").trim().toLowerCase(),
             },
@@ -964,6 +992,11 @@ async function route(req, res) {
   if (p === "/api/auth/register" || p === "/api/auth/login" || p === "/api/auth/logout") {
     return handleAuth(req, res, ip, p);
   }
+
+  if (p === "/api/auth/password") return handlePasswordChange(req, res);
+
+  /* --- newsletter signup: small body, self rate-limited --- */
+  if (p === "/api/newsletter") return handleNewsletter(req, res, ip);
 
   /* --- admin role management: 20KB --- */
   if (p === "/api/admin/role") return handleAdminRole(req, res);
@@ -1131,7 +1164,25 @@ function handleContact(req, res, ip) {
     }
 
     try {
-      /* Send the IPC inbox notification first. This is the primary success
+      /* Store the inquiry for the admin dashboard FIRST — the club keeps
+         the lead even when the EmailJS relay is down or misconfigured. */
+      /* Store the inquiry for the admin dashboard — the club keeps the lead
+         even when the email relay is unavailable. */
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        await d.collection("inquiries").insertOne({
+          name: fromName,
+          contact: replyTo,
+          message,
+          ip,
+          createdAt: new Date(),
+          businessEmailSent: true,
+        });
+      } catch (dbErr) {
+        console.warn("[contact] inquiry not stored:", dbErr.message);
+      }
+      /* Send the IPC inbox notification next. This is the primary success
          condition shown to the visitor. */
       await sendContactEmail(templateId);
       recentContactSubmissions.set(duplicateKey, Date.now());      if (recentContactSubmissions.size > 1000) {
@@ -2059,6 +2110,123 @@ async function handleMemberRestore(req, res) {
   } catch (err) {
     return mongoError(res, err, "member restore failed");
   }
+}
+
+/* --------------------------------------------------------------- */
+/* NEWSLETTER — the mailing list. Validated, deduped, honeypotted,   */
+/* rate limited per IP. Mongo down never blocks a friendly reply.    */
+/* --------------------------------------------------------------- */
+
+const recentNewsletter = new Map();
+
+async function handleNewsletter(req, res, ip) {
+  let raw = "";
+  let dead = false;
+  req.on("data", (chunk) => {
+    raw += chunk;
+    if (raw.length > 20000) { dead = true; req.destroy(); }
+  });
+  req.on("end", async () => {
+    if (dead) return;
+    let body = {};
+    try { body = JSON.parse(raw || "{}"); }
+    catch { return send(res, 400, { ok: false, reason: "bad_request" }); }
+    if (typeof body.hp === "string" && body.hp.trim() !== "") {
+      return send(res, 200, { ok: true, message: "YOU'RE ON THE LIST — FIRST ACCESS LANDS IN YOUR INBOX." });
+    }
+    const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return fail(res, 422, "invalid", "THAT EMAIL DOESN'T LOOK RIGHT — CHECK IT AND SEND AGAIN.");
+    }
+    try {
+      const { connect } = require("./ipc-pay/mongo");
+      const d = await connect();
+      const col = d.collection("newsletter");
+      /* duplicates answer friendly even inside the cooldown window — it is a
+         read, not a write, so the rate limit has nothing to protect here */
+      const existing = await col.findOne({ email });
+      if (existing) {
+        return send(res, 200, { ok: true, message: "YOU'RE ALREADY ON THE LIST — FIRST ACCESS LANDS IN YOUR INBOX." });
+      }
+      const now = Date.now();
+      const last = recentNewsletter.get(ip) || 0;
+      if (now - last < 30000) {
+        return fail(res, 429, "rate_limited", "EASY — THE LIST JUST SAVED YOU. TRY AGAIN IN A MOMENT.");
+      }
+      recentNewsletter.set(ip, now);
+      if (recentNewsletter.size > 5000) {
+        for (const [k, v] of recentNewsletter) if (now - v > 600000) recentNewsletter.delete(k);
+      }
+      await col.insertOne({ email, ip, createdAt: new Date(), source: String(body.source ?? "website").slice(0, 40) });
+      console.log("[ipc-pay] newsletter subscriber added:", email);
+      return send(res, 200, { ok: true, message: "YOU'RE ON THE LIST — FIRST ACCESS LANDS IN YOUR INBOX." });
+    } catch (err) {
+      return mongoError(res, err, "newsletter signup failed");
+    }
+  });
+}
+
+/* --------------------------------------------------------------- */
+/* PASSWORD CHANGE — signed-in members only. Verifies the current    */
+/* password, rotates the scrypt hash, kills every OTHER session.     */
+/* --------------------------------------------------------------- */
+
+async function handlePasswordChange(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const currentPassword = String(body.currentPassword ?? "");
+  const newPassword = String(body.newPassword ?? "");
+  const { verifyPassword, hashPassword, findUserById } = require("./ipc-pay/mongo");
+  const user = await findUserById(found.user._id);
+  if (!user || user.status === "removed") return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (!verifyPassword(currentPassword, user.salt, user.hash)) {
+    return fail(res, 401, "bad_credentials", "YOUR CURRENT PASSWORD IS WRONG — TRY AGAIN.");
+  }
+  if (newPassword.length < 8 || newPassword.length > 72) {
+    return fail(res, 422, "invalid", "NEW PASSWORD NEEDS AT LEAST 8 CHARACTERS.");
+  }
+  if (newPassword === currentPassword) {
+    return fail(res, 422, "invalid", "THE NEW PASSWORD MUST BE DIFFERENT FROM THE CURRENT ONE.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const next = hashPassword(newPassword);
+    await d.collection("users").updateOne(
+      { _id: user._id },
+      { $set: { salt: next.salt, hash: next.hash, passwordChangedAt: new Date() } }
+    );
+    /* security: every OTHER session dies; this device stays logged in */
+    await d.collection("sessions").deleteMany({ userId: user._id, token: { $ne: found.token } });
+    console.log("[ipc-pay] password changed:", user.email);
+    return send(res, 200, { ok: true, message: "PASSWORD UPDATED — OTHER DEVICES WERE SIGNED OUT." });
+  } catch (err) {
+    return mongoError(res, err, "password change failed");
+  }
+}
+
+/* Last 7 days of verified revenue, keyed by Asia/Manila calendar day.
+   Days with no paid payments report 0 so the chart never lies. */
+function dailyPaidRevenue(d) {
+  const manila = (dt) => new Date(dt.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    days.push({ day: manila(new Date(Date.now() - i * 86400000)), centavos: 0 });
+  }
+  const since = new Date(Date.now() - 6 * 86400000);
+  since.setUTCHours(0, 0, 0, 0);
+  return d.collection("payments").aggregate([
+    { $match: { status: "paid", verifiedAt: { $gte: since } } },
+    { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$verifiedAt", timezone: "Asia/Manila" } }, total: { $sum: "$amountCentavos" } } },
+  ]).toArray().then((rows) => {
+    const map = {};
+    rows.forEach((r) => { map[r._id] = r.total; });
+    days.forEach((day) => { day.centavos = map[day.day] || 0; });
+    return days;
+  });
 }
 
 /* --------------------------------------------------------------- */
