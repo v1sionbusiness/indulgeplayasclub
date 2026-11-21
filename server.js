@@ -680,7 +680,7 @@ function handleContact(req, res, ip) {
       return send(res, 503, { ok: false, reason: "not_configured" });
     }
 
-    const emailPattern = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const hasCustomerEmail = emailPattern.test(replyTo);
     const templateParams = {
       from_name: fromName,
