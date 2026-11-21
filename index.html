@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-21 09:40 -->
+<!-- IPC BUILD 2026-11-21 17:10 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -1787,6 +1787,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         <div class="tr-step" data-step="verify"><p class="tr-k">STEP 2</p><p class="tr-v">PAYMENT UNDER VERIFICATION</p></div>
         <div class="tr-step" data-step="paid"><p class="tr-k">STEP 3</p><p class="tr-v">PAID — ORDER UNLOCKED</p></div>
       </div>
+      <div id="poTracking" style="display:none"></div>
       <div class="pay-grid">
         <div class="pay-panel">
           <p class="pay-amount-k">ORDER TOTAL</p>
@@ -1818,7 +1819,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
             <p class="demo-k">TESTING THE FLOW? COMPLETE THIS SAMPLE PAYMENT WITHOUT REAL MONEY — IT MOVES THE ORDER TO UNDER VERIFICATION SO THE CLUB ADMIN DASHBOARD HAS SOMETHING TO VERIFY.</p>
             <button type="button" class="btn-o" id="demoPay">DEMO — COMPLETE SAMPLE PAYMENT</button>
           </div>
-          <p class="pay-note">UPLOADING PROOF MOVES YOUR PAYMENT TO UNDER VERIFICATION — A CLUB ADMIN CHECKS IT BY HAND. IT NEVER MARKS ITSELF PAID. PAID BY MEETUP OR ALREADY SENT? DM @INDULGEPLAYASCLUB AND WE'LL SORT IT.</p>
+          <p class="pay-note">UPLOADING PROOF MOVES YOUR PAYMENT TO UNDER VERIFICATION — IPC PAY READS IT AND CONFIRMS AUTOMATICALLY WHEN THE SCREENSHOT CHECKS OUT. REFERENCE-ONLY CLAIMS ARE REVIEWED BY A CLUB ADMIN. PAID BY MEETUP OR ALREADY SENT? DM @INDULGEPLAYASCLUB AND WE'LL SORT IT.</p>
         </div>
       </div>
     </div>
@@ -2946,6 +2947,13 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   document.addEventListener('ipc:auth', function () {
     var co = document.getElementById('v-checkout');
     if (co && co.classList.contains('active')) IPC.renderCheckout();
+    /* hard reload straight onto a payment/tracking link: auth restores
+       AFTER the first render, so give the payment screen a second pass */
+    var po = document.getElementById('v-payorder');
+    if (po && po.classList.contains('active')) {
+      var pm = (location.hash || '').match(/^#\/pay\/([A-Za-z0-9-]+)/);
+      if (pm) IPC.renderPayOrder(decodeURIComponent(pm[1]));
+    }
   });
   $('#coForm').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -3023,13 +3031,14 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   };
   function renderPayData(data) {
     var pay = data.payment;
-    var order = data.order || {};
+    var order = data.order || (pay && pay.order) || {};
     poState.status = pay.status;
     IPC.currentPaymentStatus = pay.status;
     var returnCart = $('#poReturnCart');
     if (returnCart) returnCart.style.display = 'none';
     $('#poNotfound').style.display = 'none';
     $('#poMain').style.display = 'block';
+    if (IPC.hidePayTracking) IPC.hidePayTracking();
     $('#poAmount').textContent = IPC.fmtP(pay.amountCentavos);
     $('#poRefs').textContent = 'ORDER ' + pay.orderReference + ' — PAYMENT ' + pay.paymentReference;
     $('#poItems').innerHTML = (order.items || []).map(function (it) {
@@ -3060,6 +3069,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       headline.textContent = 'Paid. You\u2019re locked in.';
       copy.textContent = 'The club verified your payment — the order is unlocked and being packed. Shipping is free, Metro Manila usually lands within a few days.';
       form.style.display = 'none';
+      if (IPC.renderPayTracking) IPC.renderPayTracking(order);
     } else if (pay.status === 'failed') {
       if (IPC.restorePendingBag) IPC.restorePendingBag(order.items || []);
       headline.textContent = 'Payment rejected.';
@@ -3068,7 +3078,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       form.style.display = 'none';
     } else if (pay.status === 'under_verification') {
       headline.textContent = 'Verifying your payment.';
-      copy.textContent = 'PROOF RECEIVED — IPC PAY IS CHECKING IT BY HAND. THIS PAGE UPDATES ITSELF — LEAVE IT OPEN OR COME BACK TO IT FROM YOUR ACCOUNT ANY TIME.';
+      copy.textContent = 'PROOF RECEIVED — IPC PAY IS READING YOUR PAYMENT. CONFIRMATION IS AUTOMATIC AND THIS PAGE UPDATES ITSELF — LEAVE IT OPEN OR COME BACK FROM YOUR ACCOUNT ANY TIME.';
       form.style.display = 'none';
     } else {
       headline.textContent = 'Pay your order.';
@@ -3132,7 +3142,8 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       }).then(function (d) {
         btn.disabled = false;
         btn.textContent = 'SUBMIT PAYMENT PROOF';
-        show('PROOF RECEIVED — IPC PAY IS VERIFYING YOUR PAYMENT. A CLUB ADMIN CHECKS EVERY SUBMISSION BY HAND.', true);
+        show(d.message || 'PROOF RECEIVED — IPC PAY IS READING YOUR PAYMENT. MOST PROOFS CONFIRM WITHIN SECONDS.', true);
+        if (d.autoVerified && d.trackingNumber) IPC.toast('PAYMENT VERIFIED — TRACKING ' + d.trackingNumber + ' IS LIVE');
         if (fileInput) { fileInput.value = ''; $('#proofName').textContent = ''; }
         setTimeout(function () { loadPay(poState.ref); }, 600);
       }).catch(function (err) {
@@ -3320,7 +3331,8 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       list.innerHTML = d.orders.map(function (o) {
         return '<div class="order-row">' +
           '<div><p class="ord-ref">' + IPC.esc(o.reference) + '</p>' +
-          '<p class="ord-meta">' + fmtDate(o.createdAt) + ' — ' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + ' PIECE(S) — ' + IPC.fmtP(o.totalCentavos) + '</p></div>' +
+          '<p class="ord-meta">' + fmtDate(o.createdAt) + ' — ' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + ' PIECE(S) — ' + IPC.fmtP(o.totalCentavos) + '</p>' +
+          (IPC.trackLineHTML ? IPC.trackLineHTML(o) : '') + '</div>' +
           '<div class="ord-side">' + IPC.pill(o.status) +
           (o.payment && o.payment.paymentReference ? '<a href="#/pay/' + IPC.esc(o.payment.paymentReference) + '" class="btn-o btn-sm">VIEW PAYMENT</a>' : '') +
           '</div></div>';
@@ -3347,13 +3359,15 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   function loadOverview() {
     IPC.api('/api/admin/overview').then(function (d) {
       var o = d.overview;
+      IPC.__ipcRootAdmin = o.rootAdmin || '';
       $('#admStats').innerHTML =
         statTile(o.users, 'MEMBERS') +
         statTile(o.orders, 'ORDERS') +
         statTile(o.paymentsUnderVerification, 'UNDER VERIFICATION') +
         statTile(IPC.fmtP(o.underVerificationCentavos || 0), 'PENDING VALUE') +
         statTile(IPC.fmtP(o.paidRevenueCentavos), 'VERIFIED REVENUE') +
-        statTile((o.activeVouchers || 0) + ' LIVE · ' + (o.voucherRedemptions || 0) + ' USED', 'VOUCHERS');
+        statTile((o.activeVouchers || 0) + ' LIVE · ' + (o.voucherRedemptions || 0) + ' USED', 'VOUCHERS') +
+        '<div class="stat-tile ipc-auto-tile' + (o.autoVerify === false ? ' off' : '') + '" id="ipcAutoTile" role="button" tabindex="0" title="IPC PAY AUTO READER — TAP TO SWITCH"><p class="stat-n">' + (o.autoVerify === false ? 'MANUAL' : 'AUTO-READER') + '</p><p class="stat-k">PAYMENT READER — TAP TO SWITCH</p></div>';
     }).catch(function (err) {
       $('#admStats').innerHTML = '<div class="stat-tile" style="grid-column:1/-1"><p class="stat-k">' + IPC.esc((err.message || 'OVERVIEW FAILED').toUpperCase()) + '</p></div>';
     });
@@ -3400,7 +3414,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       host.innerHTML = '<p class="count-chip" style="margin-bottom:14px">' + list.length +
         ' ORDERS — TAP ANY ROW FOR THE FULL BREAKDOWN</p>' +
         '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-        '<th>ORDER</th><th>BUYER</th><th>DELIVER TO</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>PLACED</th></tr></thead><tbody>' +
+        '<th>ORDER</th><th>BUYER</th><th>DELIVER TO</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>TRACKING</th><th>PLACED</th></tr></thead><tbody>' +
         list.map(function (o, i) {
           var cityLine = [o.city, o.province].filter(Boolean).join(', ');
           var delivery = '<b>' + IPC.esc(o.addressLine || 'NO STREET GIVEN') + '</b>' +
@@ -3443,8 +3457,9 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
             '<td>' + IPC.fmtP(o.totalCentavos) + voucher + '</td>' +
             '<td>' + (o.payment ? IPC.esc(o.payment.paymentReference) + (o.payment.refNo ? '<br /><small>REF ' + IPC.esc(o.payment.refNo) + '</small>' : '') + (o.payment.proofPresent ? '<br /><small class="adm-vtag">PROOF ON FILE</small>' : '') + '<br />' + IPC.pill(o.payment.status) : '<small>NO PAYMENT YET</small>') + '</td>' +
             '<td>' + IPC.pill(o.status) + '</td>' +
+            '<td>' + (IPC.trackCellHTML ? IPC.trackCellHTML(o) : '') + '</td>' +
             '<td>' + fmtDate(o.createdAt) + '</td></tr>' +
-            '<tr class="adm-order-detail" id="admDet' + i + '" style="display:none"><td colspan="8">' + detail + '</td></tr>';
+            '<tr class="adm-order-detail" id="admDet' + i + '" style="display:none"><td colspan="9">' + detail + (IPC.fulfilHTML ? IPC.fulfilHTML(o) : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }).catch(function (err) {
       host.innerHTML = '<p class="adm-empty">' + IPC.esc((err.message || 'ORDERS FAILED').toUpperCase()) + '</p>';
@@ -3483,16 +3498,21 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     IPC.api('/api/admin/users').then(function (d) {
       var list = d.users || [];
       if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO MEMBERS YET</p>'; return; }
-      host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-        '<th>EMAIL</th><th>NAME</th><th>MOBILE</th><th>ROLE</th><th>TIER</th><th>ORDERS</th><th>PAID</th><th>LAST ORDER</th><th>JOINED</th></tr></thead><tbody>' +
+      host.innerHTML = '<div class="ipc-emergency"><b>EMERGENCY USE ONLY</b> — REMOVING A MEMBER IS NOT RECOMMENDED AND EXISTS HERE ONLY FOR WORST-CASE SITUATIONS: HIJACKED ACCOUNTS, FRAUD, TROLLING. REMOVAL KILLS THEIR SESSIONS AND BLOCKS RE-JOINING; THEIR ORDERS AND PAYMENTS STAY ON RECORD FOREVER.</div><div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+        '<th>EMAIL</th><th>NAME</th><th>MOBILE</th><th>ROLE</th><th>TIER</th><th>ORDERS</th><th>PAID</th><th>LAST ORDER</th><th>JOINED</th><th>ACTIONS</th></tr></thead><tbody>' +
         list.map(function (u) {
-          return '<tr><td><b>' + IPC.esc(u.email) + '</b></td><td>' + IPC.esc(u.name) + '</td><td>' + IPC.esc(u.phone || 'NOT LINKED') + '</td>' +
-            '<td>' + (u.role === 'admin' ? '<span class="admin-flag">ADMIN</span>' : 'MEMBER') + '</td>' +
-            '<td>' + ipcTierBadge(u.tier || 'ROOKIE') + '</td>' +
+          var removed = u.status === 'removed';
+          var isSelf = IPC.auth.user && IPC.auth.user.email === u.email;
+          var isRoot = IPC.__ipcRootAdmin && u.email === IPC.__ipcRootAdmin;
+          var removable = !removed && !isSelf && !isRoot;
+          return '<tr' + (removed ? ' class="ipc-removed-row"' : '') + '><td><b>' + IPC.esc(u.email) + '</b></td><td>' + IPC.esc(u.name) + '</td><td>' + IPC.esc(u.phone || 'NOT LINKED') + '</td>' +
+            '<td>' + (u.role === 'admin' ? '<span class="admin-flag">ADMIN</span>' : 'MEMBER') + (removed ? ' <span class="ipc-removed-flag">REMOVED</span>' : '') + '</td>' +
+            '<td>' + (removed ? '—' : ipcTierBadge(u.tier || 'ROOKIE')) + '</td>' +
             '<td>' + (u.orders || 0) + '</td>' +
-            '<td>' + IPC.fmtP(u.spentCentavos || 0) + '</td>' +
+            '<td>' + (removed ? '—' : IPC.fmtP(u.spentCentavos || 0)) + '</td>' +
             '<td>' + (u.lastOrderAt ? fmtDate(u.lastOrderAt) : '—') + '</td>' +
-            '<td>' + fmtDate(u.createdAt) + '</td></tr>';
+            '<td>' + fmtDate(u.createdAt) + '</td>' +
+            '<td>' + (removable ? '<button type="button" class="btn-o btn-sm ipc-remove-btn" data-remove-member="' + IPC.esc(u.email) + '">REMOVE</button>' : (removed ? '<small class="ipc-removed-note">REMOVED ' + (u.removedAt ? fmtDate(u.removedAt) : '') + '</small>' : '—')) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }).catch(function (err) {
       host.innerHTML = '<p class="adm-empty">' + IPC.esc((err.message || 'MEMBERS FAILED').toUpperCase()) + '</p>';
@@ -4023,6 +4043,183 @@ setTimeout(function () {
     });
     document.__ipcRowExpand = true;
   }
+})();
+</script>
+
+<script id="ipc-tracking-member-upgrade">
+/* ORDER TRACKING + AUTO READER + EMERGENCY MEMBER REMOVAL — UI layer.
+   The server owns the truth; this block only renders and wires controls.
+   Delegated handlers survive every dashboard re-render. */
+(function () {
+  'use strict';
+  var IPC = window.IPC = window.IPC || {};
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+  var esc = function (v) { return IPC.esc ? IPC.esc(v == null ? '' : String(v)) : String(v == null ? '' : v).replace(/[&<>"']/g, function (x) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]); }); };
+
+  var style = document.createElement('style');
+  style.textContent = [
+    '.ipc-track-line{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted);margin-top:8px;text-transform:uppercase}',
+    '.ipc-track-line b{color:var(--text)}',
+    '.ipc-track-hist{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:0}',
+    '.ipc-track-hist li{display:flex;gap:12px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line)}',
+    '.ipc-track-hist li:last-child{border-bottom:0}',
+    '.ipc-track-hist .tk-st{font-family:var(--mono);font-size:9px;letter-spacing:.16em;font-weight:700;min-width:110px;text-transform:uppercase;color:var(--text)}',
+    '.ipc-track-hist .tk-note{font-size:11px;color:var(--muted);letter-spacing:.04em}',
+    '.ipc-track-hist .tk-at{font-family:var(--mono);font-size:9px;color:var(--faint);margin-left:auto;white-space:nowrap;letter-spacing:.08em}',
+    '#poTracking{margin-top:22px}',
+    '.ipc-track-panel{border:1px solid var(--line-2);background:var(--panel);padding:18px 20px}',
+    '.ipc-track-panel .k{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin:0 0 12px}',
+    '.ipc-fulfil{margin-top:22px;border:1px solid var(--line-2);background:var(--panel);padding:18px 20px}',
+    '.ipc-fulfil .k{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin:0 0 12px}',
+    '.ipc-stage-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}',
+    '.ipc-stage-btn{font-family:var(--mono);font-size:9px;letter-spacing:.14em;padding:9px 14px;border:1px solid var(--line-2);background:transparent;color:var(--muted);cursor:pointer;text-transform:uppercase}',
+    '.ipc-stage-btn:hover{background:var(--white);color:var(--black)}',
+    '.ipc-stage-btn.cur{background:var(--white);color:var(--black);font-weight:700;cursor:default}',
+    '.ipc-stage-btn.danger:hover{background:var(--black);color:var(--white);border-color:var(--black)}',
+    '.ipc-fulfil-inputs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end}',
+    '@media(max-width:860px){.ipc-fulfil-inputs{grid-template-columns:1fr}}',
+    '.ipc-fulfil-inputs label{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint);margin-bottom:6px;text-transform:uppercase}',
+    '.ipc-fulfil-inputs input{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);color:var(--text);padding:9px 10px;font:inherit;font-size:11px;border-radius:0}',
+    '.ipc-emergency{border:1px solid rgba(0,0,0,.35);background:rgba(0,0,0,.045);padding:12px 16px;margin:0 0 16px;font-family:var(--mono);font-size:9px;line-height:1.8;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}',
+    '.ipc-emergency b{color:var(--text)}',
+    '.ipc-removed-row td{opacity:.45}',
+    '.ipc-removed-flag{font-family:var(--mono);font-size:8px;letter-spacing:.16em;border:1px solid var(--line-2);padding:2px 6px;color:var(--muted)}',
+    '.ipc-removed-note{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--faint)}',
+    '.ipc-remove-btn{border-color:rgba(0,0,0,.4)}',
+    '.ipc-remove-btn:hover{background:var(--black);color:var(--white);border-color:var(--black)}',
+    '.ipc-auto-tile{cursor:pointer;transition:opacity .2s}',
+    '.ipc-auto-tile:hover{outline:1px solid var(--line-2)}',
+    '.ipc-auto-tile.off{opacity:.55}'
+  ].join('');
+  document.head.appendChild(style);
+
+  var STAGES = { processing: 'PROCESSING', packed: 'PACKED', shipped: 'SHIPPED', delivered: 'DELIVERED', cancelled: 'CANCELLED' };
+  var PILL_FOR = { processing: 'p-pending', packed: 'p-under', shipped: 'p-under', delivered: 'p-paid', cancelled: 'p-failed' };
+  function trackPill(st) {
+    var label = STAGES[st] || String(st || '—').toUpperCase();
+    return '<span class="pill ' + (PILL_FOR[st] || 'p-pending') + '"><i></i>' + label + '</span>';
+  }
+  function histHTML(trk) {
+    var hist = (trk && trk.history) || [];
+    if (!hist.length) return '';
+    return '<ul class="ipc-track-hist">' + hist.map(function (h) {
+      var d = h.at ? new Date(h.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+      return '<li><span class="tk-st">' + esc(STAGES[h.status] || h.status) + '</span>' +
+        '<span class="tk-note">' + esc(h.note ? h.note + (h.by ? ' · ' + h.by : '') : (h.by || '')) + '</span>' +
+        '<span class="tk-at">' + esc(d) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  /* compact tracking line + timeline for the account order list */
+  IPC.trackLineHTML = function (o) {
+    var t = o && o.tracking;
+    if (!t) return '';
+    return '<p class="ipc-track-line">TRACKING <b>' + esc(t.number) + '</b> — ' + (STAGES[t.status] || t.status).toUpperCase() +
+      (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + histHTML(t);
+  };
+  /* compact cell for the admin orders table */
+  IPC.trackCellHTML = function (o) {
+    var t = o && o.tracking;
+    if (!t) return o && o.status === 'paid' ? '<small>NOT OPENED</small>' : '<small>—</small>';
+    return '<small>' + esc(t.number) + '</small><br />' + trackPill(t.status);
+  };
+  /* fulfillment controls inside the admin order breakdown */
+  IPC.fulfilHTML = function (o) {
+    if (!o || o.status !== 'paid') return '';
+    var t = o.tracking || { number: 'OPENS ON FIRST UPDATE', status: 'processing', courier: '', trackingUrl: '', history: [] };
+    if (t.status === 'delivered' || t.status === 'cancelled') {
+      return '<div class="ipc-fulfil"><p class="k">FULFILLMENT — CLOSED</p>' + trackPill(t.status) + histHTML(t) + '</div>';
+    }
+    var stages = [['processing', 'PROCESSING'], ['packed', 'PACKED'], ['shipped', 'SHIPPED'], ['delivered', 'DELIVERED'], ['cancelled', 'CANCEL']];
+    var btns = stages.map(function (s) {
+      return '<button type="button" class="ipc-stage-btn' + (s[0] === t.status ? ' cur' : '') + (s[0] === 'cancelled' ? ' danger' : '') + '" data-stage="' + s[0] + '" data-ref="' + esc(o.reference) + '">' + s[1] + '</button>';
+    }).join('');
+    return '<div class="ipc-fulfil"><p class="k">FULFILLMENT — TRACKING ' + esc(t.number) + '</p>' +
+      '<div class="ipc-stage-row">' + btns + '</div>' +
+      '<div class="ipc-fulfil-inputs">' +
+      '<div><label>COURIER (OPTIONAL)</label><input data-courier="' + esc(o.reference) + '" value="' + esc(t.courier || '') + '" placeholder="E.G. J&T EXPRESS" /></div>' +
+      '<div><label>TRACKING URL (OPTIONAL)</label><input data-trackurl="' + esc(o.reference) + '" value="' + esc(t.trackingUrl || '') + '" placeholder="HTTPS://..." /></div>' +
+      '<div><label>NOTE (OPTIONAL)</label><input data-note="' + esc(o.reference) + '" placeholder="E.G. OUT FOR DELIVERY" /></div>' +
+      '</div>' + histHTML(t) + '</div>';
+  };
+  /* payment screen — tracking panel once paid */
+  IPC.renderPayTracking = function (order) {
+    var host = $('#poTracking');
+    if (!host) return;
+    var t = order && order.tracking;
+    if (!t) { host.style.display = 'none'; host.innerHTML = ''; return; }
+    host.innerHTML = '<div class="ipc-track-panel"><p class="k">ORDER TRACKING — ' + esc(t.number) + (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + trackPill(t.status) + histHTML(t) + '</div>';
+    host.style.display = 'block';
+  };
+  IPC.hidePayTracking = function () {
+    var host = $('#poTracking');
+    if (host) { host.style.display = 'none'; host.innerHTML = ''; }
+  };
+
+  /* ---------- delegated actions (survive every re-render) ---------- */
+  function apiMsg(err, fallback) { return ((err && err.message) || fallback || 'FAILED').toUpperCase(); }
+
+  document.addEventListener('click', function (ev) {
+    var stage = ev.target.closest ? ev.target.closest('[data-stage]') : null;
+    if (stage) {
+      if (stage.classList.contains('cur')) return;
+      var ref = stage.getAttribute('data-ref');
+      var st = stage.getAttribute('data-stage');
+      var noteInput = document.querySelector('[data-note="' + ref + '"]');
+      var courierInput = document.querySelector('[data-courier="' + ref + '"]');
+      var urlInput = document.querySelector('[data-trackurl="' + ref + '"]');
+      stage.disabled = true;
+      IPC.api('/api/admin/tracking', { method: 'POST', body: {
+        reference: ref, status: st,
+        note: noteInput ? noteInput.value : '',
+        courier: courierInput ? courierInput.value : '',
+        trackingUrl: urlInput ? urlInput.value : ''
+      }}).then(function (d) {
+        IPC.toast(d.message || 'TRACKING UPDATED');
+        if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+        var ot = document.querySelector('.adm-tab[data-pane="orders"]');
+        if (ot && ot.classList.contains('active')) ot.click();
+      }).catch(function (err) {
+        stage.disabled = false;
+        IPC.toast(apiMsg(err, 'TRACKING UPDATE FAILED'));
+      });
+      return;
+    }
+    var autoTile = ev.target.closest ? ev.target.closest('#ipcAutoTile') : null;
+    if (autoTile) {
+      var isOff = autoTile.classList.contains('off');
+      autoTile.style.opacity = '.4';
+      IPC.api('/api/admin/settings', { method: 'POST', body: { autoVerify: isOff } })
+        .then(function (d) {
+          IPC.toast(d.message || 'AUTO READER SWITCHED');
+          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+        })
+        .catch(function (err) {
+          autoTile.style.opacity = '';
+          IPC.toast(apiMsg(err, 'COULD NOT SWITCH THE AUTO READER'));
+        });
+      return;
+    }
+    var rm = ev.target.closest ? ev.target.closest('[data-remove-member]') : null;
+    if (rm) {
+      var email = rm.getAttribute('data-remove-member');
+      var typed = window.prompt('EMERGENCY USE ONLY — REMOVING A MEMBER IS NOT RECOMMENDED.\n\nTYPE THE MEMBER EMAIL TO CONFIRM REMOVAL:\n' + email);
+      if (typed === null) return;
+      if (typed.trim().toLowerCase() !== email.toLowerCase()) { IPC.toast('EMAIL DID NOT MATCH — REMOVAL CANCELLED'); return; }
+      rm.disabled = true;
+      IPC.api('/api/admin/members/remove', { method: 'POST', body: { email: email, confirm: typed.trim() } })
+        .then(function (d) {
+          IPC.toast(d.message || 'MEMBER REMOVED');
+          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+          var ut = document.querySelector('.adm-tab[data-pane="users"]');
+          if (ut && ut.classList.contains('active')) ut.click();
+        })
+        .catch(function (err) {
+          rm.disabled = false;
+          IPC.toast(apiMsg(err, 'REMOVAL FAILED'));
+        });
+    }
+  });
 })();
 </script>
 

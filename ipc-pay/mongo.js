@@ -27,10 +27,10 @@
  *     salt. No plaintext password is ever stored.
  *   - Sessions are 48-hex-char random tokens with a 30-day expiry; the TTL
  *     index makes MongoDB delete expired sessions automatically.
- *   - NOTHING in this file can ever flip a payment to "paid" by itself.
- *     Only POST /api/admin/decision — which requires a logged-in admin —
- *     can approve or reject a payment. A customer uploading proof moves
- *     their payment to "under_verification", never further.
+ *   - A customer uploading proof moves their payment to "under_verification",
+ *     never further — this file holds no payment-decision code at all. Every
+ *     path to "paid" (the guarded auto reader, admin decisions, the webhook)
+ *     lives in server.js, logged and compare-and-set protected.
  */
 
 const crypto = require("node:crypto");
@@ -363,7 +363,7 @@ function nextReference(prefix) {
       { $inc: { seq: 1 } },
       { upsert: true, returnDocument: "after" }
     )
-  ).then((r) => `${prefix === "order" ? "IPC" : "IPCP"}-${String(r.seq).padStart(5, "0")}`);
+  ).then((r) => `${prefix === "order" ? "IPC" : prefix === "track" ? "IPCT" : "IPCP"}-${String(r.seq).padStart(5, "0")}`);
 }
 
 /* ---------------------------------------------------------------- */

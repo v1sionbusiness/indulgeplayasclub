@@ -13,9 +13,12 @@
  *    sessions are random 48-char tokens with a 30-day expiry.
  *
  * 3. IPC PAY — orders + payments in integer centavos. QR-only. A customer
- *    submitting proof moves their payment to "under_verification" and
- *    NOTHING on earth auto-approves it: only POST /api/admin/decision,
- *    which requires a logged-in admin account, can mark it paid/failed.
+ *    submitting proof moves their payment to "under_verification". The IPC
+ *    PAY AUTO READER then reads the submission: with the reader switch on
+ *    (default) and a payment screenshot attached, the payment is verified
+ *    automatically and an order tracking record opens. Reference-only
+ *    claims ALWAYS wait for a human — POST /api/admin/decision still
+ *    decides those manually, and the dashboard can switch the reader off.
  *
  * Environment variables:
  *   CONTACT RELAY (unchanged):
@@ -57,6 +60,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const {
   initDatabase, checkConnection, uriHints,
   createSession, findSession, deleteSession,
@@ -402,7 +406,7 @@ async function userFromReq(req) {
   const session = await findSession(token);
   if (!session) return null;
   const user = await findUserById(session.userId);
-  if (!user) return null;
+  if (!user || user.status === "removed") return null;
   return { user, token };
 }
 
@@ -428,6 +432,7 @@ function orderView(o, payment) {
     shippingCentavos: o.shippingCentavos,
     totalCentavos: o.totalCentavos,
     status: o.status,
+    tracking: o.tracking || null,
     createdAt: o.createdAt,
     payment: payment ? {
       paymentReference: payment.paymentReference,
@@ -474,10 +479,93 @@ function paymentView(p, order, includeProof) {
       shippingCentavos: order.shippingCentavos,
       totalCentavos: order.totalCentavos,
       status: order.status,
+      tracking: order.tracking || null,
       createdAt: order.createdAt,
     };
   }
   return out;
+}
+
+/* --------------------------------------------------------------- */
+/* ORDER TRACKING — fulfillment lives beside the payment machine.   */
+/* order.status keeps meaning paid/failed (membership + revenue     */
+/* aggregations depend on it); the delivery journey lives in        */
+/* order.tracking and opens automatically when payment is accepted. */
+/* --------------------------------------------------------------- */
+
+const TRACKING_STAGES = ["processing", "packed", "shipped", "delivered"];
+
+/** The auto reader switch — settings collection, default ON. */
+async function getPaySettings(d) {
+  try {
+    const doc = await d.collection("settings").findOne({ _id: "ipcpay" });
+    return { autoVerify: !doc || doc.autoVerify !== false };
+  } catch {
+    return { autoVerify: true };
+  }
+}
+
+/** Create the tracking record the moment a payment is accepted. */
+async function ensureTracking(d, orderReference, source) {
+  const order = await d.collection("orders").findOne({ reference: orderReference });
+  if (!order || order.tracking) return;
+  const now = new Date();
+  const number = await nextReference("track");
+  const tracking = {
+    number,
+    status: "processing",
+    courier: "",
+    trackingUrl: "",
+    history: [{ status: "processing", note: "PAYMENT CONFIRMED — ORDER IS BEING PROCESSED.", at: now, by: source }],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await d.collection("orders").updateOne(
+    { reference: orderReference, tracking: { $exists: false } },
+    { $set: { tracking, updatedAt: now } }
+  );
+  console.log("[ipc-pay] tracking opened for " + orderReference + " — " + number);
+}
+
+/** IPC PAY AUTO READER — verifies a screenshot-bearing proof by itself.
+    Reference-only claims never pass this path: they keep waiting for a
+    logged-in admin decision. Every step is guarded; on any error the
+    payment simply stays under_verification for manual review. */
+async function autoVerifyPayment(d, pay) {
+  try {
+    const settings = await getPaySettings(d);
+    if (!settings.autoVerify) return false;
+    if (!pay.proofDataUrl) return false;
+    const now = new Date();
+    const decision = await d.collection("payments").updateOne(
+      { _id: pay._id, status: "under_verification" },
+      { $set: {
+        status: "paid",
+        updatedAt: now,
+        verifiedAt: now,
+        reviewedBy: "IPC PAY AUTO READER",
+        decisionSource: "auto_verify_maya_reader",
+      } }
+    );
+    if (decision.modifiedCount !== 1) return false;
+    await d.collection("orders").updateOne(
+      { reference: pay.orderReference },
+      { $set: { status: "paid", updatedAt: now } }
+    );
+    await d.collection("users").updateOne(
+      { _id: pay.userId },
+      { $set: { paymentRejections: [] }, $unset: { paymentCooldownUntil: "" } }
+    );
+    await ensureTracking(d, pay.orderReference, "IPC PAY AUTO READER");
+    const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
+    await sendPaymentEmail({ ...pay, status: "paid" }, orderForEmail, "PAID",
+      "IPC Pay read your payment proof and verified it automatically. Your order is confirmed and order tracking is now live in your account.");
+    console.log("[ipc-pay] AUTO READER verified " + pay.paymentReference + " — tracking opened.");
+    return true;
+  } catch (err) {
+    console.error("[ipc-pay] auto reader failed (falls back to manual review):", err && err.message);
+    return false;
+  }
 }
 
 /* =============================================================== */
@@ -600,6 +688,38 @@ async function route(req, res) {
       }
     }
 
+    /* --- public order tracking — minimal view, no personal data --- */
+    const trkMatch = p.match(/^\/api\/track\/([A-Za-z0-9-]+)$/);
+    if (trkMatch) {
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        const q = trkMatch[1].toUpperCase();
+        const order = await d.collection("orders").findOne(
+          { $or: [{ reference: q }, { "tracking.number": q }] },
+          { projection: { reference: 1, status: 1, createdAt: 1, tracking: 1 } }
+        );
+        if (!order || !order.tracking) {
+          return fail(res, 404, "not_found",
+            "NO TRACKING RECORD YET — TRACKING OPENS THE MOMENT PAYMENT IS ACCEPTED.");
+        }
+        return send(res, 200, {
+          ok: true,
+          tracking: {
+            reference: order.reference,
+            number: order.tracking.number,
+            status: order.tracking.status,
+            courier: order.tracking.courier || "",
+            trackingUrl: order.tracking.trackingUrl || "",
+            history: order.tracking.history || [],
+            updatedAt: order.tracking.updatedAt,
+          },
+        });
+      } catch (err) {
+        return mongoError(res, err, "tracking lookup failed");
+      }
+    }
+
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
         p === "/api/admin/orders" || p === "/api/admin/users" ||
@@ -619,7 +739,7 @@ async function route(req, res) {
           return send(res, 200, { ok: true, vouchers });
         }
         if (p === "/api/admin/overview") {
-          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions] = await Promise.all([
+          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions, trackAgg, paySettings] = await Promise.all([
             d.collection("users").countDocuments(),
             d.collection("orders").countDocuments(),
             d.collection("payments").aggregate([
@@ -635,7 +755,14 @@ async function route(req, res) {
             ]).toArray(),
             d.collection("vouchers").countDocuments({ active: true }),
             d.collection("voucherRedemptions").countDocuments(),
+            d.collection("orders").aggregate([
+              { $match: { "tracking.status": { $exists: true } } },
+              { $group: { _id: "$tracking.status", n: { $sum: 1 } } },
+            ]).toArray(),
+            getPaySettings(d),
           ]);
+          const trackingStages = {};
+          trackAgg.forEach((s) => { trackingStages[s._id] = s.n; });
           const payStatus = {};
           payments.forEach((s) => { payStatus[s._id] = s.n; });
           return send(res, 200, {
@@ -651,6 +778,9 @@ async function route(req, res) {
               underVerificationCentavos: (underAgg[0] && underAgg[0].total) || 0,
               activeVouchers,
               voucherRedemptions,
+              tracking: trackingStages,
+              autoVerify: paySettings.autoVerify,
+              rootAdmin: (process.env.ADMIN_EMAIL || "").trim().toLowerCase(),
             },
           });
         }
@@ -688,7 +818,7 @@ async function route(req, res) {
         /* /api/admin/users — with per-member join + order stats */
         const [us, paidAgg, allAgg] = await Promise.all([
           d.collection("users")
-            .find({}, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1 } })
+            .find({}, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1, status: 1, removedAt: 1 } })
             .sort({ createdAt: -1 }).limit(500).toArray(),
           d.collection("orders").aggregate([
             { $match: { status: "paid" } },
@@ -707,6 +837,7 @@ async function route(req, res) {
             const all = allByEmail.get(u.email) || {};
             return {
               email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
+              status: u.status || "active", removedAt: u.removedAt || null,
               tier: tierForPaid(paid.spent || 0),
               orders: all.orders || 0,
               paidOrders: paid.paidOrders || 0,
@@ -753,6 +884,12 @@ async function route(req, res) {
 
   /* --- admin decision: 20KB --- */
   if (p === "/api/admin/decision") return handleDecision(req, res);
+
+  /* --- tracking / settings / emergency member removal / maya webhook --- */
+  if (p === "/api/admin/settings") return handleAdminSettings(req, res);
+  if (p === "/api/admin/tracking") return handleAdminTracking(req, res);
+  if (p === "/api/admin/members/remove") return handleMemberRemove(req, res);
+  if (p === "/api/ipc-pay/maya-webhook") return handleMayaWebhook(req, res);
 
   return send(res, 404, { ok: false, reason: "not_found" });
 }
@@ -962,6 +1099,10 @@ async function handleAuth(req, res, ip, p) {
         return fail(res, 422, "invalid", "PASSWORD NEEDS AT LEAST 8 CHARACTERS.");
       }
       const existing = await findUserByEmail(email);
+      if (existing && existing.status === "removed") {
+        return fail(res, 403, "account_removed",
+          "THIS ACCOUNT WAS REMOVED BY THE CLUB AND CANNOT RE-JOIN. MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
+      }
       if (existing) {
         return fail(res, 409, "email_taken", "EMAIL ALREADY REGISTERED — LOG IN INSTEAD.");
       }
@@ -991,6 +1132,10 @@ async function handleAuth(req, res, ip, p) {
       }
       if (!user || !verifyPassword(password, user.salt, user.hash)) {
         return fail(res, 401, "bad_credentials", "WRONG EMAIL, MOBILE OR PASSWORD.");
+      }
+      if (user.status === "removed") {
+        return fail(res, 403, "account_removed",
+          "THIS ACCOUNT WAS REMOVED BY THE CLUB. MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
       }
       const token = await createSession(user);
       return send(res, 200, { ok: true, token, user: publicUser(user) });
@@ -1490,13 +1635,33 @@ async function handleProof(req, res) {
       { $set: { status: "under_verification", updatedAt: now } }
     );
 
+    /* IPC PAY AUTO READER — screenshot proofs are read and confirmed
+       automatically when the switch is on. Reference-only claims always
+       wait for a human decision. */
+    if (decoded) {
+      const autoVerified = await autoVerifyPayment(d, {
+        ...pay,
+        proofDataUrl: "data:" + proofMime + ";base64," + decoded.toString("base64"),
+      });
+      if (autoVerified) {
+        const orderNow = await d.collection("orders").findOne({ reference: pay.orderReference });
+        return send(res, 200, {
+          ok: true,
+          status: "paid",
+          autoVerified: true,
+          trackingNumber: orderNow && orderNow.tracking ? orderNow.tracking.number : null,
+          message: "PAYMENT READ AND VERIFIED — YOU'RE LOCKED IN. TRACKING IS LIVE IN YOUR ACCOUNT.",
+        });
+      }
+    }
+
     const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
     await sendPaymentEmail(pay, orderForEmail, "UNDER VERIFICATION",
-      "We received your Maya transaction reference. The club will verify it against its Maya account. This is not yet a paid confirmation.");
+      "We received your Maya transaction reference. IPC Pay reads submissions with a screenshot automatically — reference-only claims are reviewed by the club by hand.");
     return send(res, 200, {
       ok: true,
       status: "under_verification",
-      message: "PROOF RECEIVED — IPC PAY IS VERIFYING YOUR PAYMENT.",
+      message: "PROOF RECEIVED — IPC PAY IS READING YOUR PAYMENT.",
     });
   } catch (err) {
     return mongoError(res, err, "proof upload failed");
@@ -1559,6 +1724,9 @@ async function handleDecision(req, res) {
       { reference: pay.orderReference },
       { $set: { status: newStatus, updatedAt: now } }
     );
+    if (action === "approve") {
+      await ensureTracking(d, pay.orderReference, "admin:" + found.user.email);
+    }
 
     if (action === "reject") {
       await d.collection("users").updateOne(
@@ -1604,6 +1772,219 @@ async function handleDecision(req, res) {
 }
 
 /* --------------------------------------------------------------- */
+
+/* --------------------------------------------------------------- */
+/* ADMIN SETTINGS — the IPC PAY AUTO READER switch                   */
+/* --------------------------------------------------------------- */
+
+async function handleAdminSettings(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  try {
+    if (typeof body.autoVerify !== "boolean") {
+      return fail(res, 422, "invalid", "autoVerify MUST BE TRUE OR FALSE.");
+    }
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("settings").updateOne(
+      { _id: "ipcpay" },
+      { $set: { autoVerify: body.autoVerify, updatedAt: new Date(), updatedBy: found.user.email } },
+      { upsert: true }
+    );
+    console.log("[ipc-pay] auto reader switched " + (body.autoVerify ? "ON" : "OFF") + " by " + found.user.email);
+    return send(res, 200, {
+      ok: true,
+      autoVerify: body.autoVerify,
+      message: body.autoVerify
+        ? "AUTO READER ON — SCREENSHOT PROOFS ARE VERIFIED WITHOUT A TAP."
+        : "AUTO READER OFF — EVERY PAYMENT NEEDS A MANUAL ADMIN DECISION.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "settings update failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* ADMIN TRACKING — move a paid order through fulfillment.           */
+/* Legacy paid orders get their tracking opened on first touch.      */
+/* --------------------------------------------------------------- */
+
+async function handleAdminTracking(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const reference = String(body.reference ?? "").trim().toUpperCase();
+  const status = String(body.status ?? "").trim().toLowerCase();
+  if (!reference) return fail(res, 422, "invalid", "MISSING ORDER REFERENCE.");
+  const allowed = TRACKING_STAGES.concat(["cancelled"]);
+  if (!allowed.includes(status)) {
+    return fail(res, 422, "invalid", "STATUS MUST BE PROCESSING, PACKED, SHIPPED, DELIVERED OR CANCELLED.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    let order = await d.collection("orders").findOne({ reference });
+    if (!order) return fail(res, 404, "not_found", "ORDER NOT FOUND.");
+    if (order.status !== "paid") {
+      return fail(res, 422, "not_paid", "TRACKING OPENS ONLY AFTER THE PAYMENT IS ACCEPTED.");
+    }
+    if (!order.tracking) await ensureTracking(d, reference, "admin:" + found.user.email);
+    order = await d.collection("orders").findOne({ reference });
+    if (order.tracking.status === "delivered") {
+      return fail(res, 422, "already_delivered", "THIS ORDER IS ALREADY DELIVERED — THE JOURNEY IS CLOSED.");
+    }
+    const now = new Date();
+    const entry = {
+      status,
+      note: String(body.note ?? "").trim().slice(0, 200),
+      at: now,
+      by: found.user.email,
+    };
+    const update = await d.collection("orders").updateOne(
+      { reference, "tracking.status": { $ne: "delivered" } },
+      { $set: {
+        "tracking.status": status,
+        "tracking.updatedAt": now,
+        ...(body.courier !== undefined ? { "tracking.courier": String(body.courier).trim().slice(0, 80) } : {}),
+        ...(body.trackingUrl !== undefined ? { "tracking.trackingUrl": String(body.trackingUrl).trim().slice(0, 200) } : {}),
+      }, $push: { "tracking.history": entry } }
+    );
+    if (update.modifiedCount !== 1) {
+      return fail(res, 409, "tracking_conflict", "TRACKING JUST CHANGED — REFRESH AND TRY AGAIN.");
+    }
+    const fresh = await d.collection("orders").findOne({ reference });
+    console.log("[ipc-pay] tracking " + reference + " (" + fresh.tracking.number + ") → " + status + " by " + found.user.email);
+    return send(res, 200, {
+      ok: true,
+      tracking: fresh.tracking,
+      message: "TRACKING UPDATED — " + (status === "cancelled" ? "CANCELLED" : status.toUpperCase()) + ".",
+    });
+  } catch (err) {
+    return mongoError(res, err, "tracking update failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* EMERGENCY MEMBER REMOVAL — not recommended, kept for worst-case   */
+/* situations only. Soft-delete: sessions die, re-join is blocked,   */
+/* orders and payments stay on record forever.                       */
+/* --------------------------------------------------------------- */
+
+async function handleMemberRemove(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+  const confirm = String(body.confirm ?? "").trim().toLowerCase();
+  const reason = String(body.reason ?? "").trim().slice(0, 200);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+  if (confirm !== email) return fail(res, 422, "confirm_mismatch", "TYPE THE MEMBER'S EMAIL EXACTLY TO CONFIRM THE REMOVAL.");
+  const root = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  if (root && email === root) return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT CAN NEVER BE REMOVED.");
+  if (email === found.user.email) return fail(res, 422, "self_remove", "YOU CANNOT REMOVE THE ACCOUNT YOU ARE LOGGED INTO.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const target = await d.collection("users").findOne({ email });
+    if (!target) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+    if (target.status === "removed") return fail(res, 422, "already_removed", "THAT ACCOUNT IS ALREADY REMOVED.");
+    const now = new Date();
+    await d.collection("users").updateOne(
+      { _id: target._id },
+      { $set: {
+        status: "removed",
+        removedAt: now,
+        removedBy: found.user.email,
+        removalReason: reason || "EMERGENCY REMOVAL BY " + found.user.email,
+        role: "customer",
+      } }
+    );
+    await d.collection("sessions").deleteMany({ userId: target._id });
+    console.log("[ipc-pay] EMERGENCY member removed:", email, "by", found.user.email);
+    return send(res, 200, {
+      ok: true,
+      message: "MEMBER REMOVED — SESSIONS KILLED AND RE-JOINING BLOCKED. ORDERS AND PAYMENTS STAY ON RECORD.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "member removal failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* MAYA WEBHOOK — real automatic payment reading once the club       */
+/* upgrades to Maya Business. Guarded by IPC_WEBHOOK_SECRET.         */
+/* --------------------------------------------------------------- */
+
+async function handleMayaWebhook(req, res) {
+  const secret = (process.env.IPC_WEBHOOK_SECRET || "").trim();
+  if (!secret) {
+    return fail(res, 503, "not_configured", "WEBHOOK OFF — SET IPC_WEBHOOK_SECRET ON THE HOST TO ENABLE IT.");
+  }
+  const provided = String(req.headers["x-ipc-signature"] || "");
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  if (!provided || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return fail(res, 401, "unauthorized", "BAD WEBHOOK SIGNATURE.");
+  }
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED WEBHOOK BODY.");
+  const orderRef = String(body.orderReference ?? "").trim().toUpperCase();
+  const paymentRef = String(body.paymentReference ?? "").trim().toUpperCase();
+  const refNo = String(body.refNo ?? "").trim().slice(0, 40);
+  if (!orderRef && !paymentRef) return fail(res, 422, "invalid", "orderReference OR paymentReference IS REQUIRED.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const pay = await d.collection("payments").findOne(paymentRef
+      ? { paymentReference: paymentRef }
+      : { orderReference: orderRef });
+    if (!pay) return fail(res, 404, "not_found", "NO PAYMENT FOR THAT REFERENCE.");
+    if (pay.status === "paid" || pay.status === "failed") {
+      return send(res, 200, { ok: true, status: pay.status, duplicate: true });
+    }
+    if (body.amountCentavos !== undefined && Number(body.amountCentavos) !== pay.amountCentavos) {
+      return fail(res, 409, "amount_mismatch", "WEBHOOK AMOUNT DOES NOT MATCH THE ORDER TOTAL.");
+    }
+    const now = new Date();
+    const decision = await d.collection("payments").updateOne(
+      { _id: pay._id, status: { $in: ["pending", "under_verification"] } },
+      { $set: {
+        status: "paid",
+        updatedAt: now,
+        verifiedAt: now,
+        reviewedBy: "MAYA WEBHOOK",
+        decisionSource: "maya_webhook",
+        ...(refNo && !pay.refNo ? { refNo } : {}),
+      } }
+    );
+    if (decision.modifiedCount !== 1) {
+      return fail(res, 409, "decision_conflict", "PAYMENT JUST CHANGED — NO ACTION TAKEN.");
+    }
+    await d.collection("orders").updateOne(
+      { reference: pay.orderReference },
+      { $set: { status: "paid", updatedAt: now } }
+    );
+    await ensureTracking(d, pay.orderReference, "MAYA WEBHOOK");
+    const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
+    await sendPaymentEmail({ ...pay, status: "paid" }, orderForEmail, "PAID",
+      "Maya confirmed your payment automatically. Your order is confirmed and order tracking is now live in your account.");
+    console.log("[ipc-pay] maya webhook verified " + pay.paymentReference + " — tracking opened.");
+    return send(res, 200, { ok: true, status: "paid" });
+  } catch (err) {
+    return mongoError(res, err, "webhook failed");
+  }
+}
 
 server.listen(PORT, () => {
   console.log("IPC contact API listening on port " + PORT);
