@@ -96,6 +96,38 @@ function rateLimited(ip, limit, windowMs, bucket) {
   return false;
 }
 
+/* Two manual payment rejections within ten minutes trigger a short account
+   cooldown. This is persisted in MongoDB so a Render restart cannot bypass it. */
+const PAYMENT_REJECTION_WINDOW_MS = 10 * 60 * 1000;
+const PAYMENT_COOLDOWN_MS = 5 * 60 * 1000;
+
+async function paymentCooldownSeconds(db, userId) {
+  const account = await db.collection("users").findOne(
+    { _id: userId },
+    { projection: { paymentCooldownUntil: 1 } }
+  );
+  if (!account || !account.paymentCooldownUntil) return 0;
+  const until = new Date(account.paymentCooldownUntil).getTime();
+  const remaining = Math.ceil((until - Date.now()) / 1000);
+  if (remaining > 0) return remaining;
+  await db.collection("users").updateOne(
+    { _id: userId },
+    { $unset: { paymentCooldownUntil: "" }, $set: { paymentRejections: [] } }
+  );
+  return 0;
+}
+
+function rejectPaymentDuringCooldown(res, seconds) {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return send(res, 429, {
+    ok: false,
+    reason: "payment_cooldown",
+    retryAfterSeconds: seconds,
+    message: "PAYMENT REQUESTS ARE TEMPORARILY PAUSED AFTER TWO RECENT REJECTIONS. PLEASE WAIT ABOUT " +
+      minutes + " MINUTE" + (minutes === 1 ? "" : "S") + " BEFORE STARTING ANOTHER CHECKOUT.",
+  });
+}
+
 /* --------------------------------------------------------------- */
 /* Product catalog — the server ALWAYS recomputes totals from this,  */
 /* the client never names its own price. Money = integer centavos.   */
@@ -1096,6 +1128,8 @@ async function handleCreateOrder(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     voucherDatabase = d;
+    const cooldownSeconds = await paymentCooldownSeconds(d, found.user._id);
+    if (cooldownSeconds > 0) return rejectPaymentDuringCooldown(res, cooldownSeconds);
     const phone = await linkAccountPhone(d, found.user, rawPhone);
     const reference = await nextReference("order");
     const paymentReference = await nextReference("payment");
@@ -1249,6 +1283,8 @@ async function handleProof(req, res) {
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
+    const cooldownSeconds = await paymentCooldownSeconds(d, found.user._id);
+    if (cooldownSeconds > 0) return rejectPaymentDuringCooldown(res, cooldownSeconds);
     const pay = await d.collection("payments").findOne({ paymentReference: reference });
     if (!pay) return fail(res, 404, "not_found", "NO PAYMENT FOUND FOR THAT REFERENCE.");
     if (String(pay.userId) !== String(found.user._id)) {
@@ -1361,6 +1397,31 @@ async function handleDecision(req, res) {
       { reference: pay.orderReference },
       { $set: { status: newStatus, updatedAt: now } }
     );
+
+    if (action === "reject") {
+      await d.collection("users").updateOne(
+        { _id: pay.userId },
+        { $push: { paymentRejections: { $each: [now], $slice: -5 } } }
+      );
+      const account = await d.collection("users").findOne(
+        { _id: pay.userId },
+        { projection: { paymentRejections: 1 } }
+      );
+      const cutoff = now.getTime() - PAYMENT_REJECTION_WINDOW_MS;
+      const recentRejections = (account && Array.isArray(account.paymentRejections)
+        ? account.paymentRejections : []).filter((stamp) => new Date(stamp).getTime() >= cutoff);
+      if (recentRejections.length >= 2) {
+        await d.collection("users").updateOne(
+          { _id: pay.userId },
+          { $set: { paymentCooldownUntil: new Date(now.getTime() + PAYMENT_COOLDOWN_MS) } }
+        );
+      }
+    } else {
+      await d.collection("users").updateOne(
+        { _id: pay.userId },
+        { $set: { paymentRejections: [] }, $unset: { paymentCooldownUntil: "" } }
+      );
+    }
 
     const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
     await sendPaymentEmail({ ...pay, status: newStatus }, orderForEmail,
