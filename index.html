@@ -1717,6 +1717,7 @@ textarea.inp{min-height:110px;resize:vertical}
           <h3>PROFILE</h3>
           <div class="acct-id-row"><span>NAME</span><span id="acName">—</span></div>
           <div class="acct-id-row"><span>EMAIL</span><span id="acEmail">—</span></div>
+          <div class="acct-id-row"><span>MOBILE</span><span id="acPhone">—</span></div>
           <div class="acct-id-row"><span>MEMBER SINCE</span><span id="acSince">—</span></div>
           <div class="acct-id-row"><span>ROLE</span><span id="acRole">MEMBER</span></div>
           <div class="acct-actions">
@@ -2971,6 +2972,7 @@ textarea.inp{min-height:110px;resize:vertical}
     $('#acctHello').innerHTML = IPC.esc(u.name || u.email).replace(/ /g, '<br />') + '<span class="dim">.</span>';
     $('#acName').textContent = u.name || '—';
     $('#acEmail').textContent = u.email;
+    if ($('#acPhone')) $('#acPhone').textContent = u.phone || '—';
     $('#acSince').textContent = fmtDate(u.createdAt);
     $('#acRole').innerHTML = (u.role === 'admin' ? 'CLUB ADMIN ' : 'MEMBER ') + (u.role === 'admin' ? '<span class="admin-flag">ADMIN</span>' : '');
     $('#acAdmin').style.display = u.role === 'admin' ? 'inline-flex' : 'none';
@@ -3065,7 +3067,7 @@ textarea.inp{min-height:110px;resize:vertical}
         '<th>ORDER</th><th>BUYER</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>PLACED</th></tr></thead><tbody>' +
         list.map(function (o) {
           return '<tr><td><b>' + IPC.esc(o.reference) + '</b></td>' +
-            '<td>' + IPC.esc(o.email) + '<br />' + IPC.esc(o.customerName) + '<br /><small>' + IPC.esc(o.phone || 'NO PHONE') + '<br />' + IPC.esc(o.addressLine || 'NO ADDRESS') + ', ' + IPC.esc(o.city || '') + ', ' + IPC.esc(o.province || '') + ' ' + IPC.esc(o.postalCode || '') + (o.notes ? '<br />NOTES: ' + IPC.esc(o.notes) : '') + '</small></td>' +
+            '<td>' + IPC.esc(o.email) + '<br />' + IPC.esc(o.customerName) + '<br /><small>' + IPC.esc(o.phone || 'NO PHONE') + '<br />' + IPC.esc(o.addressLine || 'NO ADDRESS') + ', ' + IPC.esc(o.city || '') + ', ' + IPC.esc(o.province || '') + ' ' + IPC.esc(o.postalCode || '') + (o.notes ? '<br />NOTES: ' + IPC.esc(o.notes) : '') + (o.voucherCode ? '<br />VOUCHER: ' + IPC.esc(o.voucherCode) + ' · −' + IPC.fmtP(o.discountCentavos || 0) : '') + '</small></td>' +
             '<td>' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + '</td>' +
             '<td>' + IPC.fmtP(o.totalCentavos) + '</td>' +
             '<td>' + (o.payment ? IPC.esc(o.payment.paymentReference) + (o.payment.refNo ? '<br />REF ' + IPC.esc(o.payment.refNo) : '') : '—') + '</td>' +
@@ -3083,9 +3085,9 @@ textarea.inp{min-height:110px;resize:vertical}
       var list = d.users || [];
       if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO MEMBERS YET</p>'; return; }
       host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-        '<th>EMAIL</th><th>NAME</th><th>ROLE</th><th>JOINED</th></tr></thead><tbody>' +
+        '<th>EMAIL</th><th>NAME</th><th>MOBILE</th><th>ROLE</th><th>JOINED</th></tr></thead><tbody>' +
         list.map(function (u) {
-          return '<tr><td><b>' + IPC.esc(u.email) + '</b></td><td>' + IPC.esc(u.name) + '</td>' +
+          return '<tr><td><b>' + IPC.esc(u.email) + '</b></td><td>' + IPC.esc(u.name) + '</td><td>' + IPC.esc(u.phone || 'NOT LINKED') + '</td>' +
             '<td>' + (u.role === 'admin' ? '<span class="admin-flag">ADMIN</span>' : 'MEMBER') + '</td>' +
             '<td>' + fmtDate(u.createdAt) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
