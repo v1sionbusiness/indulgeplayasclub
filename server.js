@@ -912,8 +912,14 @@ async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos) {
   });
   if (redeemed) throw new Error("THIS VOUCHER HAS ALREADY BEEN USED WITH YOUR ACCOUNT OR MOBILE NUMBER.");
   if (voucher.firstOrderOnly) {
+    const nationalDigits = phone.slice(3);
+    const legacyPhonePattern = "^(?:\\+?63\\D*)?0?" + nationalDigits.split("").join("\\D*") + "$";
     const priorOrder = await d.collection("orders").findOne({
-      $or: [{ userId: user._id }, { phoneNormalized: phone }],
+      $or: [
+        { userId: user._id },
+        { phoneNormalized: phone },
+        { phone: { $regex: legacyPhonePattern, $options: "i" } },
+      ],
     });
     if (priorOrder) throw new Error("THIS OFFER IS RESERVED FOR YOUR FIRST IPC ORDER.");
   }
