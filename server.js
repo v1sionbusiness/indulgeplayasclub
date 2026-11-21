@@ -251,6 +251,129 @@ function serveIndex(res) {
       })();
     </script>`;
     html = html.replace(/<\/head>/i, contactPolish + "</head>");
+
+    /* Navigation fallback: make same-page navigation reliable even when an
+       older page script has stale handlers or the menu is rendered late. */
+    const navigationFix = `<style id="ipc-navigation-fix">
+      html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+      [id] { scroll-margin-top: 92px; }
+      a[href^="#"], [data-scroll-to], [data-nav-target] { cursor: pointer; }
+      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    </style>
+    <script id="ipc-navigation-fix-script">
+    (function () {
+      if (window.__ipcNavigationFixInstalled) return;
+      window.__ipcNavigationFixInstalled = true;
+      function cleanTarget(value) {
+        if (!value) return "";
+        value = String(value).trim();
+        if (!value || value === "#") return "";
+        try { value = decodeURIComponent(value); } catch (_) {}
+        return value.replace(/^#/, "").replace(/^\//, "");
+      }
+      function findTarget(value) {
+        var key = cleanTarget(value);
+        if (!key) return null;
+        var target = document.getElementById(key);
+        if (target) return target;
+        var aliases = document.querySelectorAll("[data-page], [data-section], [data-page-id], [name]");
+        for (var i = 0; i < aliases.length; i++) {
+          var el = aliases[i];
+          if ([el.getAttribute("data-page"), el.getAttribute("data-section"),
+               el.getAttribute("data-page-id"), el.getAttribute("name")]
+              .some(function (v) { return v && v.toLowerCase() === key.toLowerCase(); })) return el;
+        }
+        return null;
+      }
+      function closeMenus() {
+        document.querySelectorAll(
+          '.mobile-menu.open, .mobile-menu.active, .nav-menu.open, .nav-menu.active, ' +
+          '.navbar-collapse.show, [data-mobile-menu].open, [data-mobile-menu].active'
+        ).forEach(function (menu) {
+          menu.classList.remove("open", "active", "show");
+          menu.setAttribute("aria-hidden", "true");
+        });
+        document.querySelectorAll(
+          '[aria-expanded="true"][aria-controls], .menu-toggle[aria-expanded="true"], ' +
+          '.hamburger[aria-expanded="true], [data-menu-toggle][aria-expanded="true"]'
+        ).forEach(function (toggle) {
+          toggle.setAttribute("aria-expanded", "false");
+        });
+      }
+      function navigate(target, updateHash) {
+        if (!target) return false;
+        if (target.hidden) target.hidden = false;
+        if (window.getComputedStyle(target).display === "none") {
+          target.style.display = "";
+          if (window.getComputedStyle(target).display === "none") target.style.display = "block";
+        }
+        target.scrollIntoView({ behavior: window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start" });
+        if (updateHash && target.id && location.hash !== "#" + target.id) {
+          try { history.pushState(null, "", "#" + encodeURIComponent(target.id)); }
+          catch (_) { location.hash = target.id; }
+        }
+        closeMenus();
+        document.querySelectorAll('a[href^="#"], [data-scroll-to], [data-nav-target]').forEach(function (link) {
+          var raw = link.getAttribute("href") || link.getAttribute("data-scroll-to") ||
+                    link.getAttribute("data-nav-target");
+          var selected = findTarget(raw) === target;
+          if (selected) link.setAttribute("aria-current", "location");
+          else link.removeAttribute("aria-current");
+        });
+        return true;
+      }
+      document.addEventListener("click", function (event) {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+            event.shiftKey || event.altKey) return;
+        var link = event.target && event.target.closest &&
+          event.target.closest('a[href], [data-scroll-to], [data-nav-target]');
+        if (!link) return;
+        var raw = link.getAttribute("data-scroll-to") || link.getAttribute("data-nav-target");
+        var href = link.getAttribute("href") || "";
+        if (!raw && href && href !== "#") {
+          try {
+            var parsed = new URL(href, location.href);
+            if (parsed.origin !== location.origin || parsed.pathname.replace(/\/$/, "") !== location.pathname.replace(/\/$/, "")) return;
+            raw = parsed.hash;
+          } catch (_) { return; }
+        }
+        var target = findTarget(raw);
+        if (!target) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        navigate(target, true);
+      }, true);
+      window.addEventListener("hashchange", function () {
+        var target = findTarget(location.hash);
+        if (target) target.scrollIntoView({ behavior: "auto", block: "start" });
+      });
+      window.addEventListener("popstate", function () {
+        var target = findTarget(location.hash);
+        if (target) target.scrollIntoView({ behavior: "auto", block: "start" });
+      });
+      function initialRoute() {
+        if (!location.hash) return;
+        var target = findTarget(location.hash);
+        if (target) setTimeout(function () { target.scrollIntoView({ behavior: "auto", block: "start" }); }, 80);
+      }
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialRoute);
+      else initialRoute();
+      new MutationObserver(function () {
+        if (location.hash) {
+          var target = findTarget(location.hash);
+          if (target && target.getBoundingClientRect().height === 0) {
+            target.hidden = false;
+            target.style.display = "";
+          }
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    })();
+    </script>`;
+    html = html.replace(/<\/body>/i, navigationFix + "</body>");
+
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "public, max-age=300",
@@ -297,8 +420,7 @@ function readBody(req, res, maxBytes) {
       raw += chunk;
       if (raw.length > maxBytes) {
         dead = true;
-        req.destroy();
-      }
+        req.destroy();      }
     });
     req.on("end", () => {
       if (dead) return resolve(null);
@@ -597,8 +719,7 @@ async function route(req, res) {
         });
       } catch (err) {
         return mongoError(res, err, "admin query failed");
-      }
-    }
+      }    }
 
     return send(res, 404, { ok: false, reason: "not_found" });
   }
@@ -897,8 +1018,7 @@ function subtotalFromCart(rawItems) {
     const size = String(raw.size ?? "").trim();
     const color = String(raw.color ?? "").trim();
     const qty = Math.floor(Number(raw.qty ?? 0));
-    if (!product.sizes.includes(size) || !product.colors.includes(color) ||
-        !Number.isFinite(qty) || qty < 1 || qty > 99) {
+    if (!product.sizes.includes(size) || !product.colors.includes(color) ||        !Number.isFinite(qty) || qty < 1 || qty > 99) {
       throw new Error("CHECK YOUR PRODUCT OPTIONS AND QUANTITIES BEFORE APPLYING A VOUCHER.");
     }
     subtotal += product.priceCentavos * qty;
@@ -1197,8 +1317,7 @@ async function handleCreateOrder(req, res) {
       email: found.user.email,
       amountCentavos: totalCentavos,
       currency: "PHP",
-      status: "pending",
-      method: "qr",
+      status: "pending",      method: "qr",
       refNo: null,
       proofDataUrl: null,
       createdAt: now,
