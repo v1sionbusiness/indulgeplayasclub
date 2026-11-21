@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-21 06:40 -->
+<!-- IPC BUILD 2026-11-21 07:05 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -3211,7 +3211,9 @@ textarea.inp{min-height:110px;resize:vertical}
         statTile(o.users, 'MEMBERS') +
         statTile(o.orders, 'ORDERS') +
         statTile(o.paymentsUnderVerification, 'UNDER VERIFICATION') +
-        statTile(IPC.fmtP(o.paidRevenueCentavos), 'VERIFIED REVENUE');
+        statTile(IPC.fmtP(o.underVerificationCentavos || 0), 'PENDING VALUE') +
+        statTile(IPC.fmtP(o.paidRevenueCentavos), 'VERIFIED REVENUE') +
+        statTile((o.activeVouchers || 0) + ' LIVE · ' + (o.voucherRedemptions || 0) + ' USED', 'VOUCHERS');
     }).catch(function (err) {
       $('#admStats').innerHTML = '<div class="stat-tile" style="grid-column:1/-1"><p class="stat-k">' + IPC.esc((err.message || 'OVERVIEW FAILED').toUpperCase()) + '</p></div>';
     });
@@ -3255,9 +3257,11 @@ textarea.inp{min-height:110px;resize:vertical}
     IPC.api('/api/admin/orders').then(function (d) {
       var list = d.orders || [];
       if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO ORDERS YET</p>'; return; }
-      host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+      host.innerHTML = '<p class="count-chip" style="margin-bottom:14px">' + list.length +
+        ' ORDERS — TAP ANY ROW FOR THE FULL BREAKDOWN</p>' +
+        '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
         '<th>ORDER</th><th>BUYER</th><th>DELIVER TO</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>PLACED</th></tr></thead><tbody>' +
-        list.map(function (o) {
+        list.map(function (o, i) {
           var cityLine = [o.city, o.province].filter(Boolean).join(', ');
           var delivery = '<b>' + IPC.esc(o.addressLine || 'NO STREET GIVEN') + '</b>' +
             '<br /><small>' + IPC.esc(cityLine || 'NO CITY') + (o.postalCode ? ' ' + IPC.esc(o.postalCode) : '') + '</small>' +
@@ -3266,14 +3270,35 @@ textarea.inp{min-height:110px;resize:vertical}
             ? '<br /><small class="adm-vtag">VOUCHER ' + IPC.esc(o.voucherCode) +
               (o.discountCentavos ? ' −' + IPC.fmtP(o.discountCentavos) : '') + '</small>'
             : '';
-          return '<tr><td><b>' + IPC.esc(o.reference) + '</b></td>' +
+          var itemsHTML = (o.items || []).map(function (it) {
+            return '<p class="adm-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) +
+              (it.color ? ' · ' + IPC.esc(it.color) : '') + ' × ' + it.qty + '</span><span>' +
+              IPC.fmtP((it.priceC || 0) * it.qty) + '</span></p>';
+          }).join('') || '<p class="adm-empty">NO LINE ITEMS</p>';
+          var detail = '<div class="adm-detail-grid">' +
+            '<div><p class="ipc-voucher-k">PIECES</p>' + itemsHTML + '</div>' +
+            '<div><p class="ipc-voucher-k">TOTALS</p>' +
+            '<p class="adm-line"><span>SUBTOTAL</span><span>' + IPC.fmtP(o.subtotalCentavos || 0) + '</span></p>' +
+            (o.discountCentavos ? '<p class="adm-line"><span>VOUCHER ' + IPC.esc(o.voucherCode || '') + '</span><span>−' +
+              IPC.fmtP(o.discountCentavos) + '</span></p>' : '') +
+            '<p class="adm-line"><span>NATIONWIDE SHIPPING</span><span>FREE</span></p>' +
+            '<p class="adm-line adm-line-total"><span>TOTAL</span><span>' + IPC.fmtP(o.totalCentavos || 0) + '</span></p>' +
+            '</div>' +
+            '<div><p class="ipc-voucher-k">CUSTOMER</p>' +
+            '<p class="adm-line"><span>NAME</span><span>' + IPC.esc(o.customerName || '—') + '</span></p>' +
+            '<p class="adm-line"><span>EMAIL</span><span>' + IPC.esc(o.email || '—') + '</span></p>' +
+            '<p class="adm-line"><span>MOBILE</span><span>' + IPC.esc(o.phone || '—') + '</span></p>' +
+            '</div></div>';
+          return '<tr class="adm-order-row" data-exp="' + i + '"><td><b>' + IPC.esc(o.reference) +
+            '</b><br /><small>VIEW BREAKDOWN ▾</small></td>' +
             '<td>' + IPC.esc(o.email) + '<br />' + IPC.esc(o.customerName) + '<br /><small>' + IPC.esc(o.phone || 'NO PHONE') + '</small></td>' +
             '<td class="adm-delivery">' + delivery + '</td>' +
             '<td>' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + '</td>' +
             '<td>' + IPC.fmtP(o.totalCentavos) + voucher + '</td>' +
             '<td>' + (o.payment ? IPC.esc(o.payment.paymentReference) + (o.payment.refNo ? '<br />REF ' + IPC.esc(o.payment.refNo) : '') : '—') + '</td>' +
             '<td>' + IPC.pill(o.status) + '</td>' +
-            '<td>' + fmtDate(o.createdAt) + '</td></tr>';
+            '<td>' + fmtDate(o.createdAt) + '</td></tr>' +
+            '<tr class="adm-order-detail" id="admDet' + i + '" style="display:none"><td colspan="8">' + detail + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }).catch(function (err) {
       host.innerHTML = '<p class="adm-empty">' + IPC.esc((err.message || 'ORDERS FAILED').toUpperCase()) + '</p>';
@@ -3735,6 +3760,91 @@ setTimeout(function () {
         IPC.toast((err.message || 'VOUCHER UPDATE FAILED').toUpperCase());
       });
     });
+  }
+})();
+</script>
+
+<script id="ipc-admin-console-upgrade">
+/* Admin console revamp — LIVE toolbar, refresh-all, order row expansion. */
+(function () {
+  'use strict';
+  var IPC = window.IPC = window.IPC || {};
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+
+  var style = document.createElement('style');
+  style.textContent = [
+    '#v-admin .adm-stats{grid-template-columns:repeat(6,1fr)}',
+    '@media(max-width:1120px){#v-admin .adm-stats{grid-template-columns:repeat(3,1fr)}}',
+    '@media(max-width:760px){#v-admin .adm-stats{grid-template-columns:repeat(2,1fr)}}',
+    '.ipc-adm-toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;border:1px solid var(--line);border-top:0;background:var(--panel);padding:14px 20px;margin-bottom:28px}',
+    '.ipc-adm-clock{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--muted);margin:0}',
+    '.ipc-adm-note{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--faint);margin:0}',
+    '.ipc-adm-toolbar .btn-o{white-space:nowrap}',
+    '.adm-order-row{cursor:pointer}',
+    '.adm-order-row:hover td{background:rgba(255,255,255,.035)}',
+    '.adm-order-row small{font-family:var(--mono);font-size:8px;letter-spacing:.18em;color:var(--faint)}',
+    '.adm-order-detail td{background:var(--panel-2);padding:20px 24px !important}',
+    '.adm-detail-grid{display:grid;grid-template-columns:1.2fr .8fr .9fr;gap:28px}',
+    '@media(max-width:860px){.adm-detail-grid{grid-template-columns:1fr}}',
+    '.adm-line{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted);margin:0}',
+    '.adm-line-total{color:var(--text);font-weight:700;border-bottom:0}',
+    '.adm-line span:last-child{white-space:nowrap}'
+  ].join('');
+  document.head.appendChild(style);
+
+  /* toolbar: LIVE clock + last refresh + REFRESH ALL */
+  var admMain = $('#admMain');
+  if (admMain && !$('#ipcAdmToolbar')) {
+    var bar = document.createElement('div');
+    bar.className = 'ipc-adm-toolbar';
+    bar.id = 'ipcAdmToolbar';
+    bar.innerHTML = '<p class="ipc-adm-clock" id="ipcAdmClock">— LIVE</p>' +
+      '<p class="ipc-adm-note" id="ipcAdmRefreshNote">DATA REFRESHED —</p>' +
+      '<button type="button" class="btn-o btn-sm" id="ipcAdmRefreshAll">REFRESH ALL</button>';
+    var stats = $('#admStats');
+    if (stats) stats.insertAdjacentElement('afterend', bar);
+    var clock = $('#ipcAdmClock');
+    if (clock) {
+      var tick = function () {
+        clock.textContent = 'CLUB CONTROL — ' + new Date().toLocaleTimeString('en-PH', { hour12: false }) + ' PHT — LIVE';
+      };
+      tick();
+      setInterval(tick, 1000);
+    }
+    var refresh = $('#ipcAdmRefreshAll');
+    if (refresh) refresh.addEventListener('click', function () {
+      refresh.disabled = true;
+      refresh.textContent = 'REFRESHING…';
+      if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+      setTimeout(function () { refresh.disabled = false; refresh.textContent = 'REFRESH ALL'; }, 700);
+    });
+  }
+
+  /* stamp the refresh note whenever the dashboard reloads */
+  if (typeof IPC.renderAdmin === 'function' && !IPC.renderAdmin.__ipcStamped) {
+    var orig = IPC.renderAdmin;
+    IPC.renderAdmin = function () {
+      var r = orig.apply(this, arguments);
+      var n = $('#ipcAdmRefreshNote');
+      if (n) n.textContent = 'DATA REFRESHED — ' + new Date().toLocaleTimeString('en-PH', { hour12: false });
+      return r;
+    };
+    IPC.renderAdmin.__ipcStamped = true;
+  }
+
+  /* order row expansion (delegated — survives table re-renders) */
+  if (!document.__ipcRowExpand) {
+    document.addEventListener('click', function (ev) {
+      var row = ev.target.closest ? ev.target.closest('.adm-order-row') : null;
+      if (!row) return;
+      var det = document.getElementById('admDet' + row.getAttribute('data-exp'));
+      if (!det) return;
+      var open = det.style.display === 'table-row';
+      det.style.display = open ? 'none' : 'table-row';
+      var tag = row.querySelector('td small');
+      if (tag) tag.textContent = open ? 'VIEW BREAKDOWN ▾' : 'CLOSE BREAKDOWN ▴';
+    });
+    document.__ipcRowExpand = true;
   }
 })();
 </script>

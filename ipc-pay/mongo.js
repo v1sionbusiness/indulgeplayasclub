@@ -119,6 +119,7 @@ function initDatabase() {
     initPromise = connect()
       .then((d) => ensureIndexes(d))
       .then((d) => seedAdmin(d))
+      .then((d) => seedVouchers(d))
       .then((d) => d);
   }
   return initPromise;
@@ -240,6 +241,63 @@ function insertUser({ email, name, password, role, phone }) {
     createdAt: new Date(),
   };
   return connect().then((d) => d.collection("users").insertOne(doc)).then(() => doc);
+}
+
+/* ---------------------------------------------------------------- */
+/* Starter voucher seeding — runs once on boot.                     */
+/* If the vouchers collection is empty, the club's opening offers   */
+/* are created so the checkout voucher box works from day one.      */
+/* An existing voucher set is never touched.                        */
+/* ---------------------------------------------------------------- */
+function seedVouchers(d) {
+  return d.collection("vouchers")
+    .countDocuments()
+    .then((n) => {
+      if (n > 0) {
+        console.log("[ipc-pay] vouchers present: " + n + " — seed skipped.");
+        return d;
+      }
+      const now = new Date();
+      const starters = [
+        {
+          code: "WELCOMEPCLUB",
+          label: "Welcome to the club — 15% off your first order",
+          type: "percent", value: 15,
+          minSubtotalCentavos: 0, maxUses: 500, uses: 0,
+          firstOrderOnly: true, active: true,
+          startsAt: null, expiresAt: null,
+          createdAt: now, createdBy: "seed",
+        },
+        {
+          code: "PLAYASDAY",
+          label: "Playas day — ₱200 off ₱1,000+",
+          type: "fixed", value: 20000,
+          minSubtotalCentavos: 100000, maxUses: 200, uses: 0,
+          firstOrderOnly: false, active: true,
+          startsAt: null, expiresAt: null,
+          createdAt: now, createdBy: "seed",
+        },
+        {
+          code: "IPCDROP01",
+          label: "Drop 01 push — 10% off ₱2,000+ (30 days)",
+          type: "percent", value: 10,
+          minSubtotalCentavos: 200000, maxUses: 100, uses: 0,
+          firstOrderOnly: false, active: true,
+          startsAt: null,
+          expiresAt: new Date(now.getTime() + 30 * 24 * 3600 * 1000),
+          createdAt: now, createdBy: "seed",
+        },
+      ];
+      return d.collection("vouchers")
+        .insertMany(starters, { ordered: true })
+        .then(() => console.log("[ipc-pay] starter vouchers seeded: WELCOMEPCLUB · PLAYASDAY · IPCDROP01"))
+        .catch((err) => console.log("[ipc-pay] voucher seed skipped:", err.message))
+        .then(() => d);
+    })
+    .catch((err) => {
+      console.log("[ipc-pay] voucher seed check failed:", err.message);
+      return d;
+    });
 }
 
 /**

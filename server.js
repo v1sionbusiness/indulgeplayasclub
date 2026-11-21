@@ -661,7 +661,7 @@ async function route(req, res) {
           return send(res, 200, { ok: true, vouchers });
         }
         if (p === "/api/admin/overview") {
-          const [users, orders, payments, paidAgg] = await Promise.all([
+          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions] = await Promise.all([
             d.collection("users").countDocuments(),
             d.collection("orders").countDocuments(),
             d.collection("payments").aggregate([
@@ -671,6 +671,12 @@ async function route(req, res) {
               { $match: { status: "paid" } },
               { $group: { _id: null, total: { $sum: "$amountCentavos" } } },
             ]).toArray(),
+            d.collection("payments").aggregate([
+              { $match: { status: "under_verification" } },
+              { $group: { _id: null, total: { $sum: "$amountCentavos" } } },
+            ]).toArray(),
+            d.collection("vouchers").countDocuments({ active: true }),
+            d.collection("voucherRedemptions").countDocuments(),
           ]);
           const payStatus = {};
           payments.forEach((s) => { payStatus[s._id] = s.n; });
@@ -684,6 +690,9 @@ async function route(req, res) {
               paymentsPaid: payStatus.paid || 0,
               paymentsFailed: payStatus.failed || 0,
               paidRevenueCentavos: (paidAgg[0] && paidAgg[0].total) || 0,
+              underVerificationCentavos: (underAgg[0] && underAgg[0].total) || 0,
+              activeVouchers,
+              voucherRedemptions,
             },
           });
         }
