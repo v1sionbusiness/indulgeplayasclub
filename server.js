@@ -335,7 +335,7 @@ function serveIndex(res) {
         if (!raw && href && href !== "#") {
           try {
             var parsed = new URL(href, location.href);
-            if (parsed.origin !== location.origin || (parsed.pathname.length > 1 ? parsed.pathname.replace(/\/$/, "") : parsed.pathname) !== (location.pathname.length > 1 ? location.pathname.replace(/\/$/, "") : location.pathname)) return;
+            if (parsed.origin !== location.origin || (parsed.pathname.length > 1 ? parsed.pathname.slice(0, -1) : parsed.pathname) !== (location.pathname.length > 1 ? location.pathname.slice(0, -1) : location.pathname)) return;
             raw = parsed.hash;
           } catch (_) { return; }
         }
@@ -1494,4 +1494,83 @@ async function handleDecision(req, res) {
     const now = new Date();
     const newStatus = action === "approve" ? "paid" : "failed";
     /* Compare-and-set prevents two admins from approving/rejecting the same
-       payment concurrently and sending conflicting customer confirmations. */
+       payment concurrently and sending conflicting customer confirmations. */    const decision = await d.collection("payments").updateOne(
+      { _id: pay._id, status: { $in: ["pending", "under_verification"] } },
+      { $set: {
+        status: newStatus,
+        updatedAt: now,
+        verifiedAt: now,
+        reviewedBy: found.user.email,
+        decisionSource: "admin_manual_maya_check",
+      } }
+    );
+    if (decision.modifiedCount !== 1) {
+      return fail(res, 409, "decision_conflict",
+        "ANOTHER ADMIN HAS ALREADY UPDATED THIS PAYMENT. REFRESH THE PAYMENT QUEUE.");
+    }
+    await d.collection("orders").updateOne(
+      { reference: pay.orderReference },
+      { $set: { status: newStatus, updatedAt: now } }
+    );
+
+    if (action === "reject") {
+      await d.collection("users").updateOne(
+        { _id: pay.userId },
+        { $push: { paymentRejections: { $each: [now], $slice: -5 } } }
+      );
+      const account = await d.collection("users").findOne(
+        { _id: pay.userId },
+        { projection: { paymentRejections: 1 } }
+      );
+      const cutoff = now.getTime() - PAYMENT_REJECTION_WINDOW_MS;
+      const recentRejections = (account && Array.isArray(account.paymentRejections)
+        ? account.paymentRejections : []).filter((stamp) => new Date(stamp).getTime() >= cutoff);
+      if (recentRejections.length >= 2) {
+        await d.collection("users").updateOne(
+          { _id: pay.userId },
+          { $set: { paymentCooldownUntil: new Date(now.getTime() + PAYMENT_COOLDOWN_MS) } }
+        );
+      }
+    } else {
+      await d.collection("users").updateOne(
+        { _id: pay.userId },
+        { $set: { paymentRejections: [] }, $unset: { paymentCooldownUntil: "" } }
+      );
+    }
+
+    const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
+    await sendPaymentEmail({ ...pay, status: newStatus }, orderForEmail,
+      newStatus.toUpperCase(), action === "approve"
+        ? "Your Maya payment was checked and verified by the club. Your order is now confirmed."
+        : "Your payment could not be verified by the club. Please check your Maya transaction details and contact the club before trying again.");
+    return send(res, 200, {
+      ok: true,
+      status: newStatus,
+      verifiedAt: now,
+      message: action === "approve"
+        ? "PAYMENT MARKED PAID — ORDER UNLOCKED."
+        : "PAYMENT REJECTED — CUSTOMER MUST RESUBMIT.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "decision failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+
+server.listen(PORT, () => {
+  console.log("IPC contact API listening on port " + PORT);
+  /* Seed the admin account + indexes in the background — the contact
+     relay keeps working even if MONGODB_URI isn't set yet. */
+  initDatabase()
+    .then(() => console.log("[ipc-pay] MongoDB Atlas ready — accounts online."))
+    .catch((err) => {
+      if (err && err.code === "MONGO_NOT_CONFIGURED") {
+        console.log("[ipc-pay] MONGODB_URI not set — contact relay only, accounts offline.");
+      } else {
+        console.error("[ipc-pay] Mongo init failed:", err && err.message);
+        const hints = (err && err.hints && err.hints.length) ? err.hints : uriHints(process.env.MONGODB_URI);
+        hints.forEach((h) => console.error("[ipc-pay] FIX: " + h));
+      }
+    });
+});
