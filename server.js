@@ -672,9 +672,8 @@ function handleContact(req, res, ip) {
       return send(res, 200, { ok: true, duplicate: true });
     }
 
-    if (rateLimited(ip, 5, 60 * 60 * 1000, "contact")) {
-      return send(res, 429, { ok: false, reason: "rate_limited" });
-    }
+    /* No hourly contact-form cap: valid customer inquiries may be submitted.
+       The 90-second duplicate guard above still prevents accidental repeat sends. */
 
     const publicKey = process.env.EMAILJS_PUBLIC_KEY || "";
     const serviceId = process.env.EMAILJS_SERVICE_ID || "";
