@@ -227,7 +227,11 @@ function serveIndex(res) {
           ["SEND MESSAGE", "SUBMIT MESSAGE"]
         ]);
         function polish() {
-          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          /* MutationObserver can fire while the document body is being
+             replaced or before it exists. createTreeWalker requires a Node. */
+          var root = document.body;
+          if (!root || root.nodeType !== 1) return;
+          var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
           var node;
           while ((node = walker.nextNode())) {
             var value = node.nodeValue.trim();
