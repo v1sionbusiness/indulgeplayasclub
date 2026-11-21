@@ -38,7 +38,8 @@
  *   POST /api/auth/register        → { name, email, password }
  *   POST /api/auth/login           → { email | mobile, password }
  *   POST /api/auth/logout          → (Bearer token)
- *   GET  /api/auth/me              → (Bearer token) profile + role
+ *   GET  /api/auth/me              → (Bearer token) profile + role + membership level
+ *   POST /api/admin/role           → (Bearer admin) { email, role } grant/revoke admin
  *   POST /api/orders               → (Bearer) create order + payment record
  *   GET  /api/orders/mine          → (Bearer) my order history
  *   GET  /api/payments/<reference> → (Bearer) owner or admin
@@ -168,93 +169,7 @@ function serveIndex(res) {
        inside bundled JavaScript, fetch(), and XMLHttpRequest before network I/O. */
     const apiGuard = '<script id="ipc-api-host-guard">(function(){var oldHost="https://ipc-contact-api.onrender.com";var newHost="https://indulgeplayasclub.onrender.com";function fix(v){if(typeof v!=="string")return v;return v.replace(/https?:\\/\\/ipc-contact-api\\.onrender\\.com/gi,newHost).replace(/ipc-contact-api\\.onrender\\.com/gi,"indulgeplayasclub.onrender.com");}try{var nativeFetch=window.fetch;if(nativeFetch)window.fetch=function(input,init){if(typeof input==="string")input=fix(input);else if(input&&typeof Request!=="undefined"&&input instanceof Request&&input.url.indexOf(oldHost)===0)input=new Request(fix(input.url),input);return nativeFetch.call(this,input,init);};var nativeOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url){arguments[1]=fix(url);return nativeOpen.apply(this,arguments);};}catch(e){}try{localStorage.removeItem("ipc_api_override");}catch(e){}})();</script>';
     html = html.replace(/<\/head>/i, apiGuard + "</head>");
-    /* Keep the checkout QR as a clearly marked placeholder until the
-       merchant's actual QR image is uploaded and installed. */
-    const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){try{if(window.IPC&&window.IPC.API&&String(window.IPC.API).indexOf("ipc-contact-api.onrender.com")!==-1){window.IPC.API="https://indulgeplayasclub.onrender.com";}}catch(e){}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
-    html = html.replace(/<\/body>/i, loginFix + "</body>");
-    const contactPolish = `<style id="ipc-contact-form-polish">
-      .ipc-contact-glass {
-        color: #f5f5f5 !important;
-        background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.045)) !important;
-        border: 1px solid rgba(255,255,255,.22) !important;
-        border-radius: 22px !important;
-        padding: clamp(20px, 4vw, 34px) !important;
-        box-shadow: 0 18px 55px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12) !important;
-        -webkit-backdrop-filter: blur(18px) saturate(135%) !important;
-        backdrop-filter: blur(18px) saturate(135%) !important;
-      }
-      .ipc-contact-glass input, .ipc-contact-glass textarea, .ipc-contact-glass select {
-        box-sizing: border-box !important;
-        width: 100% !important;
-        color: #171717 !important;
-        -webkit-text-fill-color: #171717 !important;
-        background: rgba(255,255,255,.94) !important;
-        border: 1px solid rgba(255,255,255,.7) !important;
-        border-radius: 11px !important;
-        padding: 13px 15px !important;
-        caret-color: #171717 !important;
-        box-shadow: inset 0 1px 2px rgba(0,0,0,.06) !important;
-        transition: border-color .2s ease, box-shadow .2s ease, background .2s ease !important;
-      }
-      .ipc-contact-glass input::placeholder, .ipc-contact-glass textarea::placeholder {
-        color: #666 !important;
-        -webkit-text-fill-color: #666 !important;
-        opacity: 1 !important;
-      }
-      .ipc-contact-glass input:focus, .ipc-contact-glass textarea:focus, .ipc-contact-glass select:focus {
-        outline: none !important;
-        border-color: #fff !important;
-        box-shadow: 0 0 0 3px rgba(255,255,255,.22), 0 0 0 1px rgba(20,20,20,.12) inset !important;
-        background: #fff !important;
-      }
-      .ipc-contact-glass label { color: #f5f5f5 !important; }
-      .ipc-contact-glass button, .ipc-contact-glass input[type="submit"] {
-        border-radius: 999px !important;
-        letter-spacing: .08em !important;
-        font-weight: 700 !important;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .ipc-contact-glass input, .ipc-contact-glass textarea, .ipc-contact-glass select { transition: none !important; }
-      }
-    </style>
-    <script id="ipc-contact-copy-polish">
-      (function () {
-        var replacements = new Map([
-          ["SEND US A MESSAGE", "CONTACT THE CLUB"],
-          ["DROP YOUR NAME, A WAY TO REACH YOU AND WHAT'S ON YOUR MIND — IT LANDS STRAIGHT IN THE CLUB INBOX. NO EMAIL SHOWN, NO DM NEEDED.", "Have a question or need assistance? Send us a message and our team will be in touch."],
-          ["Have a question or need assistance? Send us a message and our team will get back to you using the contact details you provide. Your email address will not be displayed publicly.", "Have a question or need assistance? Send us a message and our team will be in touch."],
-          ["EMAIL OR FB NAME (FOR REPLY)", "EMAIL ADDRESS OR FACEBOOK NAME"],
-          ["SEND MESSAGE", "SUBMIT MESSAGE"]
-        ]);
-        function polish() {
-          /* MutationObserver can fire while the document body is being
-             replaced or before it exists. createTreeWalker requires a Node. */
-          var root = document.body;
-          if (!root || root.nodeType !== 1) return;
-          var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-          var node;
-          while ((node = walker.nextNode())) {
-            var value = node.nodeValue.trim();
-            if (replacements.has(value)) node.nodeValue = node.nodeValue.replace(value, replacements.get(value));
-          }
-          var heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,p,div,span"))
-            .find(function (el) { return el.children.length === 0 && el.textContent.trim() === "CONTACT THE CLUB"; });
-          if (heading) {
-            var current = heading;
-            for (var depth = 0; current && depth < 7; depth++, current = current.parentElement) {
-              if (current.querySelector && current.querySelector("input, textarea, select")) {
-                current.classList.add("ipc-contact-glass");
-                break;
-              }
-            }
-          }
-        }
-        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", polish);
-        else polish();
-        new MutationObserver(polish).observe(document.documentElement, { childList: true, subtree: true });
-      })();
-    </script>`;
-    html = html.replace(/<\/head>/i, contactPolish + "</head>");
+    /* Contact glass UI now ships inside index.html itself — no runtime injection. */
 
     /* Router compatibility: older IPC router code calls .forEach() on the
        result of $(). In some browsers/helpers that result is a single Element
@@ -454,7 +369,30 @@ function bearerToken(req) {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), email: u.email, name: u.name, phone: u.phone || "", role: u.role };
+  return { id: String(u._id), email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt };
+}
+
+/* Membership levels — computed from VERIFIED payments only. */
+const TIERS = [
+  { key: "ROOKIE", minPaidCentavos: 0 },
+  { key: "HOMIE", minPaidCentavos: 250000 },
+  { key: "OG", minPaidCentavos: 750000 },
+  { key: "VIP", minPaidCentavos: 1500000 },
+];
+
+function tierForPaid(centavos) {
+  let tier = TIERS[0].key;
+  for (const x of TIERS) if (centavos >= x.minPaidCentavos) tier = x.key;
+  return tier;
+}
+
+/** Lifetime paid totals for one member email (paid orders only). */
+async function paidSummary(d, email) {
+  const agg = await d.collection("orders").aggregate([
+    { $match: { email, status: "paid" } },
+    { $group: { _id: null, spent: { $sum: "$totalCentavos" }, orders: { $sum: 1 } } },
+  ]).toArray();
+  return { spentCentavos: agg[0] ? agg[0].spent : 0, paidOrders: agg[0] ? agg[0].orders : 0 };
 }
 
 /** Resolve the logged-in user from the Authorization header, or null. */
@@ -591,7 +529,25 @@ async function route(req, res) {
     if (p === "/api/auth/me") {
       const found = await userFromReq(req).catch(() => null);
       if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
-      return send(res, 200, { ok: true, user: publicUser(found.user) });
+      const user = publicUser(found.user);
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        const paid = await paidSummary(d, user.email);
+        const tier = tierForPaid(paid.spentCentavos);
+        const idx = TIERS.findIndex((x) => x.key === tier);
+        const next = TIERS[idx + 1] || null;
+        user.membership = {
+          tier,
+          spentCentavos: paid.spentCentavos,
+          paidOrders: paid.paidOrders,
+          nextTier: next ? { key: next.key, minPaidCentavos: next.minPaidCentavos } : null,
+          nextTierGapCentavos: next ? Math.max(0, next.minPaidCentavos - paid.spentCentavos) : 0,
+        };
+      } catch (err) {
+        user.membership = null; /* DB hiccup — the profile still loads */
+      }
+      return send(res, 200, { ok: true, user });
     }
 
     /* --- my order history --- */
@@ -751,6 +707,7 @@ async function route(req, res) {
             const all = allByEmail.get(u.email) || {};
             return {
               email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
+              tier: tierForPaid(paid.spent || 0),
               orders: all.orders || 0,
               paidOrders: paid.paidOrders || 0,
               spentCentavos: paid.spent || 0,
@@ -778,6 +735,9 @@ async function route(req, res) {
   if (p === "/api/auth/register" || p === "/api/auth/login" || p === "/api/auth/logout") {
     return handleAuth(req, res, ip, p);
   }
+
+  /* --- admin role management: 20KB --- */
+  if (p === "/api/admin/role") return handleAdminRole(req, res);
 
   /* --- voucher validation + admin voucher management: 20KB --- */
   if (p === "/api/vouchers/validate") return handleValidateVoucher(req, res);
@@ -1152,6 +1112,47 @@ async function handleValidateVoucher(req, res) {
     });
   } catch (err) {
     return fail(res, 422, "voucher_invalid", err.message || "VOUCHER COULD NOT BE APPLIED.");
+  }
+}
+
+/* Grant or revoke ADMIN for a member by email. The seeded club-owner
+   account (ADMIN_EMAIL) can never be demoted. */
+async function handleAdminRole(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  try {
+    const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+    const role = String(body.role ?? "").toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+    }
+    if (role !== "admin" && role !== "customer") {
+      return fail(res, 422, "invalid", "ROLE IS ADMIN OR MEMBER ONLY.");
+    }
+    const root = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    if (root && email === root && role !== "admin") {
+      return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT STAYS ADMIN.");
+    }
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const target = await d.collection("users").findOne({ email });
+    if (!target) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+    if (target.role === role) {
+      return send(res, 200, { ok: true, user: publicUser(target), message: "ALREADY " + (role === "admin" ? "AN ADMIN" : "A MEMBER") + "." });
+    }
+    await d.collection("users").updateOne({ _id: target._id }, { $set: { role, updatedAt: new Date() } });
+    const fresh = await d.collection("users").findOne({ _id: target._id });
+    return send(res, 200, {
+      ok: true,
+      user: publicUser(fresh),
+      message: fresh.role === "admin" ? "ADMIN GRANTED." : "ADMIN REMOVED.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "role change failed");
   }
 }
 
