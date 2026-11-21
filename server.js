@@ -356,28 +356,9 @@ function serveIndex(res) {
         });
         return true;
       }
-      document.addEventListener("click", function (event) {
-        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
-            event.shiftKey || event.altKey) return;
-        var link = event.target && event.target.closest &&
-          event.target.closest('a[href], [data-scroll-to], [data-nav-target]');
-        if (!link) return;
-        var raw = link.getAttribute("data-scroll-to") || link.getAttribute("data-nav-target");
-        var href = link.getAttribute("href") || "";
-        if (!raw && href && href !== "#") {
-          try {
-            var parsed = new URL(href, location.href);
-            if (parsed.origin !== location.origin || (parsed.pathname.length > 1 && parsed.pathname.charAt(parsed.pathname.length - 1) === "/" ? parsed.pathname.slice(0, -1) : parsed.pathname) !== (location.pathname.length > 1 && location.pathname.charAt(location.pathname.length - 1) === "/" ? location.pathname.slice(0, -1) : location.pathname)) return;
-            raw = parsed.hash;
-          } catch (_) { return; }
-        }
-        var target = findTarget(raw);
-        if (!target) return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-        navigate(target, true);
-      }, true);
+      /* Do not capture or cancel clicks here. The IPC site's own router and
+         admin dashboard use delegated click handlers; intercepting these
+         events prevents their page and dashboard controls from running. */
       window.addEventListener("hashchange", function () {
         var target = findTarget(location.hash);
         if (target) target.scrollIntoView({ behavior: "auto", block: "start" });
