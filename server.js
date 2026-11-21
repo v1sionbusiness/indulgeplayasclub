@@ -1089,9 +1089,13 @@ async function handleCreateOrder(req, res) {
     return fail(res, 422, "invalid", "COMPLETE THE DELIVERY DETAILS BEFORE PLACING THE ORDER.");
   }
 
+  let voucherReservation = null;
+  let voucherDatabase = null;
+  let orderSaved = false;
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
+    voucherDatabase = d;
     const phone = await linkAccountPhone(d, found.user, rawPhone);
     const reference = await nextReference("order");
     const paymentReference = await nextReference("payment");
@@ -1114,6 +1118,7 @@ async function handleCreateOrder(req, res) {
           orderReference: reference,
           createdAt: now,
         });
+        voucherReservation = { voucherId: v._id, orderReference: reference };
       } catch (claimErr) {
         await d.collection("vouchers").updateOne({ _id: v._id }, { $inc: { uses: -1 } });
         if (claimErr && claimErr.code === 11000) {
@@ -1149,6 +1154,7 @@ async function handleCreateOrder(req, res) {
       updatedAt: now,
     };
     await d.collection("orders").insertOne(orderDoc);
+    orderSaved = true;
 
     const paymentDoc = {
       paymentReference,
@@ -1179,6 +1185,14 @@ async function handleCreateOrder(req, res) {
       shippingCentavos: SHIPPING_CENTAVOS,
     });
   } catch (err) {
+    if (voucherReservation && voucherDatabase && !orderSaved) {
+      await voucherDatabase.collection("voucherRedemptions").deleteOne({
+        orderReference: voucherReservation.orderReference,
+      }).catch(() => {});
+      await voucherDatabase.collection("vouchers").updateOne(
+        { _id: voucherReservation.voucherId }, { $inc: { uses: -1 } }
+      ).catch(() => {});
+    }
     if (err && err.code === 11000) {
       return fail(res, 409, "account_or_voucher_conflict",
         "THIS MOBILE NUMBER OR VOUCHER HAS ALREADY BEEN USED. REFRESH AND TRY AGAIN.");
