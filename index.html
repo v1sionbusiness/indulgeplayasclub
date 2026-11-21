@@ -2868,7 +2868,7 @@ textarea.inp{min-height:110px;resize:vertical}
   });
   var demoBtn = $('#demoPay');
   if (demoBtn) demoBtn.addEventListener('click', function () {
-    if (!poState.ref) return;
+    if (!poState.ref || !IPC.auth.user || IPC.auth.user.role !== 'admin') return;
     var refNo = 'IPC-DEMO-' + String(Math.floor(100000 + Math.random() * 900000));
     var inp = $('#refNo');
     if (inp) inp.value = refNo;
