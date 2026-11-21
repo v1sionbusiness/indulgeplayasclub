@@ -3268,5 +3268,267 @@ setTimeout(function () {
   }
 }, 1200);
 </script>
+
+<script id="ipc-admin-voucher-upgrade">
+(function () {
+  'use strict';
+  var IPC = window.IPC = window.IPC || {};
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+  var $ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var esc = function (v) { return IPC.esc ? IPC.esc(v == null ? '' : String(v)) : String(v == null ? '' : v).replace(/[&<>"']/g, function (x) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]); }); };
+  var appliedVoucher = null;
+
+  var style = document.createElement('style');
+  style.textContent = [
+    '#v-admin .adm-wrap{max-width:1320px}',
+    '#v-admin #admMain{position:relative}',
+    '#v-admin .adm-editorial{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:1px solid var(--line-2);padding-bottom:24px;margin-bottom:8px}',
+    '#v-admin .adm-editorial-note{font-family:var(--mono);font-size:10px;line-height:1.9;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;max-width:330px}',
+    '#v-admin .adm-stats{margin-top:28px}',
+    '#v-admin .stat-tile{min-height:120px;display:flex;flex-direction:column;justify-content:space-between}',
+    '#v-admin .adm-tabs{width:100%;border:0;border-bottom:1px solid var(--line-2);gap:6px;margin-top:32px}',
+    '#v-admin .adm-tab{border:1px solid transparent;padding:13px 16px}',
+    '#v-admin .adm-tab.active{background:var(--white);color:var(--black)}',
+    '#v-admin .adm-pane{margin-top:26px}',
+    '#v-admin .pay-card{border-radius:0;box-shadow:0 14px 40px rgba(0,0,0,.12)}',
+    '#v-admin .adm-table th{white-space:nowrap}',
+    '.ipc-voucher-layout{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(0,1.4fr);gap:24px;align-items:start}',
+    '.ipc-voucher-card{border:1px solid var(--line-2);background:var(--panel);padding:24px}',
+    '.ipc-voucher-k{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-bottom:16px}',
+    '.ipc-voucher-card h3{font-family:var(--display);font-size:24px;text-transform:uppercase;margin:0 0 20px}',
+    '.ipc-voucher-form{display:grid;grid-template-columns:1fr 1fr;gap:14px}',
+    '.ipc-voucher-form .full{grid-column:1/-1}',
+    '.ipc-voucher-form label{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--faint);margin-bottom:7px}',
+    '.ipc-voucher-form input,.ipc-voucher-form select{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);color:var(--text);padding:12px;font:inherit;border-radius:0}',
+    '.ipc-voucher-check{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)}',
+    '.ipc-voucher-check input{width:auto}',
+    '.ipc-voucher-list{display:flex;flex-direction:column;gap:10px}',
+    '.ipc-voucher-row{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:18px;border:1px solid var(--line);background:var(--panel)}',
+    '.ipc-voucher-code{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.12em}',
+    '.ipc-voucher-meta{font-family:var(--mono);font-size:9px;line-height:1.9;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;margin-top:7px}',
+    '.ipc-voucher-status{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;padding:5px 8px;border:1px solid var(--line-2)}',
+    '.ipc-voucher-status.off{opacity:.5}',
+    '.ipc-voucher-actions{display:flex;gap:8px;align-items:center}',
+    '.ipc-voucher-box{border:1px solid var(--line-2);padding:18px;margin:18px 0;background:var(--panel)}',
+    '.ipc-voucher-box .k{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--faint);margin:0 0 12px}',
+    '.ipc-voucher-entry{display:flex;gap:8px}',
+    '.ipc-voucher-entry input{min-width:0;flex:1;background:var(--bg);color:var(--text);border:1px solid var(--line-2);padding:12px 14px;font:inherit;letter-spacing:.12em;text-transform:uppercase}',
+    '.ipc-voucher-entry button{white-space:nowrap}',
+    '.ipc-voucher-msg{font-family:var(--mono);font-size:9px;line-height:1.7;letter-spacing:.12em;color:var(--faint);margin-top:10px;text-transform:uppercase}',
+    '.ipc-voucher-msg.ok{color:var(--text)}',
+    '.ipc-discount-row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.1em}',
+    '.ipc-discount-row b{color:var(--text)}',
+    '.ipc-phone-note{font-family:var(--mono);font-size:9px;line-height:1.8;letter-spacing:.12em;color:var(--faint);margin-top:12px}',
+    '@media(max-width:760px){.ipc-voucher-layout{grid-template-columns:1fr}.ipc-voucher-form{grid-template-columns:1fr}.ipc-voucher-form .full{grid-column:auto}.ipc-voucher-row{grid-template-columns:1fr}.ipc-voucher-actions{justify-content:flex-start}.ipc-voucher-entry{flex-direction:column}.ipc-voucher-entry button{width:100%}#v-admin .adm-tab{flex:1 1 auto}}'
+  ].join('');
+  document.head.appendChild(style);
+
+  var signupForm = $('#signupForm');
+  if (signupForm && !$('#suPhone')) {
+    var emailField = $('#suEmail') && $('#suEmail').closest('.field');
+    if (emailField) {
+      var phoneField = document.createElement('div');
+      phoneField.className = 'field';
+      phoneField.innerHTML = '<label for="suPhone">MOBILE NUMBER — ONE PER ACCOUNT</label><input class="inp" id="suPhone" type="tel" inputmode="tel" maxlength="24" placeholder="09XX XXX XXXX" autocomplete="tel" required /><p class="ipc-phone-note">Your mobile number is linked to one IPC account and helps protect first-order offers from duplicate claims.</p>';
+      emailField.insertAdjacentElement('afterend', phoneField);
+    }
+    var signupNote = signupForm.querySelector('.forgot-line');
+    if (signupNote) signupNote.textContent = 'JOIN WITH YOUR NAME, EMAIL, MOBILE NUMBER AND PASSWORD. ONE MOBILE NUMBER CAN BE LINKED TO ONE IPC ACCOUNT.';
+  }
+
+  var summary = $('#coSummary');
+  var totals = summary && $('.co-totals', summary);
+  if (summary && totals && !$('#ipcVoucherBox')) {
+    var voucherBox = document.createElement('section');
+    voucherBox.className = 'ipc-voucher-box';
+    voucherBox.id = 'ipcVoucherBox';
+    voucherBox.innerHTML = '<p class="k">PROMO CODE / CLUB OFFER</p><div class="ipc-voucher-entry"><input id="ipcVoucherCode" type="text" maxlength="32" placeholder="ENTER VOUCHER CODE" autocomplete="off" /><button type="button" class="btn-o btn-sm" id="ipcVoucherApply">APPLY</button></div><p class="ipc-voucher-msg" id="ipcVoucherMsg">FIRST-ORDER OFFERS ARE LINKED TO YOUR ACCOUNT AND MOBILE NUMBER.</p>';
+    totals.insertAdjacentElement('beforebegin', voucherBox);
+    var discountRow = document.createElement('p');
+    discountRow.className = 'ipc-discount-row';
+    discountRow.id = 'ipcDiscountRow';
+    discountRow.style.display = 'none';
+    discountRow.innerHTML = '<span>VOUCHER DISCOUNT</span><b id="ipcDiscountValue">−₱0</b>';
+    var totalRow = $('.sum-row.total', totals);
+    if (totalRow) totalRow.insertAdjacentElement('beforebegin', discountRow);
+  }
+
+  function clearVoucher(message) {
+    appliedVoucher = null;
+    var row = $('#ipcDiscountRow');
+    if (row) row.style.display = 'none';
+    if ($('#coTotal') && IPC.bag) $('#coTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
+    var msg = $('#ipcVoucherMsg');
+    if (msg) { msg.textContent = message || 'FIRST-ORDER OFFERS ARE LINKED TO YOUR ACCOUNT AND MOBILE NUMBER.'; msg.className = 'ipc-voucher-msg'; }
+  }
+
+  var originalApi = IPC.api;
+  if (typeof originalApi === 'function') {
+    IPC.api = function (path, opts) {
+      opts = opts || {};
+      if (path === '/api/auth/register') {
+        opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { phone: ($('#suPhone') && $('#suPhone').value.trim()) || '' }) });
+      }
+      if (path === '/api/orders' && appliedVoucher) {
+        opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { voucherCode: appliedVoucher.code }) });
+      }
+      return originalApi.call(this, path, opts);
+    };
+  }
+
+  var applyBtn = $('#ipcVoucherApply');
+  if (applyBtn) applyBtn.addEventListener('click', function () {
+    var code = ($('#ipcVoucherCode').value || '').trim().toUpperCase();
+    var phone = ($('#coPhone') && $('#coPhone').value.trim()) || '';
+    var msg = $('#ipcVoucherMsg');
+    if (!code) { clearVoucher('ENTER A VOUCHER CODE FIRST.'); return; }
+    if (!phone) { clearVoucher('ENTER YOUR MOBILE NUMBER IN DELIVERY DETAILS FIRST.'); return; }
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'CHECKING…';
+    msg.className = 'ipc-voucher-msg';
+    msg.textContent = 'VERIFYING YOUR OFFER…';
+    var items = (IPC.bag && IPC.bag.items || []).map(function (it) {
+      return { productId: it.productId, size: it.size, color: it.color, qty: it.qty };
+    });
+    IPC.api('/api/vouchers/validate', { method: 'POST', body: { code: code, phone: phone, items: items } })
+      .then(function (d) {
+        appliedVoucher = { code: d.code, discountCentavos: d.discountCentavos };
+        $('#ipcDiscountRow').style.display = 'flex';
+        $('#ipcDiscountValue').textContent = '−' + IPC.fmtP(d.discountCentavos);
+        $('#coTotal').textContent = IPC.fmtP(d.totalCentavos);
+        msg.textContent = d.message || 'VOUCHER APPLIED.';
+        msg.className = 'ipc-voucher-msg ok';
+      })
+      .catch(function (err) {
+        clearVoucher((err.message || 'VOUCHER COULD NOT BE APPLIED.').toUpperCase());
+      })
+      .finally(function () {
+        applyBtn.disabled = false;
+        applyBtn.textContent = 'APPLY';
+      });
+  });
+
+  var phoneInput = $('#coPhone');
+  if (phoneInput) phoneInput.addEventListener('input', function () {
+    if (appliedVoucher) clearVoucher('MOBILE NUMBER CHANGED — APPLY THE VOUCHER AGAIN.');
+  });
+  document.addEventListener('ipc:bag', function () {
+    if (appliedVoucher) clearVoucher('YOUR BAG CHANGED — APPLY THE VOUCHER AGAIN.');
+  });
+  document.addEventListener('ipc:auth', function () {
+    var user = IPC.auth && IPC.auth.user;
+    if (user && user.phone && $('#coPhone') && !$('#coPhone').value) $('#coPhone').value = user.phone;
+  });
+
+  var admMain = $('#admMain');
+  var adminTabs = $('.adm-tabs');
+  var usersPane = $('#pane-users');
+  if (admMain && adminTabs && usersPane && !$('#pane-vouchers')) {
+    var intro = document.createElement('div');
+    intro.className = 'adm-editorial';
+    intro.innerHTML = '<div><p class="kicker">THE BACK OFFICE / IPC</p><p class="ipc-voucher-k" style="margin:8px 0 0">OPERATIONS · ORDERS · MEMBERS · OFFERS</p></div><p class="adm-editorial-note">A CLEAR VIEW OF THE CLUB. EVERY PAYMENT IS REVIEWED BY A HUMAN.</p>';
+    admMain.insertBefore(intro, $('#admStats'));
+    var tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'adm-tab';
+    tab.setAttribute('data-pane', 'vouchers');
+    tab.textContent = 'VOUCHERS';
+    adminTabs.appendChild(tab);
+    var pane = document.createElement('div');
+    pane.className = 'adm-pane';
+    pane.id = 'pane-vouchers';
+    pane.innerHTML = '<div class="ipc-voucher-layout">' +
+      '<section class="ipc-voucher-card"><p class="ipc-voucher-k">01 / CREATE AN OFFER</p><h3>Issue a voucher<span class="dim">.</span></h3>' +
+      '<form class="ipc-voucher-form" id="ipcVoucherForm">' +
+      '<div class="full"><label for="ipcAdmCode">VOUCHER CODE</label><input id="ipcAdmCode" maxlength="32" placeholder="WELCOME10" required /></div>' +
+      '<div class="full"><label for="ipcAdmLabel">INTERNAL / DISPLAY LABEL</label><input id="ipcAdmLabel" maxlength="80" placeholder="FIRST ORDER OFFER" /></div>' +
+      '<div><label for="ipcAdmType">DISCOUNT TYPE</label><select id="ipcAdmType"><option value="percent">PERCENTAGE (%)</option><option value="fixed">FIXED AMOUNT (PHP)</option></select></div>' +
+      '<div><label for="ipcAdmValue">DISCOUNT VALUE</label><input id="ipcAdmValue" type="number" min="1" step="1" placeholder="10" required /></div>' +
+      '<div><label for="ipcAdmMin">MINIMUM SPEND (PHP)</label><input id="ipcAdmMin" type="number" min="0" step="1" value="0" /></div>' +
+      '<div><label for="ipcAdmMax">MAXIMUM USES (0 = UNLIMITED)</label><input id="ipcAdmMax" type="number" min="0" step="1" value="100" /></div>' +
+      '<div class="full"><label for="ipcAdmExpiry">EXPIRY DATE (OPTIONAL)</label><input id="ipcAdmExpiry" type="date" /></div>' +
+      '<label class="ipc-voucher-check full"><input id="ipcAdmFirst" type="checkbox" checked /> FIRST IPC ORDER ONLY — ONE CLAIM PER ACCOUNT + MOBILE</label>' +
+      '<div class="full"><button class="btn-w" type="submit" style="width:100%;justify-content:center">CREATE VOUCHER</button><p class="form-msg" id="ipcAdmVoucherMsg" role="status" aria-live="polite"></p></div>' +
+      '</form></section>' +
+      '<section class="ipc-voucher-card"><p class="ipc-voucher-k">02 / ACTIVE & PAST OFFERS</p><h3>Voucher register<span class="dim">.</span></h3><div id="ipcVoucherList" class="ipc-voucher-list"><p class="adm-empty">LOADING VOUCHERS…</p></div></section>' +
+      '</div>';
+    usersPane.insertAdjacentElement('afterend', pane);
+
+    function loadVouchers() {
+      var host = $('#ipcVoucherList');
+      host.innerHTML = '<p class="adm-empty">LOADING VOUCHERS…</p>';
+      IPC.api('/api/admin/vouchers').then(function (d) {
+        var list = d.vouchers || [];
+        if (!list.length) { host.innerHTML = '<p class="adm-empty">NO VOUCHERS YET — CREATE THE FIRST CLUB OFFER.</p>'; return; }
+        host.innerHTML = list.map(function (v) {
+          var offer = v.type === 'percent' ? v.value + '% OFF' : IPC.fmtP(v.value) + ' OFF';
+          var limit = v.maxUses > 0 ? (v.uses || 0) + ' / ' + v.maxUses + ' USES' : (v.uses || 0) + ' USES · NO LIMIT';
+          var expiry = v.expiresAt ? 'ENDS ' + new Date(v.expiresAt).toLocaleDateString('en-PH') : 'NO EXPIRY';
+          return '<article class="ipc-voucher-row"><div><p class="ipc-voucher-code">' + esc(v.code) + ' <span class="ipc-voucher-status ' + (v.active ? '' : 'off') + '">' + (v.active ? 'ACTIVE' : 'PAUSED') + '</span></p>' +
+            '<p class="ipc-voucher-meta">' + esc(v.label || '') + ' · ' + offer + ' · MIN ' + IPC.fmtP(v.minSubtotalCentavos || 0) + '<br />' + limit + ' · ' + expiry + (v.firstOrderOnly ? ' · FIRST ORDER ONLY' : '') + '</p></div>' +
+            '<div class="ipc-voucher-actions"><button type="button" class="btn-o btn-sm" data-voucher-toggle="' + esc(v.code) + '" data-active="' + (v.active ? 'false' : 'true') + '">' + (v.active ? 'PAUSE' : 'ACTIVATE') + '</button></div></article>';
+        }).join('');
+      }).catch(function (err) {
+        host.innerHTML = '<p class="adm-empty">' + esc((err.message || 'COULD NOT LOAD VOUCHERS').toUpperCase()) + '</p>';
+      });
+    }
+
+    tab.addEventListener('click', function () {
+      $('.adm-tab').forEach(function (t) { t.classList.remove('active'); });
+      $('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
+      tab.classList.add('active');
+      pane.classList.add('active');
+      loadVouchers();
+    });
+
+    $('#ipcVoucherForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var form = this;
+      var msg = $('#ipcAdmVoucherMsg');
+      var btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = 'CREATING…';
+      msg.className = 'form-msg';
+      IPC.api('/api/admin/vouchers', { method: 'POST', body: {
+        code: $('#ipcAdmCode').value.trim(),
+        label: $('#ipcAdmLabel').value.trim(),
+        type: $('#ipcAdmType').value,
+        value: Number($('#ipcAdmValue').value),
+        minOrderPhp: Number($('#ipcAdmMin').value || 0),
+        maxUses: Number($('#ipcAdmMax').value || 0),
+        expiresAt: $('#ipcAdmExpiry').value || null,
+        firstOrderOnly: $('#ipcAdmFirst').checked
+      }}).then(function () {
+        msg.textContent = 'VOUCHER CREATED — ' + $('#ipcAdmCode').value.trim().toUpperCase();
+        msg.className = 'form-msg show ok';
+        form.reset();
+        $('#ipcAdmMax').value = '100';
+        $('#ipcAdmFirst').checked = true;
+        loadVouchers();
+      }).catch(function (err) {
+        msg.textContent = (err.message || 'VOUCHER CREATION FAILED').toUpperCase();
+        msg.className = 'form-msg show err';
+      }).finally(function () {
+        btn.disabled = false;
+        btn.textContent = 'CREATE VOUCHER';
+      });
+    });
+
+    pane.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-voucher-toggle]');
+      if (!btn) return;
+      btn.disabled = true;
+      IPC.api('/api/admin/vouchers/toggle', { method: 'POST', body: {
+        code: btn.getAttribute('data-voucher-toggle'),
+        active: btn.getAttribute('data-active') === 'true'
+      }}).then(loadVouchers).catch(function (err) {
+        btn.disabled = false;
+        IPC.toast((err.message || 'VOUCHER UPDATE FAILED').toUpperCase());
+      });
+    });
+  }
+})();
+</script>
+
 </body>
 </html>
