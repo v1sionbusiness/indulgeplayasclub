@@ -3072,7 +3072,7 @@ textarea.inp{min-height:110px;resize:vertical}
         '<th>ORDER</th><th>BUYER</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>PLACED</th></tr></thead><tbody>' +
         list.map(function (o) {
           return '<tr><td><b>' + IPC.esc(o.reference) + '</b></td>' +
-            '<td>' + IPC.esc(o.email) + '<br />' + IPC.esc(o.customerName) + '</td>' +
+            '<td>' + IPC.esc(o.email) + '<br />' + IPC.esc(o.customerName) + '<br /><small>' + IPC.esc(o.phone || 'NO PHONE') + '<br />' + IPC.esc(o.addressLine || 'NO ADDRESS') + ', ' + IPC.esc(o.city || '') + ', ' + IPC.esc(o.province || '') + ' ' + IPC.esc(o.postalCode || '') + (o.notes ? '<br />NOTES: ' + IPC.esc(o.notes) : '') + '</small></td>' +
             '<td>' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + '</td>' +
             '<td>' + IPC.fmtP(o.totalCentavos) + '</td>' +
             '<td>' + (o.payment ? IPC.esc(o.payment.paymentReference) + (o.payment.refNo ? '<br />REF ' + IPC.esc(o.payment.refNo) : '') : '—') + '</td>' +
