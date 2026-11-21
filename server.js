@@ -555,12 +555,12 @@ async function route(req, res) {
         }
         /* /api/admin/users */
         const us = await d.collection("users")
-          .find({}, { projection: { email: 1, name: 1, role: 1, createdAt: 1 } })
+          .find({}, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1 } })
           .sort({ createdAt: -1 }).limit(500).toArray();
         return send(res, 200, {
           ok: true,
           users: us.map((u) => ({
-            email: u.email, name: u.name, role: u.role, createdAt: u.createdAt,
+            email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
           })),
         });
       } catch (err) {
@@ -919,6 +919,9 @@ async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos) {
   }
   const discountCentavos = calculateVoucherDiscount(subtotalCentavos, voucher);
   if (discountCentavos <= 0) throw new Error("THIS VOUCHER DOES NOT APPLY TO YOUR CURRENT BAG.");
+  if (subtotalCentavos + SHIPPING_CENTAVOS - discountCentavos < 100) {
+    throw new Error("THE VOUCHER MUST LEAVE AT LEAST ₱1.00 TO PAY.");
+  }
   return { voucher, code, discountCentavos };
 }
 
@@ -972,7 +975,7 @@ async function handleAdminVoucherCreate(req, res) {
         !Number.isFinite(maxUses) || maxUses < 0 || maxUses > 1000000) {
       return fail(res, 422, "invalid", "CHECK THE MINIMUM SPEND AND USE LIMIT.");
     }
-    const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    const expiresAt = body.expiresAt ? new Date(String(body.expiresAt).slice(0, 10) + "T23:59:59.999") : null;
     if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
       return fail(res, 422, "invalid", "EXPIRY MUST BE A FUTURE DATE.");
     }
