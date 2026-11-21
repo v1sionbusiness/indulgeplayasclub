@@ -839,27 +839,41 @@ async function handleProof(req, res) {
       return fail(res, 422, "already_paid", "THIS PAYMENT IS ALREADY VERIFIED AND PAID.");
     }
 
+    /* A Maya transaction reference must not be reused for another IPC order. */
+    const duplicateRef = await d.collection("payments").findOne({
+      refNo,
+      _id: { $ne: pay._id },
+    });
+    if (duplicateRef) {
+      return fail(res, 409, "duplicate_reference",
+        "THAT MAYA TRANSACTION REFERENCE HAS ALREADY BEEN SUBMITTED FOR ANOTHER ORDER.");
+    }
+
     const now = new Date();
-    await d.collection("payments").updateOne(
-      { _id: pay._id },
+    const proofUpdate = await d.collection("payments").updateOne(
+      { _id: pay._id, status: { $nin: ["paid", "failed"] } },
       {
         $set: {
           refNo,
           status: "under_verification",
           updatedAt: now,
+          proofSubmittedAt: now,
           ...(decoded ? { proofDataUrl: `data:${proofMime};base64,${decoded.toString("base64")}` } : {}),
         },
       }
     );
+    if (proofUpdate.modifiedCount !== 1) {
+      return fail(res, 409, "payment_locked",
+        "THIS PAYMENT HAS ALREADY BEEN DECIDED. CONTACT THE CLUB IF YOU NEED HELP.");
+    }
     await d.collection("orders").updateOne(
       { reference: pay.orderReference },
       { $set: { status: "under_verification", updatedAt: now } }
     );
 
-    await sendPaymentEmail(pay, {
-      customerName: (await d.collection("orders").findOne({ reference: pay.orderReference }))?.customerName,
-      email: pay.email,
-    }, "UNDER VERIFICATION", "We received your payment reference. The club will verify it manually; this is not yet a paid confirmation.");
+    const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
+    await sendPaymentEmail(pay, orderForEmail, "UNDER VERIFICATION",
+      "We received your Maya transaction reference. The club will verify it against its Maya account. This is not yet a paid confirmation.");
     return send(res, 200, {
       ok: true,
       status: "under_verification",
@@ -900,24 +914,40 @@ async function handleDecision(req, res) {
       return fail(res, 422, "already_decided",
         `THIS PAYMENT IS ALREADY ${pay.status.toUpperCase()} — NO FURTHER CHANGES.`);
     }
+    if (action === "approve" &&
+        (pay.status !== "under_verification" || !pay.refNo)) {
+      return fail(res, 422, "proof_required",
+        "A MAYA TRANSACTION REFERENCE MUST BE SUBMITTED BEFORE A PAYMENT CAN BE APPROVED.");
+    }
 
     const now = new Date();
     const newStatus = action === "approve" ? "paid" : "failed";
-    await d.collection("payments").updateOne(
-      { _id: pay._id },
-      { $set: { status: newStatus, updatedAt: now, verifiedAt: now, reviewedBy: found.user.email } }
+    /* Compare-and-set prevents two admins from approving/rejecting the same
+       payment concurrently and sending conflicting customer confirmations. */
+    const decision = await d.collection("payments").updateOne(
+      { _id: pay._id, status: { $in: ["pending", "under_verification"] } },
+      { $set: {
+        status: newStatus,
+        updatedAt: now,
+        verifiedAt: now,
+        reviewedBy: found.user.email,
+        decisionSource: "admin_manual_maya_check",
+      } }
     );
+    if (decision.modifiedCount !== 1) {
+      return fail(res, 409, "decision_conflict",
+        "ANOTHER ADMIN HAS ALREADY UPDATED THIS PAYMENT. REFRESH THE PAYMENT QUEUE.");
+    }
     await d.collection("orders").updateOne(
       { reference: pay.orderReference },
       { $set: { status: newStatus, updatedAt: now } }
     );
 
-    await sendPaymentEmail(pay, {
-      customerName: (await d.collection("orders").findOne({ reference: pay.orderReference }))?.customerName,
-      email: pay.email,
-    }, newStatus.toUpperCase(), action === "approve"
-      ? "Your payment has been verified by the club. Your order is now confirmed."
-      : "Your payment could not be verified. Please check your reference and contact the club before trying again.");
+    const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
+    await sendPaymentEmail({ ...pay, status: newStatus }, orderForEmail,
+      newStatus.toUpperCase(), action === "approve"
+        ? "Your Maya payment was checked and verified by the club. Your order is now confirmed."
+        : "Your payment could not be verified by the club. Please check your Maya transaction details and contact the club before trying again.");
     return send(res, 200, {
       ok: true,
       status: newStatus,
