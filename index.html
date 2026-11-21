@@ -3406,7 +3406,7 @@ setTimeout(function () {
   'use strict';
   var IPC = window.IPC = window.IPC || {};
   var $ = function (s, c) { return (c || document).querySelector(s); };
-  var $ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var all = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
   var esc = function (v) { return IPC.esc ? IPC.esc(v == null ? '' : String(v)) : String(v == null ? '' : v).replace(/[&<>"']/g, function (x) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]); }); };
   var appliedVoucher = null;
 
@@ -3609,8 +3609,8 @@ setTimeout(function () {
     }
 
     tab.addEventListener('click', function () {
-      $('.adm-tab').forEach(function (t) { t.classList.remove('active'); });
-      $('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
+      all('.adm-tab').forEach(function (t) { t.classList.remove('active'); });
+      all('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
       tab.classList.add('active');
       pane.classList.add('active');
       loadVouchers();
