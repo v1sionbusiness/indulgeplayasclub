@@ -129,7 +129,7 @@ function serveIndex(res) {
     /* Rewrite legacy API calls at runtime too. This catches URLs assembled
        inside bundled JavaScript, fetch(), and XMLHttpRequest before network I/O. */
     const apiGuard = '<script id="ipc-api-host-guard">(function(){var oldHost="https://ipc-contact-api.onrender.com";var newHost="https://indulgeplayasclub.onrender.com";function fix(v){if(typeof v!=="string")return v;return v.replace(/https?:\\/\\/ipc-contact-api\\.onrender\\.com/gi,newHost).replace(/ipc-contact-api\\.onrender\\.com/gi,"indulgeplayasclub.onrender.com");}try{var nativeFetch=window.fetch;if(nativeFetch)window.fetch=function(input,init){if(typeof input==="string")input=fix(input);else if(input&&typeof Request!=="undefined"&&input instanceof Request&&input.url.indexOf(oldHost)===0)input=new Request(fix(input.url),input);return nativeFetch.call(this,input,init);};var nativeOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url){arguments[1]=fix(url);return nativeOpen.apply(this,arguments);};}catch(e){}try{localStorage.removeItem("ipc_api_override");}catch(e){}})();</script>';
-    html = html.replace(/<\\/head>/i, apiGuard + "</head>");
+    html = html.replace(/<\/head>/i, apiGuard + "</head>");
     /* Keep the checkout QR as a clearly marked placeholder until the
        merchant's actual QR image is uploaded and installed. */
     const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){if(window.IPC){window.IPC.API="https://indulgeplayasclub.onrender.com";}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
