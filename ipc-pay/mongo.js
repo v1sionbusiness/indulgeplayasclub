@@ -225,6 +225,14 @@ function findUserByEmail(email) {
   );
 }
 
+function findUserByPhone(phone) {
+  return connect().then((d) =>
+    d.collection("users").findOne({ phone: String(phone) })
+  );
+}
+
+
+
 function findUserById(id) {
   return connect().then((d) => d.collection("users").findOne({ _id: id }));
 }
@@ -371,6 +379,7 @@ module.exports = {
   findSession,
   deleteSession,
   findUserByEmail,
+  findUserByPhone,
   findUserById,
   insertUser,
   nextReference,

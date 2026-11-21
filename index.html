@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-21 07:05 -->
+<!-- IPC BUILD 2026-11-21 08:10 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -748,7 +748,38 @@ textarea.inp{min-height:110px;resize:vertical}
 .btn-o:hover{transform:translateY(-2px)}
 @media(max-width:640px){.contact-arc{left:22px;top:26px;width:96px}.contact-inner,.contact-standalone .contact-inner{padding-top:158px}.contact-brand{margin-bottom:26px}}
 
-</style>
+<style id="ipc-revamp">
+/* ================================================================
+   IPC REVAMP LAYER — same elements, sharper finish
+   Selection, scrollbar, focus, motion and hover language unified.
+   ================================================================ */
+html{scroll-behavior:smooth;scroll-padding-top:120px}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+::selection{background:var(--white);color:var(--black)}
+:focus-visible{outline:2px solid var(--white);outline-offset:2px}
+.inp:focus,textarea:focus,select:focus{outline:none;border-color:var(--white)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--line-2);border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+/* buttons — keep the invert, add a breath of motion */
+.btn-w,.btn-o,.btn-k{will-change:transform}
+.btn-w:hover,.btn-o:hover{transform:translateY(-1px)}
+.btn-w:active,.btn-o:active{transform:translateY(0)}
+/* cards — one consistent hover language */
+.feat-row,.method,.pay-panel,.co-summary,.auth-panel,.ipc-voucher-card,.ipc-voucher-box{transition:border-color .25s var(--ease)}
+.method:hover{border-color:var(--line-2)}
+.feat-row:hover{transform:translateY(-2px);border-color:var(--line-2)}
+/* admin tables + faq + footer */
+.adm-table tbody tr{transition:background-color .2s}
+.faq-item{transition:border-color .2s}
+.faq-item[open]{border-color:var(--line-2)}
+.footer a{transition:color .2s}
+.footer a:hover{color:var(--white)}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{transition-duration:.01ms!important;animation-duration:.01ms!important}
+}
 </head>
 <body>
 <a class="skip" href="#main">SKIP TO CONTENT</a>
@@ -1604,7 +1635,6 @@ textarea.inp{min-height:110px;resize:vertical}
     <div class="pay-grid" style="margin-top:52px">
       <div class="pay-panel reveal">
         <div id="ipcLiveQr" class="qr-panel" role="img" aria-label="Official Maya QR Ph payment code"></div>
-        <p class="qr-notice">OFFICIAL MAYA QR PH — ACCOUNT NAME: ANCEL JAMES CLAUDIO. SEND THE EXACT ORDER TOTAL. PAYMENT IS VERIFIED BY THE CLUB BEFORE SHIPPING.</p>
       </div>
       <div class="pay-instructions reveal-sm">
         <h3>How a checkout runs</h3>
@@ -1701,7 +1731,6 @@ textarea.inp{min-height:110px;resize:vertical}
           <p class="pay-amount" id="poAmount">₱0</p>
           <p class="pay-ref-line" id="poRefs">—</p>
           <div id="ipcLiveQrOrder" class="qr-panel" style="margin-top:18px" role="img" aria-label="Official Maya QR Ph payment code"></div>
-          <p class="qr-notice">OFFICIAL MAYA QR PH — ACCOUNT NAME: ANCEL JAMES CLAUDIO. SEND THE EXACT ORDER TOTAL AND SUBMIT YOUR E-WALLET REFERENCE BELOW. PAYMENT IS VERIFIED BY THE CLUB BEFORE SHIPPING.</p>
           <div class="pay-items-mini" id="poItems"></div>
         </div>
         <div class="pay-instructions">
@@ -1758,8 +1787,8 @@ textarea.inp{min-height:110px;resize:vertical}
     </div>
     <form class="auth-panel active" id="loginForm" novalidate>
       <div class="field">
-        <label for="liEmail">EMAIL</label>
-        <input class="inp" id="liEmail" type="email" maxlength="120" placeholder="YOU@MAIL.COM" autocomplete="email" required />
+        <label for="liEmail">EMAIL OR MOBILE NUMBER</label>
+        <input class="inp" id="liEmail" type="text" maxlength="120" placeholder="YOU@MAIL.COM OR 09XX XXX XXXX" autocomplete="username" required />
       </div>
       <div class="field">
         <label for="liPass">PASSWORD</label>
@@ -3273,7 +3302,7 @@ textarea.inp{min-height:110px;resize:vertical}
           var itemsHTML = (o.items || []).map(function (it) {
             return '<p class="adm-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) +
               (it.color ? ' · ' + IPC.esc(it.color) : '') + ' × ' + it.qty + '</span><span>' +
-              IPC.fmtP((it.priceC || 0) * it.qty) + '</span></p>';
+              IPC.fmtP(((it.priceCentavos != null ? it.priceCentavos : it.priceC) || 0) * it.qty) + '</span></p>';
           }).join('') || '<p class="adm-empty">NO LINE ITEMS</p>';
           var detail = '<div class="adm-detail-grid">' +
             '<div><p class="ipc-voucher-k">PIECES</p>' + itemsHTML + '</div>' +
@@ -3288,6 +3317,12 @@ textarea.inp{min-height:110px;resize:vertical}
             '<p class="adm-line"><span>NAME</span><span>' + IPC.esc(o.customerName || '—') + '</span></p>' +
             '<p class="adm-line"><span>EMAIL</span><span>' + IPC.esc(o.email || '—') + '</span></p>' +
             '<p class="adm-line"><span>MOBILE</span><span>' + IPC.esc(o.phone || '—') + '</span></p>' +
+            '</div>' +
+            '<div><p class="ipc-voucher-k">PAYMENT</p>' +
+            '<p class="adm-line"><span>STATUS</span><span>' + (o.payment ? String(o.payment.status || '—').toUpperCase().replace(/_/g, ' ') : 'NO PAYMENT YET') + '</span></p>' +
+            '<p class="adm-line"><span>E-WALLET REF</span><span>' + (o.payment && o.payment.refNo ? IPC.esc(o.payment.refNo) : '—') + '</span></p>' +
+            '<p class="adm-line"><span>PROOF</span><span>' + (o.payment && o.payment.proofPresent ? 'ON FILE' : 'NOT SUBMITTED') + '</span></p>' +
+            '<p class="adm-line"><span>VERIFIED AT</span><span>' + (o.payment && o.payment.verifiedAt ? fmtDate(o.payment.verifiedAt) : '—') + '</span></p>' +
             '</div></div>';
           return '<tr class="adm-order-row" data-exp="' + i + '"><td><b>' + IPC.esc(o.reference) +
             '</b><br /><small>VIEW BREAKDOWN ▾</small></td>' +
@@ -3295,7 +3330,7 @@ textarea.inp{min-height:110px;resize:vertical}
             '<td class="adm-delivery">' + delivery + '</td>' +
             '<td>' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + '</td>' +
             '<td>' + IPC.fmtP(o.totalCentavos) + voucher + '</td>' +
-            '<td>' + (o.payment ? IPC.esc(o.payment.paymentReference) + (o.payment.refNo ? '<br />REF ' + IPC.esc(o.payment.refNo) : '') : '—') + '</td>' +
+            '<td>' + (o.payment ? IPC.esc(o.payment.paymentReference) + (o.payment.refNo ? '<br /><small>REF ' + IPC.esc(o.payment.refNo) + '</small>' : '') + (o.payment.proofPresent ? '<br /><small class="adm-vtag">PROOF ON FILE</small>' : '') + '<br />' + IPC.pill(o.payment.status) : '<small>NO PAYMENT YET</small>') + '</td>' +
             '<td>' + IPC.pill(o.status) + '</td>' +
             '<td>' + fmtDate(o.createdAt) + '</td></tr>' +
             '<tr class="adm-order-detail" id="admDet' + i + '" style="display:none"><td colspan="8">' + detail + '</td></tr>';
@@ -3311,10 +3346,13 @@ textarea.inp{min-height:110px;resize:vertical}
       var list = d.users || [];
       if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO MEMBERS YET</p>'; return; }
       host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-        '<th>EMAIL</th><th>NAME</th><th>MOBILE</th><th>ROLE</th><th>JOINED</th></tr></thead><tbody>' +
+        '<th>EMAIL</th><th>NAME</th><th>MOBILE</th><th>ROLE</th><th>ORDERS</th><th>PAID</th><th>LAST ORDER</th><th>JOINED</th></tr></thead><tbody>' +
         list.map(function (u) {
           return '<tr><td><b>' + IPC.esc(u.email) + '</b></td><td>' + IPC.esc(u.name) + '</td><td>' + IPC.esc(u.phone || 'NOT LINKED') + '</td>' +
             '<td>' + (u.role === 'admin' ? '<span class="admin-flag">ADMIN</span>' : 'MEMBER') + '</td>' +
+            '<td>' + (u.orders || 0) + '</td>' +
+            '<td>' + IPC.fmtP(u.spentCentavos || 0) + '</td>' +
+            '<td>' + (u.lastOrderAt ? fmtDate(u.lastOrderAt) : '—') + '</td>' +
             '<td>' + fmtDate(u.createdAt) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }).catch(function (err) {
@@ -3524,28 +3562,28 @@ setTimeout(function () {
     '#v-admin .pay-card{border-radius:0;box-shadow:0 14px 40px rgba(0,0,0,.12)}',
     '#v-admin .adm-table th{white-space:nowrap}',
     '.ipc-voucher-layout{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(0,1.4fr);gap:24px;align-items:start}',
-    '.ipc-voucher-card{border:1px solid var(--line-2);background:var(--panel);padding:24px}',
-    '.ipc-voucher-k{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-bottom:16px}',
-    '.ipc-voucher-card h3{font-family:var(--display);font-size:24px;text-transform:uppercase;margin:0 0 20px}',
+    '.ipc-voucher-card{border:1px solid var(--line-2);background:var(--panel);padding:18px}',
+    '.ipc-voucher-k{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-bottom:10px}',
+    '.ipc-voucher-card h3{font-family:var(--display);font-size:20px;text-transform:uppercase;margin:0 0 14px}',
     '.ipc-voucher-form{display:grid;grid-template-columns:1fr 1fr;gap:14px}',
     '.ipc-voucher-form .full{grid-column:1/-1}',
     '.ipc-voucher-form label{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--faint);margin-bottom:7px}',
-    '.ipc-voucher-form input,.ipc-voucher-form select{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);color:var(--text);padding:12px;font:inherit;border-radius:0}',
+    '.ipc-voucher-form input,.ipc-voucher-form select{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);color:var(--text);padding:10px;font:inherit;border-radius:0}',
     '.ipc-voucher-check{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)}',
     '.ipc-voucher-check input{width:auto}',
     '.ipc-voucher-list{display:flex;flex-direction:column;gap:10px}',
-    '.ipc-voucher-row{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:18px;border:1px solid var(--line);background:var(--panel)}',
+    '.ipc-voucher-row{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:13px 14px;border:1px solid var(--line);background:var(--panel)}',
     '.ipc-voucher-code{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.12em}',
     '.ipc-voucher-meta{font-family:var(--mono);font-size:9px;line-height:1.9;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;margin-top:7px}',
     '.ipc-voucher-status{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;padding:5px 8px;border:1px solid var(--line-2)}',
     '.ipc-voucher-status.off{opacity:.5}',
     '.ipc-voucher-actions{display:flex;gap:8px;align-items:center}',
-    '.ipc-voucher-box{border:1px solid var(--line-2);padding:18px;margin:18px 0;background:var(--panel)}',
-    '.ipc-voucher-box .k{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--faint);margin:0 0 12px}',
+    '.ipc-voucher-box{border:1px solid var(--line-2);padding:12px 14px;margin:12px 0;background:var(--panel)}',
+    '.ipc-voucher-box .k{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--faint);margin:0 0 8px}',
     '.ipc-voucher-entry{display:flex;gap:8px}',
-    '.ipc-voucher-entry input{min-width:0;flex:1;background:var(--bg);color:var(--text);border:1px solid var(--line-2);padding:12px 14px;font:inherit;letter-spacing:.12em;text-transform:uppercase}',
+    '.ipc-voucher-entry input{min-width:0;flex:1;background:var(--bg);color:var(--text);border:1px solid var(--line-2);padding:9px 12px;font:inherit;font-size:12px;letter-spacing:.12em;text-transform:uppercase}',
     '.ipc-voucher-entry button{white-space:nowrap}',
-    '.ipc-voucher-msg{font-family:var(--mono);font-size:9px;line-height:1.7;letter-spacing:.12em;color:var(--faint);margin-top:10px;text-transform:uppercase}',
+    '.ipc-voucher-msg{font-family:var(--mono);font-size:9px;line-height:1.7;letter-spacing:.12em;color:var(--faint);margin-top:8px;text-transform:uppercase}',
     '.ipc-voucher-msg.ok{color:var(--text)}',
     '.ipc-discount-row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.1em}',
     '.ipc-discount-row b{color:var(--text)}',
@@ -3784,7 +3822,7 @@ setTimeout(function () {
     '.adm-order-row:hover td{background:rgba(255,255,255,.035)}',
     '.adm-order-row small{font-family:var(--mono);font-size:8px;letter-spacing:.18em;color:var(--faint)}',
     '.adm-order-detail td{background:var(--panel-2);padding:20px 24px !important}',
-    '.adm-detail-grid{display:grid;grid-template-columns:1.2fr .8fr .9fr;gap:28px}',
+    '.adm-detail-grid{display:grid;grid-template-columns:1.1fr .8fr .9fr .8fr;gap:28px}',
     '@media(max-width:860px){.adm-detail-grid{grid-template-columns:1fr}}',
     '.adm-line{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted);margin:0}',
     '.adm-line-total{color:var(--text);font-weight:700;border-bottom:0}',

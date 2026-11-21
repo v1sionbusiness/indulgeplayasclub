@@ -36,7 +36,7 @@
  *   GET  /api/ipc-pay/health       → pings MongoDB Atlas
  *   POST /api/contact              → EmailJS relay (unchanged behavior)
  *   POST /api/auth/register        → { name, email, password }
- *   POST /api/auth/login           → { email, password }
+ *   POST /api/auth/login           → { email | mobile, password }
  *   POST /api/auth/logout          → (Bearer token)
  *   GET  /api/auth/me              → (Bearer token) profile + role
  *   POST /api/orders               → (Bearer) create order + payment record
@@ -59,7 +59,7 @@ const path = require("node:path");
 const {
   initDatabase, checkConnection, uriHints,
   createSession, findSession, deleteSession,
-  findUserByEmail, findUserById, insertUser,
+  findUserByEmail, findUserByPhone, findUserById, insertUser,
   nextReference,
 } = require("./ipc-pay/mongo");
 
@@ -170,7 +170,7 @@ function serveIndex(res) {
     html = html.replace(/<\/head>/i, apiGuard + "</head>");
     /* Keep the checkout QR as a clearly marked placeholder until the
        merchant's actual QR image is uploaded and installed. */
-    const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){if(window.IPC){window.IPC.API="https://indulgeplayasclub.onrender.com";}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
+    const loginFix = '<script>(function(){try{localStorage.removeItem("ipc_api_override");}catch(e){}function pin(){try{if(window.IPC&&window.IPC.API&&String(window.IPC.API).indexOf("ipc-contact-api.onrender.com")!==-1){window.IPC.API="https://indulgeplayasclub.onrender.com";}}catch(e){}}pin();document.addEventListener("DOMContentLoaded",pin);})();</script>';
     html = html.replace(/<\/body>/i, loginFix + "</body>");
     const contactPolish = `<style id="ipc-contact-form-polish">
       .ipc-contact-glass {
@@ -494,7 +494,9 @@ function orderView(o, payment) {
     payment: payment ? {
       paymentReference: payment.paymentReference,
       status: payment.status,
+      method: payment.method || "qr",
       refNo: payment.refNo || null,
+      proofPresent: Boolean(payment.proofDataUrl),
       verifiedAt: payment.verifiedAt || null,
     } : null,
   };
@@ -727,15 +729,34 @@ async function route(req, res) {
             orders: ords.map((o) => orderView(o, byOrder.get(o.reference))),
           });
         }
-        /* /api/admin/users */
-        const us = await d.collection("users")
-          .find({}, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1 } })
-          .sort({ createdAt: -1 }).limit(500).toArray();
+        /* /api/admin/users — with per-member join + order stats */
+        const [us, paidAgg, allAgg] = await Promise.all([
+          d.collection("users")
+            .find({}, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1 } })
+            .sort({ createdAt: -1 }).limit(500).toArray(),
+          d.collection("orders").aggregate([
+            { $match: { status: "paid" } },
+            { $group: { _id: "$email", paidOrders: { $sum: 1 }, spent: { $sum: "$totalCentavos" } } },
+          ]).toArray(),
+          d.collection("orders").aggregate([
+            { $group: { _id: "$email", orders: { $sum: 1 }, last: { $max: "$createdAt" } } },
+          ]).toArray(),
+        ]);
+        const paidByEmail = new Map(paidAgg.map((x) => [x._id, x]));
+        const allByEmail = new Map(allAgg.map((x) => [x._id, x]));
         return send(res, 200, {
           ok: true,
-          users: us.map((u) => ({
-            email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
-          })),
+          users: us.map((u) => {
+            const paid = paidByEmail.get(u.email) || {};
+            const all = allByEmail.get(u.email) || {};
+            return {
+              email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
+              orders: all.orders || 0,
+              paidOrders: paid.paidOrders || 0,
+              spentCentavos: paid.spent || 0,
+              lastOrderAt: all.last || null,
+            };
+          }),
         });
       } catch (err) {
         return mongoError(res, err, "admin query failed");
@@ -995,14 +1016,21 @@ async function handleAuth(req, res, ip, p) {
       return send(res, 200, { ok: true, token, user: publicUser(user) });
     }
 
-    /* ---- login ---- */
+    /* ---- login: email OR the member's linked mobile number ---- */
     if (p === "/api/auth/login") {
-      const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+      const identifier = String(body.email ?? "").trim();
       const password = String(body.password ?? "");
-      const user = await findUserByEmail(email);
-      const { verifyPassword } = require("./ipc-pay/mongo");
+      const { verifyPassword, findUserByPhone } = require("./ipc-pay/mongo");
+      let user = null;
+      if (identifier.includes("@")) {
+        user = await findUserByEmail(identifier.toLowerCase().slice(0, 120));
+      } else if (identifier) {
+        /* no @ — treat it as the mobile number the member joined with */
+        try { user = await findUserByPhone(normalizePhilippineMobile(identifier)); }
+        catch (err) { user = null; }
+      }
       if (!user || !verifyPassword(password, user.salt, user.hash)) {
-        return fail(res, 401, "bad_credentials", "WRONG EMAIL OR PASSWORD.");
+        return fail(res, 401, "bad_credentials", "WRONG EMAIL, MOBILE OR PASSWORD.");
       }
       const token = await createSession(user);
       return send(res, 200, { ok: true, token, user: publicUser(user) });
