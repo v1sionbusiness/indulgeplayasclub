@@ -1708,14 +1708,22 @@ async function handleProof(req, res) {
       return fail(res, 422, "already_paid", "THIS PAYMENT IS ALREADY VERIFIED AND PAID.");
     }
 
-    /* A Maya transaction reference must not be reused for another IPC order. */
+    /* A Maya transaction reference can only ever pay for ONE order — but
+       only claims that are still in play or already accepted lock the ref.
+       A REJECTED claim (status failed) never bought anything, so the same
+       reference — full number or last-4 — can be resubmitted on a new or
+       corrected order without a false "already used" wall. Refs attached
+       to PAID orders stay burned forever. */
     const duplicateRef = await d.collection("payments").findOne({
       refNo,
       _id: { $ne: pay._id },
+      status: { $in: ["under_verification", "paid"] },
     });
     if (duplicateRef) {
       return fail(res, 409, "duplicate_reference",
-        "THAT MAYA TRANSACTION REFERENCE HAS ALREADY BEEN SUBMITTED FOR ANOTHER ORDER.");
+        duplicateRef.status === "paid"
+          ? "THAT MAYA TRANSACTION REFERENCE ALREADY PAID FOR ANOTHER ORDER — ONE PAYMENT COVERS ONE ORDER ONLY."
+          : "THAT MAYA TRANSACTION REFERENCE IS CURRENTLY ATTACHED TO ANOTHER ORDER WAITING FOR VERIFICATION.");
     }
 
     const now = new Date();
