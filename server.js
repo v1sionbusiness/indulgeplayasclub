@@ -297,8 +297,7 @@ function serveIndex(res) {
         document.querySelectorAll(
           '[aria-expanded="true"][aria-controls], .menu-toggle[aria-expanded="true"], ' +
           '.hamburger[aria-expanded="true], [data-menu-toggle][aria-expanded="true"]'
-        ).forEach(function (toggle) {
-          toggle.setAttribute("aria-expanded", "false");        });
+        ).forEach(function (toggle) {          toggle.setAttribute("aria-expanded", "false");        });
       }
       function navigate(target, updateHash) {
         if (!target) return false;
@@ -335,7 +334,7 @@ function serveIndex(res) {
         if (!raw && href && href !== "#") {
           try {
             var parsed = new URL(href, location.href);
-            if (parsed.origin !== location.origin || (parsed.pathname.length > 1 ? parsed.pathname.slice(0, -1) : parsed.pathname) !== (location.pathname.length > 1 ? location.pathname.slice(0, -1) : location.pathname)) return;
+            if (parsed.origin !== location.origin || (parsed.pathname.length > 1 && parsed.pathname.charAt(parsed.pathname.length - 1) === "/" ? parsed.pathname.slice(0, -1) : parsed.pathname) !== (location.pathname.length > 1 && location.pathname.charAt(location.pathname.length - 1) === "/" ? location.pathname.slice(0, -1) : location.pathname)) return;
             raw = parsed.hash;
           } catch (_) { return; }
         }
@@ -597,8 +596,7 @@ async function route(req, res) {
           .toArray();
         const byOrder = new Map(payments.map((pay) => [pay.orderReference, pay]));
         return send(res, 200, {
-          ok: true,          orders: orders.map((o) => orderView(o, byOrder.get(o.reference))),
-        });
+          ok: true,          orders: orders.map((o) => orderView(o, byOrder.get(o.reference))),        });
       } catch (err) {
         return mongoError(res, err, "order history failed");
       }
@@ -897,8 +895,7 @@ function handleContact(req, res, ip) {
          condition shown to the visitor. */
       await sendContactEmail(templateId);
       recentContactSubmissions.set(duplicateKey, Date.now());      if (recentContactSubmissions.size > 1000) {
-        const cutoff = Date.now() - 90000;
-        for (const [key, timestamp] of recentContactSubmissions) {
+        const cutoff = Date.now() - 90000;        for (const [key, timestamp] of recentContactSubmissions) {
           if (timestamp < cutoff) recentContactSubmissions.delete(key);
         }
       }
@@ -1197,8 +1194,7 @@ async function handleCreateOrder(req, res) {
     return fail(res, 422, "invalid", "TOO MANY LINES IN ONE ORDER — SPLIT IT UP.");
   }
   const lines = [];
-  for (const raw of rawItems) {
-    const product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+  for (const raw of rawItems) {    const product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
     if (!product) {
       return fail(res, 422, "invalid", "UNKNOWN PRODUCT IN YOUR BAG — REFRESH AND TRY AGAIN.");
     }
@@ -1497,8 +1493,7 @@ async function handleDecision(req, res) {
        payment concurrently and sending conflicting customer confirmations. */    const decision = await d.collection("payments").updateOne(
       { _id: pay._id, status: { $in: ["pending", "under_verification"] } },
       { $set: {
-        status: newStatus,
-        updatedAt: now,
+        status: newStatus,        updatedAt: now,
         verifiedAt: now,
         reviewedBy: found.user.email,
         decisionSource: "admin_manual_maya_check",
