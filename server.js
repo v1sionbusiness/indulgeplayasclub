@@ -491,6 +491,46 @@ async function route(req, res) {
 }
 
 /* --------------------------------------------------------------- */
+/* PAYMENT EMAIL — EmailJS template configured separately from the contact form. */
+async function sendPaymentEmail(pay, order, status, detail) {
+  const publicKey = process.env.EMAILJS_PUBLIC_KEY || "";
+  const serviceId = process.env.EMAILJS_SERVICE_ID || "";
+  const templateId = process.env.EMAILJS_PAYMENT_TEMPLATE_ID || "";
+  if (!publicKey || !serviceId || !templateId) {
+    console.warn("[ipc-pay] payment email skipped: EMAILJS_PAYMENT_TEMPLATE_ID or EmailJS credentials missing.");
+    return false;
+  }
+  const amount = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" })
+    .format((pay.amountCentavos || 0) / 100);
+  try {
+    const response = await fetch(EMAILJS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id: serviceId,
+        template_id: templateId,
+        user_id: publicKey,
+        template_params: {
+          to_email: pay.email || (order && order.email) || "",
+          customer_name: (order && order.customerName) || "IPC customer",
+          order_reference: pay.orderReference || "",
+          payment_reference: pay.paymentReference || "",
+          amount: amount,
+          payment_status: status,
+          status_detail: detail,
+          reply_to: "INDULGE PLAYAS CLUB",
+        },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error("EmailJS responded " + response.status);
+    return true;
+  } catch (err) {
+    console.error("[ipc-pay] payment email failed:", err.message);
+    return false;
+  }
+}
+
 /* CONTACT RELAY — behavior preserved exactly                       */
 /* --------------------------------------------------------------- */
 
@@ -816,6 +856,10 @@ async function handleProof(req, res) {
       { $set: { status: "under_verification", updatedAt: now } }
     );
 
+    await sendPaymentEmail(pay, {
+      customerName: (await d.collection("orders").findOne({ reference: pay.orderReference }))?.customerName,
+      email: pay.email,
+    }, "UNDER VERIFICATION", "We received your payment reference. The club will verify it manually; this is not yet a paid confirmation.");
     return send(res, 200, {
       ok: true,
       status: "under_verification",
@@ -868,6 +912,12 @@ async function handleDecision(req, res) {
       { $set: { status: newStatus, updatedAt: now } }
     );
 
+    await sendPaymentEmail(pay, {
+      customerName: (await d.collection("orders").findOne({ reference: pay.orderReference }))?.customerName,
+      email: pay.email,
+    }, newStatus.toUpperCase(), action === "approve"
+      ? "Your payment has been verified by the club. Your order is now confirmed."
+      : "Your payment could not be verified. Please check your reference and contact the club before trying again.");
     return send(res, 200, {
       ok: true,
       status: newStatus,

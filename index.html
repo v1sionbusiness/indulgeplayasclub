@@ -2715,31 +2715,21 @@ textarea.inp{min-height:110px;resize:vertical}
     });
   });
 
-  /* Official QR Ph payload supplied by the merchant. Render the exact decoded
-     merchant QR matrix locally; no third-party QR generator is involved. */
+  /* Official Maya QR Ph code. Exact payload decoded from the merchant image supplied by the owner. */
   function drawIpcQr() {
-    var host = $('#ipcLiveQr');
-    if (!host || host.getAttribute('data-ready') === '1') return;
-    var packed = atob('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP5gTArecTU/gEFn5yqcTkZQQC6XIYReze+roBdBml9jBF7l0AujTbx+Ir1K6AQUTrJRCEcRBAP6qqqqqqqq/gABYiHsYi00AAAPSXYr9tooMQBGtp6k6ibin0AtlhkI/5EXRmALGtvH78XDSrAM4t7/qwHLfogF5uar/+6Tn7ABS+NLHsIFT7ABczK4YrhSEfEActminQmS73cAYjMSh3a7OpcAMr+o70Ej1VYgFLNQTo66/81QD21S1tmLanpgBWtXH1F3YspgA11N4CSImN8+AbNLXuzCRnknALPsRwr4opGsAAANL/EeKHW/ADKXZM1Z70K/gBu3U7U480OaUAI00Mmu04586Aavqo8x2bwEKAI/7YAfvRUr/gCxp8HcZM+xEgDa8vCqsCI9rgBMYlK7FhDWRsAH9MVN/0vBPqADOIfjrn78jdAK/QwiNF8G9ugHoZk456BajoAB+NWb7+Yk3U4ACb033htYLqwAc1mUBBcOLT6AOrnFU4HSqpdAJ50pmBRSZ1hgBTqQMlyqs44gCa+TrX3d4E/oB+I35uReLuQIAMu4EwT4plKOAasRins3zjzhAC70C+ycBMl+gFq8oHHz+VnCwDKwssSqr04a4BOmQ3Hxe8eTAAj8wE+NtTpg8AKGZZ+rY5odYADYnWhXEqpkrgEgdpVFKTnSZgBqpkcj6GPb/IAATLoTHHyLxwA/oS9wqWim62AQViDxRwXpUdALrSIBfyPMn9gF00HiBwiKGAAC6XBQl9XONMYBBOy1GTECo5kA/mNl0/y6wUYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==');
-    var n = 73, bits = [];
-    for (var i = 0; i < n*n; i++) bits.push((packed.charCodeAt(i >> 3) >> (7 - (i & 7))) & 1);
-    var path = '';
-    for (var y = 0; y < n; y++) {
-      var x = 0;
-      while (x < n) {
-        if (!bits[y*n+x]) { x++; continue; }
-        var start = x;
-        while (x < n && bits[y*n+x]) x++;
-        path += 'M' + start + ' ' + y + 'h' + (x-start) + 'v1h-' + (x-start) + 'z';
-      }
-    }
-    host.innerHTML = '<svg class="qr-img" viewBox="0 0 73 73" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" aria-hidden="true"><rect width="73" height="73" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
-    host.setAttribute('data-ready','1');
-    var orderHost = $('#ipcLiveQrOrder');
-    if (orderHost && orderHost.getAttribute('data-ready') !== '1') {
-      orderHost.innerHTML = host.innerHTML;
-      orderHost.setAttribute('data-ready','1');
-    }
+    var data = 'data:image/png;base64,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';
+    ['ipcLiveQr','ipcLiveQrOrder'].forEach(function(id) {
+      var host = document.getElementById(id);
+      if (!host || host.getAttribute('data-ready') === '1') return;
+      var img = document.createElement('img');
+      img.className = 'qr-img';
+      img.src = data;
+      img.alt = 'Official Maya QR Ph payment code for ANCEL JAMES CLAUDIO';
+      img.decoding = 'sync';
+      img.loading = 'eager';
+      host.replaceChildren(img);
+      host.setAttribute('data-ready','1');
+    });
   }
   /* ---------------- IPC PAY ORDER SCREEN ---------------- */
   var poState = { ref: null, timer: null };
