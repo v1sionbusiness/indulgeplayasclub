@@ -252,6 +252,35 @@ function serveIndex(res) {
     </script>`;
     html = html.replace(/<\/head>/i, contactPolish + "</head>");
 
+    /* Router compatibility: older IPC router code calls .forEach() on the
+       result of $(). In some browsers/helpers that result is a single Element
+       or an HTMLCollection, neither of which consistently exposes forEach.
+       Install safe, standards-shaped iteration before page scripts execute. */
+    const routerIterationCompat = `<script id="ipc-router-iteration-compat">
+    (function () {
+      function addForEach(proto, single) {
+        if (!proto || typeof proto.forEach === "function") return;
+        Object.defineProperty(proto, "forEach", {
+          configurable: true,
+          writable: true,
+          value: function (callback, thisArg) {
+            if (typeof callback !== "function") throw new TypeError("callback must be a function");
+            if (single) {
+              callback.call(thisArg, this, 0, [this]);
+              return;
+            }
+            Array.prototype.forEach.call(this, callback, thisArg);
+          }
+        });
+      }
+      addForEach(window.Element && Element.prototype, true);
+      addForEach(window.NodeList && NodeList.prototype, false);
+      addForEach(window.HTMLCollection && HTMLCollection.prototype, false);
+    })();
+    </script>`;
+    html = html.replace(/<\/head>/i, routerIterationCompat + "</head>");
+
+
     /* Navigation fallback: make same-page navigation reliable even when an
        older page script has stale handlers or the menu is rendered late. */
     const navigationFix = `<style id="ipc-navigation-fix">
