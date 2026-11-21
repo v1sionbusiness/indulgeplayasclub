@@ -983,10 +983,11 @@ async function route(req, res) {
   /* --- admin decision: 20KB --- */
   if (p === "/api/admin/decision") return handleDecision(req, res);
 
-  /* --- tracking / settings / emergency member removal / maya webhook --- */
+  /* --- tracking / settings / emergency member removal + restore / maya webhook --- */
   if (p === "/api/admin/settings") return handleAdminSettings(req, res);
   if (p === "/api/admin/tracking") return handleAdminTracking(req, res);
   if (p === "/api/admin/members/remove") return handleMemberRemove(req, res);
+  if (p === "/api/admin/members/restore") return handleMemberRestore(req, res);
   if (p === "/api/ipc-pay/maya-webhook") return handleMayaWebhook(req, res);
 
   return send(res, 404, { ok: false, reason: "not_found" });
@@ -2016,6 +2017,39 @@ async function handleMemberRemove(req, res) {
     });
   } catch (err) {
     return mongoError(res, err, "member removal failed");
+  }
+}
+
+/* RESTORE — the admin escape hatch for an emergency removal done by   */
+/* mistake. Removed members themselves still cannot re-join on their    */
+/* own; only the club can let them back in. Restored members come back  */
+/* as regular customers (re-grant ADMIN from the role form if needed).  */
+async function handleMemberRestore(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const target = await d.collection("users").findOne({ email });
+    if (!target) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+    if (target.status !== "removed") return fail(res, 422, "not_removed", "THAT ACCOUNT IS NOT REMOVED — NOTHING TO RESTORE.");
+    await d.collection("users").updateOne(
+      { _id: target._id },
+      { $set: { status: "active" }, $unset: { removedAt: "", removedBy: "", removalReason: "" } }
+    );
+    console.log("[ipc-pay] member restored:", email, "by", found.user.email);
+    return send(res, 200, {
+      ok: true,
+      message: "MEMBER RESTORED — " + email.toUpperCase() + " CAN LOG IN AND ORDER AGAIN.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "member restore failed");
   }
 }
 

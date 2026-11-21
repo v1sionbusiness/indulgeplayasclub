@@ -3514,7 +3514,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     IPC.api('/api/admin/users').then(function (d) {
       var list = d.users || [];
       if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO MEMBERS YET</p>'; return; }
-      host.innerHTML = '<div class="ipc-emergency"><b>EMERGENCY USE ONLY</b> — REMOVING A MEMBER IS NOT RECOMMENDED AND EXISTS HERE ONLY FOR WORST-CASE SITUATIONS: HIJACKED ACCOUNTS, FRAUD, TROLLING. REMOVAL KILLS THEIR SESSIONS AND BLOCKS RE-JOINING; THEIR ORDERS AND PAYMENTS STAY ON RECORD FOREVER.</div><div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+      host.innerHTML = '<div class="ipc-emergency"><b>EMERGENCY USE ONLY</b> — REMOVING A MEMBER IS NOT RECOMMENDED AND EXISTS HERE ONLY FOR WORST-CASE SITUATIONS: HIJACKED ACCOUNTS, FRAUD, TROLLING. REMOVAL KILLS THEIR SESSIONS AND BLOCKS RE-JOINING; THEIR ORDERS AND PAYMENTS STAY ON RECORD FOREVER. REMOVED BY MISTAKE? HIT RESTORE ON THEIR ROW TO LET THEM BACK IN.</div><div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
         '<th>EMAIL</th><th>NAME</th><th>MOBILE</th><th>ROLE</th><th>TIER</th><th>ORDERS</th><th>PAID</th><th>LAST ORDER</th><th>JOINED</th><th>ACTIONS</th></tr></thead><tbody>' +
         list.map(function (u) {
           var removed = u.status === 'removed';
@@ -3528,7 +3528,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
             '<td>' + (removed ? '—' : IPC.fmtP(u.spentCentavos || 0)) + '</td>' +
             '<td>' + (u.lastOrderAt ? fmtDate(u.lastOrderAt) : '—') + '</td>' +
             '<td>' + fmtDate(u.createdAt) + '</td>' +
-            '<td>' + (removable ? '<button type="button" class="btn-o btn-sm ipc-remove-btn" data-remove-member="' + IPC.esc(u.email) + '">REMOVE</button>' : (removed ? '<small class="ipc-removed-note">REMOVED ' + (u.removedAt ? fmtDate(u.removedAt) : '') + '</small>' : '—')) + '</td></tr>';
+            '<td>' + (removable ? '<button type="button" class="btn-o btn-sm ipc-remove-btn" data-remove-member="' + IPC.esc(u.email) + '">REMOVE</button>' : (removed ? '<small class="ipc-removed-note">REMOVED ' + (u.removedAt ? fmtDate(u.removedAt) : '') + '</small> <button type="button" class="btn-o btn-sm ipc-restore-btn" data-restore-member="' + IPC.esc(u.email) + '">RESTORE</button>' : '—')) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }).catch(function (err) {
       host.innerHTML = '<p class="adm-empty">' + IPC.esc((err.message || 'MEMBERS FAILED').toUpperCase()) + '</p>';
@@ -4234,6 +4234,23 @@ setTimeout(function () {
         .catch(function (err) {
           rm.disabled = false;
           IPC.toast(apiMsg(err, 'REMOVAL FAILED'));
+        });
+    }
+    var rs = ev.target.closest ? ev.target.closest('[data-restore-member]') : null;
+    if (rs) {
+      var rsemail = rs.getAttribute('data-restore-member');
+      if (!window.confirm('RESTORE ' + rsemail.toUpperCase() + ' BACK INTO THE CLUB? THEY WILL BE ABLE TO LOG IN AND ORDER AGAIN.')) return;
+      rs.disabled = true;
+      IPC.api('/api/admin/members/restore', { method: 'POST', body: { email: rsemail } })
+        .then(function (d) {
+          IPC.toast(d.message || 'MEMBER RESTORED');
+          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+          var ut = document.querySelector('.adm-tab[data-pane="users"]');
+          if (ut && ut.classList.contains('active')) ut.click();
+        })
+        .catch(function (err) {
+          rs.disabled = false;
+          IPC.toast(apiMsg(err, 'RESTORE FAILED'));
         });
     }
   });
