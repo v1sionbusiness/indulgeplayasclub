@@ -128,12 +128,17 @@ async function ensureIndexes(d) {
   /* one at a time — a hiccup on one index must never block the admin seed */
   const specs = [
     ["users", { email: 1 }, { unique: true }],
+    ["users", { phone: 1 }, { unique: true, sparse: true }],
     ["sessions", { token: 1 }, { unique: true }],
     ["sessions", { expiresAt: 1 }, { expireAfterSeconds: 0 }], /* TTL — expired sessions delete themselves */
     ["orders", { reference: 1 }, { unique: true }],
     ["orders", { userId: 1, createdAt: -1 }, {}],
     ["payments", { paymentReference: 1 }, { unique: true }],
     ["payments", { orderReference: 1 }, {}],
+    ["vouchers", { code: 1 }, { unique: true }],
+    ["voucherRedemptions", { code: 1, userId: 1 }, { unique: true }],
+    ["voucherRedemptions", { code: 1, phone: 1 }, { unique: true }],
+    ["voucherRedemptions", { orderReference: 1 }, { unique: true }],
   ];
   for (const [coll, key, opts] of specs) {
     try {
@@ -223,11 +228,12 @@ function findUserById(id) {
   return connect().then((d) => d.collection("users").findOne({ _id: id }));
 }
 
-function insertUser({ email, name, password, role }) {
+function insertUser({ email, name, password, role, phone }) {
   const { salt, hash } = hashPassword(password);
   const doc = {
     email: String(email).toLowerCase(),
     name: String(name),
+    ...(phone ? { phone: String(phone) } : {}),
     salt,
     hash,
     role: role === "admin" ? "admin" : "customer",
