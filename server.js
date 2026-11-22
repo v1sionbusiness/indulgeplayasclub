@@ -315,8 +315,15 @@ function serveIndex(req, res) {
        (304 when unchanged) and always picks up the newest build. The old
        `public, max-age=300` let devices keep running a stale app after a
        deploy — the source of "the site still shows the old login" reports. */
-    const etag = '"' + crypto.createHash("sha1").update(html).digest("hex").slice(0, 24) + '"';
-    if (req && req.headers["if-none-match"] === etag) {
+    const etagRaw = crypto.createHash("sha1").update(html).digest("hex").slice(0, 24);
+    const etag = '"' + etagRaw + '"';
+    /* Proxies (Cloudflare in front of Render) may rewrite the tag to weak
+       form (W/"…") and the browser may echo a list — compare normalized. */
+    const inm = String((req && req.headers["if-none-match"]) || "");
+    const clientTags = inm.split(",").map(function (t) {
+      return t.trim().replace(/^W\//i, "").replace(/"/g, "");
+    });
+    if (clientTags.indexOf(etagRaw) >= 0 || clientTags.indexOf("*") >= 0) {
       res.writeHead(304, {
         ETag: etag,
         "Cache-Control": "no-cache",
