@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-22 12:30 -->
+<!-- IPC BUILD 2026-11-22 15:10 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
-<meta name="description" content="INDULGE PLAYAS CLUB is a small independent clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping. Strictly for playas only. Since 2023." />
+<meta name="description" content="INDULGE PLAYAS CLUB is a small independent clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping where coverage reaches. Strictly for playas only. Since 2023." />
 <meta name="keywords" content="Indulge Playas Club, IPC, local clothing brand, Philippines streetwear, limited drops, free shipping, Strictly for Playas Only" />
 <meta name="theme-color" content="#0A0A0A" />
 <script>document.documentElement.classList.add('js');</script>
 <meta property="og:title" content="INDULGE PLAYAS CLUB" />
-<meta property="og:description" content="Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping. Est. 2023." />
+<meta property="og:description" content="Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping where coverage reaches. Est. 2023." />
 <meta property="og:site_name" content="INDULGE PLAYAS CLUB" />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230A0A0A'/%3E%3Ctext x='32' y='43' font-family='Arial Black, sans-serif' font-size='21' font-weight='900' fill='%23FFFFFF' text-anchor='middle'%3EIPC%3C/text%3E%3C/svg%3E" />
@@ -158,6 +158,8 @@ html:not(.js) .tex{animation:drift 90s linear infinite alternate}
 .bag-btn{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;border:1px solid var(--line-2);padding:10px 16px;transition:all .25s var(--ease)}
 .bag-btn:hover{border-color:var(--white);background:var(--white);color:var(--black)}
 .bag-n{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:50%;background:var(--white);color:var(--black);font-size:10px;font-weight:700;padding:0 5px}
+.bag-n.pop{animation:bagPop .45s var(--ease)}
+@keyframes bagPop{0%{transform:scale(.4)}55%{transform:scale(1.4)}100%{transform:scale(1)}}
 .burger{display:none;padding:6px}
 @media(max-width:1120px){.nav-link{letter-spacing:.18em}.nav-links{gap:20px}}
 @media(max-width:960px){
@@ -475,6 +477,18 @@ textarea.inp{min-height:110px;resize:vertical}
 .od-chev{position:relative;width:14px;height:14px;flex-shrink:0;transition:transform .3s var(--ease)}
 .od-chev::before{content:"";position:absolute;left:4px;top:3px;width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}
 .order-drop[open] .od-chev{transform:rotate(225deg)}
+/* order history folds into ONE collapsible section — a growing order count never stretches the tab */
+.acct-drop{border:1px solid var(--line);background:var(--panel)}
+.acct-drop>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 22px;cursor:pointer;list-style:none;transition:background .2s var(--ease)}
+.acct-drop>summary::-webkit-details-marker{display:none}
+.acct-drop>summary:hover{background:var(--bg-2)}
+.os-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.os-title{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--text);text-transform:uppercase;font-weight:700}
+.os-sub{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+.os-side{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.acct-drop[open]>summary .od-chev{transform:rotate(225deg)}
+.acct-drop-body{border-top:1px solid var(--line);padding:18px 20px 20px;animation:dropIn .32s var(--ease)}
+@keyframes dropIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .od-body{border-top:1px solid var(--line);padding:16px 20px 20px;display:flex;flex-direction:column;gap:10px}
 .od-k{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-top:4px}
 .ord-line{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;line-height:1.7;color:var(--muted)}
@@ -919,8 +933,8 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 <header class="nav" id="nav">
   <div class="topstrip" aria-hidden="true">
     <div class="mtrack">
-      <div class="mitems"><span>NATIONWIDE SHIPPING</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
-      <div class="mitems"><span>NATIONWIDE SHIPPING</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
+      <div class="mitems"><span>FREE SHIPPING — WHERE COVERAGE REACHES</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
+      <div class="mitems"><span>FREE SHIPPING — WHERE COVERAGE REACHES</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
     </div>
   </div>
   <nav class="nav-inner" aria-label="Main navigation">
@@ -1027,8 +1041,8 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 <section class="marquee" aria-hidden="true">
   <div class="mwrap">
     <div class="mtrack">
-      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">FREE SHIPPING FOR ALL ORDERS <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
-      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">FREE SHIPPING FOR ALL ORDERS <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
+      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">FREE SHIPPING — WHERE COVERAGE REACHES <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
+      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">FREE SHIPPING — WHERE COVERAGE REACHES <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
     </div>
   </div>
 </section>
@@ -1239,7 +1253,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       <div class="about-body">
         <div class="about-copy reveal-sm">
           <p>INDULGE PLAYAS CLUB is a Manila-born clothing brand, running since 2023 — founded by a small circle of friends who wanted pieces they couldn't find in local stores: clean designs, heavyweight fabric, and fits that hold up from the morning commute to the late-night gig. The OG logo tee with its silver stitch marked the beginning, and that same club mark still leads every drop.</p>
-          <p>The brand grew out of the local scene — the music, the courts, the streets — and it still moves that way. Every drop gets announced on our Facebook page first, reserved by message, then released in numbered batches: meetup around the metro or shipped anywhere in the country, always free. That model keeps the circle small and the quality up — pieces we actually wear, tested where we actually live.</p>
+          <p>The brand grew out of the local scene — the music, the courts, the streets — and it still moves that way. Every drop gets announced on our Facebook page first, reserved by message, then released in numbered batches: meetup around the metro or shipped anywhere in the country — free where courier coverage reaches. That model keeps the circle small and the quality up — pieces we actually wear, tested where we actually live.</p>
           <p>Every piece we release carries the club motto — strictly for playas only. It sets the standard for who we build for: people who play hard, work harder, and look right doing both. The circle stays small on purpose, and every new member earns the spot.</p>
         </div>
         <div class="pillars">
@@ -1261,7 +1275,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
           <div class="pillar reveal-x" style="--d:.3s">
             <span class="num">04</span>
             <span class="k">Free Shipping</span>
-            <span class="v">Every order ships free anywhere in the Philippines — no minimum spend, no fine print.</span>
+            <span class="v">Orders ship free where courier coverage reaches — no minimum spend. Delivery rates apply outside covered areas.</span>
           </div>
         </div>
         <div class="about-mark reveal-sm" style="--d:.15s">
@@ -1344,7 +1358,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         <div class="cop-step reveal-x" style="--d:.3s">
           <span class="num">04</span>
           <h3>MEETUP OR SHIP NATIONWIDE</h3>
-          <p>Pick it up around Metro Manila, or sit back — it ships FREE to any point in the Philippines, packed and handed to a trusted local courier.</p>
+          <p>Pick it up around Metro Manila, or sit back — it ships anywhere in the Philippines, free where courier coverage reaches and standard rates outside covered areas, packed and handed to a trusted local courier.</p>
         </div>
       </div>
       <div class="cop-cards">
@@ -1554,7 +1568,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     <p class="terms-updated reveal-sm" style="--d:.15s">LAST UPDATED — NOVEMBER 2026</p>
 
     <div class="terms-short reveal-sm" style="--d:.2s">
-      <p>THE SHORT VERSION: buy through the shop, pay with IPC Pay (QR), the club verifies every payment by hand, and your order ships free anywhere in the Philippines. Pre-orders are produced in their window and ship when the run lands. Every verified purchase levels you up — ROOKIE, HOMIE, OG, VIP — with perks at each level. Be straight with us and we'll be straight with you.</p>
+      <p>THE SHORT VERSION: buy through the shop, pay with IPC Pay (QR), the club verifies every payment by hand, and your order ships anywhere in the Philippines — free where courier coverage reaches. Pre-orders are produced in their window and ship when the run lands. Every verified purchase levels you up — ROOKIE, HOMIE, OG, VIP — with perks at each level. Be straight with us and we'll be straight with you.</p>
     </div>
 
     <div class="terms-block reveal-sm">
@@ -1821,7 +1835,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
             <span class="num">01</span>
             <div>
               <h4>ADD TO BAG &amp; CHECK OUT</h4>
-              <p>Bag the pieces, drop your delivery details, place the order. The total is locked in writing — shipping is always free.</p>
+              <p>Bag the pieces, drop your delivery details, place the order. The total is locked in writing — shipping is free where courier coverage reaches, and rates show at checkout before you confirm.</p>
             </div>
           </div>
           <div class="pay-step">
@@ -2065,10 +2079,20 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
           <div id="ipcMemberBody"><p class="orders-empty">CHECKING YOUR LEVEL…</p></div>
         </div>
         <div class="acct-card">
-          <h3>ORDER HISTORY</h3>
-          <div class="orders-list" id="ordersList"></div>
-          <p class="orders-empty" id="ordersEmpty" style="display:none">NO ORDERS YET — THE FIRST DROP WON'T WAIT FOREVER</p>
-          <a href="#/shop" class="btn-o btn-sm" data-route="shop" style="margin-top:16px">SHOP THE DROP</a>
+          <details class="acct-drop" id="ordersDrop">
+            <summary>
+              <span class="os-main">
+                <span class="os-title">ORDER HISTORY</span>
+                <span class="os-sub" id="ordersCount">TAP TO DROP DOWN YOUR ORDERS</span>
+              </span>
+              <span class="os-side"><span id="ordersLatest" style="display:none"></span><i class="od-chev" aria-hidden="true"></i></span>
+            </summary>
+            <div class="acct-drop-body">
+              <div class="orders-list" id="ordersList"></div>
+              <p class="orders-empty" id="ordersEmpty" style="display:none">NO ORDERS YET — THE FIRST DROP WON'T WAIT FOREVER</p>
+              <a href="#/shop" class="btn-o btn-sm" data-route="shop" style="margin-top:16px">SHOP THE DROP</a>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -2151,7 +2175,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     <div class="footer-grid">
       <div class="f-col">
         <p class="f-k">THE CLUB</p>
-        <p class="f-blurb">Manila-born clothing brand, est. 2023 — heavyweight pieces in numbered batches, announced on Facebook and Instagram first, shipped free. Strictly for playas only.</p>
+        <p class="f-blurb">Manila-born clothing brand, est. 2023 — heavyweight pieces in numbered batches, announced on Facebook and Instagram first, shipped free where couriers reach. Strictly for playas only.</p>
         <div class="f-social">
           <a href="https://www.facebook.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer" aria-label="INDULGE PLAYAS CLUB on Facebook">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.4 21v-8.2h2.76l.41-3.2h-3.17V7.56c0-.93.26-1.56 1.58-1.56h1.7V3.14C16.4 3.1 15.39 3 14.21 3c-2.46 0-4.15 1.5-4.15 4.27v2.33H7.3v3.2h2.76V21h3.34Z"/></svg>
@@ -2215,7 +2239,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 <div class="lightbox" id="lightbox"><img id="lightboxImg" alt="Payment proof" /></div>
 
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"ClothingStore","name":"INDULGE PLAYAS CLUB","alternateName":"IPC","description":"Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping nationwide. Strictly for playas only.","foundingDate":"2023","address":{"@type":"PostalAddress","addressLocality":"Manila","addressCountry":"PH"},"sameAs":["https://www.facebook.com/indulgeplayasclub","https://www.instagram.com/indulgeplayasclub"]}
+{"@context":"https://schema.org","@type":"ClothingStore","name":"INDULGE PLAYAS CLUB","alternateName":"IPC","description":"Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping where coverage reaches. Strictly for playas only.","foundingDate":"2023","address":{"@type":"PostalAddress","addressLocality":"Manila","addressCountry":"PH"},"sameAs":["https://www.facebook.com/indulgeplayasclub","https://www.instagram.com/indulgeplayasclub"]}
 </script>
 <script>
 /* BLOCK 1 — CORE + ANIMATIONS (runs first, fully standalone): footer year +
@@ -2418,7 +2442,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     };
     var cfSendFailed = function () {
       cfBusy(false, 'SEND MESSAGE');
-      cfShow('COULDN\u2019T SEND JUST NOW — THE CLUB\u2019S SERVER MIGHT BE WAKING UP (FREE HOST). WAIT 30 SECONDS AND SEND AGAIN, OR DM @INDULGEPLAYASCLUB ON INSTAGRAM.', false);
+      cfShow('COULDN\u2019T SEND JUST NOW — THE CLUB\u2019S SERVER MIGHT BE WAKING UP. WAIT 30 SECONDS AND SEND AGAIN, OR DM @INDULGEPLAYASCLUB ON INSTAGRAM.', false);
     };
     cf.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -2492,7 +2516,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v17-20261122-uxdrop';
+  var IPC_BUILD = 'ipc-v18-20261122-alivetrack';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -3022,7 +3046,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         'CLUB ONLY': 'CLUB ONLY — MEMBERS GET FIRST ACCESS',
         'NEW DROP': 'JUST DROPPED — READY TO SHIP'
       };
-      avail.textContent = stockCopy[p.tag] || 'READY TO SHIP — FREE';
+      avail.textContent = stockCopy[p.tag] || 'READY TO SHIP — FREE WHERE COVERED';
       avail.className = 'avail-line show';
     }
     /* wishlist state on the page */
@@ -3371,7 +3395,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         poState.paidHandledRef = pay.paymentReference;
       }
       headline.textContent = 'Paid. You\u2019re locked in.';
-      copy.textContent = 'The club verified your payment — the order is unlocked and being packed. Shipping is free, Metro Manila usually lands within a few days.';
+      copy.textContent = 'The club verified your payment — the order is unlocked and being packed. Shipping is free where courier coverage reaches, Metro Manila usually lands within a few days.';
       form.style.display = 'none';
       if (IPC.renderPayTracking) IPC.renderPayTracking(order);
     } else if (pay.status === 'failed') {
@@ -3645,16 +3669,33 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     }
     var list = $('#ordersList');
     list.innerHTML = '<p class="orders-empty">LOADING YOUR ORDERS…</p>';
+    /* the whole history lives inside ONE dropdown section — remember whether the
+       member left it open, and keep the summary line (count + latest status) fresh */
+    var drop = $('#ordersDrop');
+    var countLine = $('#ordersCount'), latestWrap = $('#ordersLatest');
+    if (drop && !drop.dataset.wired) {
+      drop.dataset.wired = '1';
+      try { if (localStorage.getItem('ipc_orders_open') === '1') drop.open = true; } catch (e) { /* storage off — stays collapsed */ }
+      drop.addEventListener('toggle', function () {
+        try { localStorage.setItem('ipc_orders_open', drop.open ? '1' : '0'); } catch (e) { /* ignore */ }
+      });
+    }
     IPC.api('/api/orders/mine').then(function (d) {
-      if ((d.orders || []).length === 0) {
+      var orders = d.orders || [];
+      if (orders.length === 0) {
         list.innerHTML = '';
         $('#ordersEmpty').style.display = 'block';
+        countLine.textContent = 'NO ORDERS YET — YOUR FIRST ORDER LANDS HERE';
+        latestWrap.style.display = 'none';
         return;
       }
       $('#ordersEmpty').style.display = 'none';
+      countLine.textContent = orders.length + (orders.length === 1 ? ' ORDER — LATEST ' : ' ORDERS — LATEST ') + fmtDate(orders[0].createdAt);
+      latestWrap.style.display = '';
+      latestWrap.innerHTML = IPC.pill(orders[0].status);
       /* recent orders as an expandable list — newest one opens by default,
          older orders collapse to a single summary line */
-      list.innerHTML = d.orders.map(function (o, idx) {
+      list.innerHTML = orders.map(function (o, idx) {
         var pieces = (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0);
         var cityLine = [o.city, o.province].filter(Boolean).join(', ');
         var itemsHTML = (o.items || []).map(function (it) {
@@ -4048,7 +4089,15 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   });
 
   /* bag badge + auth-aware re-renders */
-  function setBagBadge() { $('#bagCount').textContent = String(IPC.bag.count); }
+  function setBagBadge() {
+    var el = $('#bagCount');
+    var n = String(IPC.bag.count);
+    if (el.textContent === n) return;
+    el.textContent = n;
+    el.classList.remove('pop');
+    void el.offsetWidth; /* restart the pop animation on every change */
+    el.classList.add('pop');
+  }
   document.addEventListener('ipc:bag', function () {
     setBagBadge();
     var c = document.getElementById('v-cart');
@@ -4493,7 +4542,41 @@ setTimeout(function () {
     '.ipc-remove-btn:hover{background:var(--black);color:var(--white);border-color:var(--black)}',
     '.ipc-auto-tile{cursor:pointer;transition:opacity .2s}',
     '.ipc-auto-tile:hover{outline:1px solid var(--line-2)}',
-    '.ipc-auto-tile.off{opacity:.55}'
+    '.ipc-auto-tile.off{opacity:.55}',
+    /* delivery stepper — the journey made visual: rail fills, dots pulse, steps land one by one */
+    '.ipc-stepper{display:flex;position:relative;margin:16px 0 4px}',
+    '.ipc-stepper::before{content:"";position:absolute;top:9px;left:12.5%;right:12.5%;height:2px;background:var(--line-2)}',
+    '.tk-fill{position:absolute;top:9px;left:12.5%;height:2px;background:var(--white);z-index:1;width:0;overflow:visible;animation:tkGrow 1s var(--ease) .25s forwards}',
+    '.tk-fill::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);transform:translateX(-100%);animation:tkSheen 2.6s linear 1.2s infinite}',
+    '.tk-fill::after{content:"";position:absolute;right:-3px;top:-2px;width:6px;height:6px;border-radius:50%;background:var(--white)}',
+    '@keyframes tkGrow{to{width:var(--w,0%)}}',
+    '@keyframes tkSheen{to{transform:translateX(220%)}}',
+    '.tk-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px;position:relative;z-index:2;animation:tkIn .5s var(--ease) both}',
+    '.tk-step:nth-child(2){animation-delay:.08s}',
+    '.tk-step:nth-child(3){animation-delay:.16s}',
+    '.tk-step:nth-child(4){animation-delay:.24s}',
+    '.tk-step:nth-child(5){animation-delay:.32s}',
+    '@keyframes tkIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}',
+    '.tk-dot{position:relative;width:18px;height:18px;border-radius:50%;border:2px solid var(--line-2);background:var(--panel);transition:background .3s var(--ease),border-color .3s var(--ease)}',
+    '.tk-step.done .tk-dot{background:var(--white);border-color:var(--white)}',
+    '.tk-step.done .tk-dot::after{content:"";position:absolute;left:4px;top:2px;width:5px;height:9px;border-right:2px solid var(--black);border-bottom:2px solid var(--black);transform:rotate(45deg)}',
+    '.tk-step.cur .tk-dot{background:var(--white);border-color:var(--white);animation:tkPulse 2.2s var(--ease) infinite}',
+    '.tk-step.cur .tk-dot::after{content:"";position:absolute;left:4px;top:2px;width:5px;height:9px;border-right:2px solid var(--black);border-bottom:2px solid var(--black);transform:rotate(45deg)}',
+    '@keyframes tkPulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}70%{box-shadow:0 0 0 10px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}',
+    '.tk-lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;text-align:center}',
+    '.tk-step.done .tk-lab,.tk-step.cur .tk-lab{color:var(--text)}',
+    '.tk-date{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--faint);opacity:.85}',
+    '.tk-step.cur .tk-date{color:var(--muted)}',
+    '.ipc-track-latest{display:flex;align-items:baseline;gap:10px;margin-top:14px;padding:11px 14px;border:1px dashed var(--line-2);font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;line-height:1.7}',
+    '.ipc-track-latest b{color:var(--text)}',
+    '.tk-live{display:inline-flex;align-items:center;gap:6px;font-size:8px;font-weight:700;letter-spacing:.2em;color:var(--text);white-space:nowrap}',
+    '.tk-live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--white);animation:blink 1.6s infinite}',
+    '.ipc-track-cancel{margin-top:14px;padding:12px 14px;border:1px solid rgba(255,90,90,.45);background:rgba(255,90,90,.06);font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;line-height:1.8}',
+    '.ipc-track-cancel b{color:var(--text)}',
+    '.ipc-track-feed li{padding:6px 0}',
+    '.ipc-track-feed .tk-st{min-width:96px}',
+    '.ipc-track-feed .tk-note{flex:1;min-width:0}',
+    '@media(max-width:520px){.tk-lab{font-size:7px;letter-spacing:.04em}.tk-date{font-size:7px}.tk-step{gap:5px}.ipc-track-feed .tk-st{min-width:72px}}'
   ].join('');
   document.head.appendChild(style);
 
@@ -4515,12 +4598,59 @@ setTimeout(function () {
     }).join('') + '</ul>';
   }
 
-  /* compact tracking line + timeline for the account order list */
+  /* delivery stepper — the journey made visual: rail fills to the current stage,
+     done dots grow checkmarks, the current dot pulses, steps land one by one */
+  var STAGE_ORDER = ['processing', 'packed', 'shipped', 'delivered'];
+  function stageDate(t, st) {
+    var found = null;
+    ((t && t.history) || []).forEach(function (h) { if (h.status === st) found = h; });
+    return found && found.at ? new Date(found.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+  }
+  function stepperHTML(t) {
+    if (!t) return '';
+    if (t.status === 'cancelled') {
+      var hist = t.history || [];
+      var last = hist[hist.length - 1] || {};
+      var cd = last.at ? new Date(last.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+      return '<div class="ipc-track-cancel"><b>CANCELLED</b>' + (last.note ? ' — ' + esc(last.note) : '') + (cd ? ' · ' + cd : '') + '</div>';
+    }
+    var idx = Math.max(0, STAGE_ORDER.indexOf(t.status));
+    var steps = STAGE_ORDER.map(function (st, i) {
+      var cls = i < idx ? ' done' : (i === idx ? ' cur' : '');
+      var d = stageDate(t, st);
+      return '<div class="tk-step' + cls + '"><span class="tk-dot"></span><span class="tk-lab">' + STAGES[st] +
+        '</span><span class="tk-date">' + (d || (i === 0 ? 'TODAY' : 'PENDING')) + '</span></div>';
+    }).join('');
+    return '<div class="ipc-stepper"><span class="tk-fill" style="--w:' + (idx / STAGE_ORDER.length * 100) + '%"></span>' + steps + '</div>';
+  }
+  function latestHTML(t) {
+    var hist = (t && t.history) || [];
+    var last = hist[hist.length - 1];
+    if (!last) return '';
+    var at = last.at ? new Date(last.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+    var by = IPC.teamLabel(last.by);
+    return '<p class="ipc-track-latest"><span class="tk-live">LIVE</span><span><b>' + esc(STAGES[last.status] || last.status) + '</b>' +
+      (last.note ? ' — ' + esc(last.note) : '') + (at ? ' · ' + at : '') + (by ? ' · ' + esc(by) : '') + '</span></p>';
+  }
+  function feedHTML(t) {
+    var hist = ((t && t.history) || []).slice().reverse().slice(0, 4);
+    if (!hist.length) return '';
+    return '<ul class="ipc-track-hist ipc-track-feed">' + hist.map(function (h) {
+      var d = h.at ? new Date(h.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
+      var by = IPC.teamLabel(h.by);
+      return '<li><span class="tk-st">' + esc(STAGES[h.status] || h.status) + '</span>' +
+        '<span class="tk-note">' + esc(h.note ? h.note + (by ? ' · ' + by : '') : by) + '</span>' +
+        '<span class="tk-at">' + esc(d) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  /* compact tracking line + stepper for the account order list */
   IPC.trackLineHTML = function (o) {
     var t = o && o.tracking;
     if (!t) return '';
-    return '<p class="ipc-track-line">TRACKING <b>' + esc(t.number) + '</b> — ' + (STAGES[t.status] || t.status).toUpperCase() +
-      (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + histHTML(t);
+    return '<p class="ipc-track-line">TRACKING <b>' + esc(t.number) + '</b>' +
+      (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' +
+      stepperHTML(t) + (t.status === 'cancelled' ? '' : latestHTML(t)) + feedHTML(t);
   };
   /* compact cell for the admin orders table */
   IPC.trackCellHTML = function (o) {
@@ -4553,7 +4683,7 @@ setTimeout(function () {
     if (!host) return;
     var t = order && order.tracking;
     if (!t) { host.style.display = 'none'; host.innerHTML = ''; return; }
-    host.innerHTML = '<div class="ipc-track-panel"><p class="k">ORDER TRACKING — ' + esc(t.number) + (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + trackPill(t.status) + histHTML(t) + '</div>';
+    host.innerHTML = '<div class="ipc-track-panel"><p class="k">ORDER TRACKING — ' + esc(t.number) + (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + trackPill(t.status) + stepperHTML(t) + (t.status === 'cancelled' ? '' : latestHTML(t)) + feedHTML(t) + '</div>';
     host.style.display = 'block';
   };
   IPC.hidePayTracking = function () {

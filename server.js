@@ -161,7 +161,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v17-20261122-uxdrop";
+const BUILD_STAMP = "ipc-v18-20261122-alivetrack";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 function serveIndex(req, res) {
@@ -363,7 +363,7 @@ function mongoError(res, err, fallback) {
   if (err && err.code === "MONGO_NOT_CONFIGURED") {
     console.error("Mongo not configured:", err.message);
     return fail(res, 503, "mongo_not_configured",
-      "ACCOUNT SERVER NOT CONNECTED — SET MONGODB_URI ON THE HOST.");
+      "ACCOUNT SERVER NOT REACHABLE — TRY AGAIN IN A FEW MINUTES.");
   }
   console.error(fallback, err && err.message);
   return fail(res, 500, "server_error", fallback);
