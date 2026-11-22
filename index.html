@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-21 19:50 -->
+<!-- IPC BUILD 2026-11-22 12:30 -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -2473,7 +2473,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v15-20261121-tracksort';
+  var IPC_BUILD = 'ipc-v16-20261122-phvalid';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2763,6 +2763,15 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   };
 
   IPC.auth = { user: null, token: null, ready: false, online: true };
+  /* PH mobile sanity check — mirrors the server's normalizePhilippineMobile:
+     accepts 09XXXXXXXXX, +639XXXXXXXXX and 639XXXXXXXXX, ignores spaces and
+     dashes. Returns true when the number can be stored as one club ID. */
+  IPC.phMobile = function (v) {
+    var digits = String(v || '').replace(/[^0-9]/g, '');
+    if (digits.indexOf('63') === 0) digits = digits.slice(2);
+    if (digits.charAt(0) === '0') digits = digits.slice(1);
+    return /^9\d{9}$/.test(digits);
+  };
   IPC.auth.restore = function () {
     var token = null;
     try { token = localStorage.getItem(AUTH_KEY) || sessionStorage.getItem(AUTH_KEY); } catch (e) {}
@@ -3243,6 +3252,10 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       show('COMPLETE THE DELIVERY DETAILS — NAME, MOBILE, ADDRESS, CITY AND PROVINCE.', false);
       return;
     }
+    if (!IPC.phMobile(phone)) {
+      show('ENTER A VALID PH MOBILE NUMBER — 09XX XXX XXXX (11 DIGITS).', false);
+      return;
+    }
     if (IPC.bag.items.length === 0) { show('YOUR BAG IS EMPTY — ADD A PIECE BEFORE CHECKING OUT.', false); return; }
     var checkoutBagSnapshot = IPC.bag.items.map(function (it) { return { productId: it.productId, size: it.size, color: it.color, qty: it.qty }; });
     try { localStorage.setItem(IPC.PENDING_BAG_KEY, JSON.stringify({ items: checkoutBagSnapshot, createdAt: Date.now() })); } catch (snapshotError) {}
@@ -3510,6 +3523,15 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     return IPC.auth.login($('#liEmail').value.trim(), $('#liPass').value, $('#liRemember').checked);
   });
   wireAuthForm('signupForm', 'suSubmit', 'suMsg', function () {
+    var suPhone = $('#suPhone') ? $('#suPhone').value.trim() : '';
+    /* one mobile number is one club ID — catch bad formats before the
+       account server has to reject them */
+    if (!suPhone) {
+      return Promise.resolve({ ok: false, message: 'DROP YOUR MOBILE NUMBER TO JOIN — 09XX XXX XXXX.' });
+    }
+    if (!IPC.phMobile(suPhone)) {
+      return Promise.resolve({ ok: false, message: 'ENTER A VALID PH MOBILE NUMBER — 09XX XXX XXXX (11 DIGITS).' });
+    }
     return IPC.auth.signup($('#suName').value.trim(), $('#suEmail').value.trim(), $('#suPass').value);
   });
 
@@ -4134,6 +4156,7 @@ setTimeout(function () {
     var msg = $('#ipcVoucherMsg');
     if (!code) { clearVoucher('ENTER A VOUCHER CODE FIRST.'); return; }
     if (!phone) { clearVoucher('ENTER YOUR MOBILE NUMBER IN DELIVERY DETAILS FIRST.'); return; }
+    if (!IPC.phMobile(phone)) { clearVoucher('CHECK YOUR MOBILE NUMBER — PH FORMAT 09XX XXX XXXX.'); return; }
     applyBtn.disabled = true;
     applyBtn.textContent = 'CHECKING…';
     msg.className = 'ipc-voucher-msg';

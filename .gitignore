@@ -1,0 +1,12 @@
+# dependencies — never commit the install tree
+node_modules/
+
+# environment / secrets
+.env
+.env.*
+
+# logs and OS noise
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db
