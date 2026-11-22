@@ -2473,7 +2473,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v14-20261121-baglogin';
+  var IPC_BUILD = 'ipc-v15-20261121-tracksort';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -3695,11 +3695,36 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     IPC.api('/api/admin/orders').then(function (d) {
       var list = d.orders || [];
       if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO ORDERS YET</p>'; return; }
-      host.innerHTML = '<p class="count-chip" style="margin-bottom:14px">' + list.length +
-        ' ORDERS — TAP ANY ROW FOR THE FULL BREAKDOWN</p>' +
-        '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+      /* delivery-stage filter — PENDING = tracking not opened yet (payment
+         not accepted); everything else rides the order's tracking stage
+         (processing / packed / shipped / delivered / cancelled). The
+         chosen chip lives on IPC so it survives re-renders. */
+      function stageOf(o) {
+        var t = o && o.tracking;
+        return (t && t.status) ? t.status : 'pending';
+      }
+      var FILTERS = [['all', 'ALL'], ['pending', 'PENDING'], ['processing', 'PROCESSING'], ['packed', 'PACKED'], ['shipped', 'SHIPPED'], ['delivered', 'DELIVERED'], ['cancelled', 'CANCELLED']];
+      var counts = { all: list.length, pending: 0, processing: 0, packed: 0, shipped: 0, delivered: 0, cancelled: 0 };
+      list.forEach(function (o) { var s = stageOf(o); if (counts[s] != null) counts[s]++; });
+      var cur = IPC.__admTrackFilter || 'all';
+      if (counts[cur] == null) cur = 'all';
+      var chips = '<div class="ipc-stage-row" style="margin:0 0 18px;align-items:center">' +
+        '<span style="font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase">DELIVERY —</span>' +
+        FILTERS.map(function (f) {
+          return '<button type="button" class="ipc-stage-btn' + (f[0] === cur ? ' cur' : '') + '" data-tf="' + f[0] + '" title="SHOW ' + f[1] + ' DELIVERY">' + f[1] + ' · ' + counts[f[0]] + '</button>';
+        }).join('') + '</div>';
+      var shown = cur === 'all' ? list : list.filter(function (o) { return stageOf(o) === cur; });
+      var curLabel = FILTERS.filter(function (f) { return f[0] === cur; })[0][1];
+      var head = '<p class="count-chip" style="margin-bottom:14px">' + (cur === 'all'
+        ? list.length + ' ORDERS — TAP ANY ROW FOR THE FULL BREAKDOWN'
+        : shown.length + ' OF ' + list.length + ' ORDERS — DELIVERY ' + curLabel) + '</p>';
+      if (shown.length === 0) {
+        host.innerHTML = chips + head + '<p class="adm-empty">NOTHING IN ' + curLabel + ' RIGHT NOW — TAP ANOTHER STAGE OR ALL</p>';
+        return;
+      }
+      host.innerHTML = chips + head + '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
         '<th>ORDER</th><th>BUYER</th><th>DELIVER TO</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>TRACKING</th><th>PLACED</th></tr></thead><tbody>' +
-        list.map(function (o, i) {
+      shown.map(function (o, i) {
           var cityLine = [o.city, o.province].filter(Boolean).join(', ');
           var delivery = '<b>' + IPC.esc(o.addressLine || 'NO STREET GIVEN') + '</b>' +
             '<br /><small>' + IPC.esc(cityLine || 'NO CITY') + (o.postalCode ? ' ' + IPC.esc(o.postalCode) : '') + '</small>' +
@@ -3748,6 +3773,18 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     }).catch(function (err) {
       host.innerHTML = '<p class="adm-empty">' + IPC.esc((err.message || 'ORDERS FAILED').toUpperCase()) + '</p>';
     });
+  }
+  /* delivery-stage filter chips (delegated — survives table re-renders) */
+  if (!document.__ipcTrackFilter) {
+    document.addEventListener('click', function (ev) {
+      var chip = ev.target.closest ? ev.target.closest('[data-tf]') : null;
+      if (!chip) return;
+      var f = chip.getAttribute('data-tf') || 'all';
+      if (IPC.__admTrackFilter === f) return;
+      IPC.__admTrackFilter = f;
+      loadAdminOrders();
+    });
+    document.__ipcTrackFilter = true;
   }
   function wireRoleForm() {
     var email = $('#ipcRoleEmail'), grant = $('#ipcRoleGrant'), revoke = $('#ipcRoleRevoke'), msg = $('#ipcRoleMsg');
