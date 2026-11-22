@@ -5,12 +5,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
-<meta name="description" content="INDULGE PLAYAS CLUB is a small independent clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping nationwide. Strictly for playas only. Since 2023." />
+<meta name="description" content="INDULGE PLAYAS CLUB is a small independent clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping. Strictly for playas only. Since 2023." />
 <meta name="keywords" content="Indulge Playas Club, IPC, local clothing brand, Philippines streetwear, limited drops, free shipping, Strictly for Playas Only" />
 <meta name="theme-color" content="#0A0A0A" />
 <script>document.documentElement.classList.add('js');</script>
 <meta property="og:title" content="INDULGE PLAYAS CLUB" />
-<meta property="og:description" content="Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping nationwide. Est. 2023." />
+<meta property="og:description" content="Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping. Est. 2023." />
 <meta property="og:site_name" content="INDULGE PLAYAS CLUB" />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230A0A0A'/%3E%3Ctext x='32' y='43' font-family='Arial Black, sans-serif' font-size='21' font-weight='900' fill='%23FFFFFF' text-anchor='middle'%3EIPC%3C/text%3E%3C/svg%3E" />
@@ -464,6 +464,25 @@ textarea.inp{min-height:110px;resize:vertical}
 .ord-meta{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
 .ord-side{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .orders-empty{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;padding:26px 0}
+/* order history — expandable recent-order rows */
+.order-drop{border:1px solid var(--line);background:var(--panel)}
+.order-drop+.order-drop{margin-top:14px}
+.order-drop summary{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 20px;cursor:pointer;list-style:none;transition:background .2s var(--ease)}
+.order-drop summary::-webkit-details-marker{display:none}
+.order-drop summary:hover{background:var(--bg-2)}
+.od-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.od-side{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em}
+.od-chev{position:relative;width:14px;height:14px;flex-shrink:0;transition:transform .3s var(--ease)}
+.od-chev::before{content:"";position:absolute;left:4px;top:3px;width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}
+.order-drop[open] .od-chev{transform:rotate(225deg)}
+.od-body{border-top:1px solid var(--line);padding:16px 20px 20px;display:flex;flex-direction:column;gap:10px}
+.od-k{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-top:4px}
+.ord-line{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;line-height:1.7;color:var(--muted)}
+.ord-line span:last-child{font-family:var(--mono);white-space:nowrap;color:var(--text)}
+.ord-line-total{border-top:1px solid var(--line);padding-top:12px;margin-top:2px;color:var(--text);font-weight:600}
+.od-addr{font-size:13.5px;line-height:1.7;color:var(--muted)}
+.od-pay{align-self:flex-start;margin-top:6px}
+#acLogout.danger-arm{background:var(--white);color:var(--black);border-color:var(--white)}
 .admin-flag{font-family:var(--mono);font-size:9px;letter-spacing:.2em;background:var(--white);color:var(--black);padding:4px 8px;font-weight:700;text-transform:uppercase}
 @media(max-width:960px){.acct-grid{grid-template-columns:1fr}}
 
@@ -900,8 +919,8 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 <header class="nav" id="nav">
   <div class="topstrip" aria-hidden="true">
     <div class="mtrack">
-      <div class="mitems"><span>FREE SHIPPING NATIONWIDE</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
-      <div class="mitems"><span>FREE SHIPPING NATIONWIDE</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
+      <div class="mitems"><span>NATIONWIDE SHIPPING</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
+      <div class="mitems"><span>NATIONWIDE SHIPPING</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
     </div>
   </div>
   <nav class="nav-inner" aria-label="Main navigation">
@@ -997,7 +1016,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       <div class="hero-stats">
         <span>EST. 2023</span>
         <span>SMALL BATCHES</span>
-        <span>FREE SHIPPING NATIONWIDE</span>
+        <span>NATIONWIDE SHIPPING</span>
       </div>
       <p class="hero-loc">MADE IN THE PHILIPPINES</p>
     </div>
@@ -1023,7 +1042,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     </div>
     <div class="feat-grid" id="featGrid"><!-- rendered by JS --></div>
     <div class="shop-cta-row reveal-sm">
-      <p class="count-chip">EVERY PIECE SHIPS FREE — NATIONWIDE, NO MINIMUM</p>
+      <p class="count-chip">FREE SHIPPING ON EVERY ORDER — WHERE COVERAGE REACHES</p>
       <a href="#/shop" class="link-arrow" data-route="shop">SHOP ALL PIECES
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
       </a>
@@ -1281,7 +1300,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         <p class="kicker">FROM THE VAULT</p>
         <h2>Where it<br /><span class="ts">started.</span></h2>
       </div>
-      <p class="vault-p reveal-sm" style="--d:.1s">Straight outta Sampaloc, Manila — this is where the club began. Before the numbered batches and the free nationwide shipping, there was the circle, one heavy tee and graphics loud enough to speak for themselves. We keep the early work archived here — same energy, cleaner lines, same club.</p>
+      <p class="vault-p reveal-sm" style="--d:.1s">Straight outta Sampaloc, Manila — this is where the club began. Before the numbered batches and the free shipping, there was the circle, one heavy tee and graphics loud enough to speak for themselves. We keep the early work archived here — same energy, cleaner lines, same club.</p>
       <div class="vault-solo-wrap">
         <figure class="vault-item reveal" style="--d:.05s">
           <div class="vimg">
@@ -1339,7 +1358,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
           <p class="k">SHIPPING
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
           </p>
-          <p class="v">FREE nationwide on every order, no minimum spend. Metro Manila usually lands within a few days; up province takes a little longer, depending on the courier.</p>
+          <p class="v">Free on every order wherever our couriers reach — no minimum spend. Metro Manila usually lands within a few days; up province takes a little longer. The exact timing depends on your location.</p>
         </div>
         <div class="cop-card reveal-sm" style="--d:.24s">
           <p class="k">MEETUPS
@@ -1437,7 +1456,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         </details>
         <details class="faq-item reveal-sm" style="--d:.15s">
           <summary>Is shipping really free?<span class="plus" aria-hidden="true"></span></summary>
-          <p class="a">Every order ships free anywhere in the Philippines — no minimum spend, no small-print exclusions. Metro Manila usually takes a few days; provinces a little longer depending on the courier.</p>
+          <p class="a">Shipping is free on every order, no minimum spend — wherever courier coverage reaches. Metro Manila usually takes a few days; provinces a little longer, depending on your location.</p>
         </details>
         <details class="faq-item reveal-sm" style="--d:.2s">
           <summary>What if my size sells out?<span class="plus" aria-hidden="true"></span></summary>
@@ -1481,7 +1500,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       <div class="ipc-glass-facts reveal-sm" style="--d:.25s">
         <div class="ipc-glass-chip"><b>REPLIES WITHIN A DAY</b><small>EVERY MESSAGE IS READ BY A HUMAN</small></div>
         <div class="ipc-glass-chip"><b>MEETUPS — METRO MANILA</b><small>SPOTS CONFIRMED WHEN YOU RESERVE</small></div>
-        <div class="ipc-glass-chip"><b>FREE SHIPPING NATIONWIDE</b><small>NO MINIMUM — VERIFIED ORDERS ONLY</small></div>
+        <div class="ipc-glass-chip"><b>FREE SHIPPING</b><small>NO MINIMUM — WHERE COVERAGE REACHES</small></div>
       </div>
       <!-- message box — the only contact channel, nothing else collects or shows an email -->
       <form class="contact-form ipc-glass reveal-sm" id="contactForm" style="--d:.3s" novalidate>
@@ -1545,7 +1564,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       <ul>
         <li>An order is only locked in once it has a reference number (IPC-XXXXX) on your account.</li>
         <li>Orders unpaid after 48 hours can be released back to the batch.</li>
-        <li>Prices are in Philippine pesos (PHP) and include free nationwide shipping.</li>
+        <li>Prices are in Philippine pesos (PHP) and include free shipping where courier coverage allows.</li>
       </ul>
     </div>
 
@@ -1570,9 +1589,9 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 
     <div class="terms-block reveal-sm">
       <h3>04 — SHIPPING</h3>
-      <p>Every order ships FREE anywhere in the Philippines — no minimum spend, no small-print exclusions. Orders go out packed and handed to a trusted local courier once payment is verified.</p>
+      <p>Orders ship FREE across the areas our couriers cover — no minimum spend, no small-print exclusions. Once payment is verified, everything goes out packed and handed to a trusted local courier.</p>
       <ul>
-        <li>Metro Manila usually lands within a few days; provinces take a little longer depending on the courier.</li>
+        <li>Metro Manila usually lands within a few days; provinces take a little longer — the exact timing depends on your location and the courier.</li>
         <li>Double-check your delivery details before placing the order — the club ships to the address on the order.</li>
       </ul>
     </div>
@@ -1699,7 +1718,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       <div class="bag-lines" id="bagLines"></div>
       <div class="bag-summary">
         <p class="sum-row"><span>SUBTOTAL</span><b id="bagSubtotal">₱0</b></p>
-        <p class="sum-row"><span>SHIPPING</span><b>FREE — NATIONWIDE</b></p>
+        <p class="sum-row"><span>SHIPPING</span><b>FREE — BASED ON LOCATION</b></p>
         <p class="sum-row total"><span>TOTAL</span><b id="bagTotal">₱0</b></p>
         <p class="ship-note">PAID WITH IPC PAY (QR) — EVERY PAYMENT VERIFIED BY HAND BEFORE ANYTHING SHIPS</p>
         <div class="bag-actions">
@@ -1775,7 +1794,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       <div id="coLines"></div>
       <div class="co-totals">
         <p class="sum-row"><span>SUBTOTAL</span><b id="coSubtotal">₱0</b></p>
-        <p class="sum-row"><span>SHIPPING</span><b>FREE</b></p>
+        <p class="sum-row"><span>SHIPPING</span><b>FREE — BASED ON LOCATION</b></p>
         <p class="sum-row total"><span>TOTAL</span><b id="coTotal">₱0</b></p>
       </div>
       <p class="pay-note">THE TOTAL IS LOCKED IN WRITING THE MOMENT THE ORDER IS PLACED. PAYMENT HAPPENS ON THE NEXT SCREEN VIA IPC PAY — QR ONLY FOR NOW, CARDS AND E-WALLETS ARE COMING SOON.</p>
@@ -1999,7 +2018,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       </div>
       <button type="submit" class="btn-w" id="suSubmit" style="width:100%;justify-content:center;margin-top:6px">CREATE ACCOUNT</button>
       <p class="form-msg" id="suMsg" role="status" aria-live="polite"></p>
-      <p class="forgot-line">SIGN-UP RUNS ON THE CLUB'S OWN SERVER (MONGODB ATLAS) — EMAIL AND PASSWORD ONLY. NO GOOGLE, NO FACEBOOK, NO OUTSIDE LOGINS.</p>
+      <p class="forgot-line">SIGN-UP RUNS ON THE CLUB'S OWN SERVER — EMAIL AND PASSWORD ONLY. NO GOOGLE, NO FACEBOOK, NO OUTSIDE LOGINS.</p>
     </form>
   </div>
 </div>
@@ -2132,7 +2151,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     <div class="footer-grid">
       <div class="f-col">
         <p class="f-k">THE CLUB</p>
-        <p class="f-blurb">Manila-born clothing brand, est. 2023 — heavyweight pieces in numbered batches, announced on Facebook and Instagram first, shipped free nationwide. Strictly for playas only.</p>
+        <p class="f-blurb">Manila-born clothing brand, est. 2023 — heavyweight pieces in numbered batches, announced on Facebook and Instagram first, shipped free. Strictly for playas only.</p>
         <div class="f-social">
           <a href="https://www.facebook.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer" aria-label="INDULGE PLAYAS CLUB on Facebook">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.4 21v-8.2h2.76l.41-3.2h-3.17V7.56c0-.93.26-1.56 1.58-1.56h1.7V3.14C16.4 3.1 15.39 3 14.21 3c-2.46 0-4.15 1.5-4.15 4.27v2.33H7.3v3.2h2.76V21h3.34Z"/></svg>
@@ -2169,7 +2188,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
           <li><a href="https://www.facebook.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer">FACEBOOK — INDULGE PLAYAS CLUB</a></li>
           <li><a href="https://www.instagram.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer">INSTAGRAM — @INDULGEPLAYASCLUB</a></li>
           <li><span>MEETUPS — METRO MANILA</span></li>
-          <li><span>FREE SHIPPING — NATIONWIDE</span></li>
+          <li><span>FREE SHIPPING — BASED ON LOCATION</span></li>
         </ul>
       </div>
     </div>
@@ -2355,7 +2374,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 })();
 </script>
 <script>
-/* BLOCK 3 — MESSAGE BOX: relays the form to the club's Render backend (the
+/* BLOCK 3 — MESSAGE BOX: relays the form to the club's own backend (the
    contact server). Fully independent of the animation, nav and store code —
    if this block fails, nothing else on the page is affected, and whatever
    fails anywhere else, the message box still works. */
@@ -2363,12 +2382,12 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   try {
   var $ = function (s, c) { return (c || document).querySelector(s); };
 
-  /* ---- message box → club inbox (via the club's Render backend) ----
-     The EmailJS keys live ONLY in the Render environment variables — they are
-     never written into this file, so nothing secret gets pushed to GitHub.
+  /* ---- message box → club inbox (via the club's own backend) ----
+     The email keys live ONLY in the backend's environment variables — they
+     are never written into this file.
      NOTE: there is intentionally NO mailto fallback anywhere on this page —
      the club email address never appears in the source OR the live DOM. */
-  var CONTACT_API = 'https://indulgeplayasclub.onrender.com/api/contact'; /* CONTACT API — PASTE YOUR RENDER URL HERE */
+  var CONTACT_API = 'https://indulgeplayasclub.onrender.com/api/contact'; /* CONTACT API — PASTE YOUR API URL HERE */
   /* hidden test hook: ?ipc_api=<base> (or a saved ipc_api_override in
      localStorage) points the message box at another server — used by the
      local test suite, never needed in production */
@@ -2446,7 +2465,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 </script>
 <script>
 /* BLOCK 4 — STORE CORE: catalog, money, bag (localStorage), IPC accounts
-   (MongoDB Atlas via the club's Render backend), and the API client.
+   (the club's own backend), and the API client.
    All money is integer centavos. If this block fails, the marketing site
    above still works — only the shop is affected. */
 (function () {
@@ -2454,9 +2473,9 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   var IPC = window.IPC = window.IPC || {};
   var $ = function (s, c) { return (c || document).querySelector(s); };
 
-  /* IPC ACCOUNTS API — the club's Render backend (holds no secrets).
+  /* IPC ACCOUNTS API — the club's own backend (holds no secrets).
      The build script pastes the URL in at build time. */
-  var IPC_API = 'https://indulgeplayasclub.onrender.com'; /* IPC ACCOUNTS API — PASTE YOUR RENDER URL HERE */
+  var IPC_API = 'https://indulgeplayasclub.onrender.com'; /* IPC ACCOUNTS API — PASTE YOUR API URL HERE */
   IPC.API = IPC_API;
   /* same hidden test hook as the message box (see block 3) */
   try {
@@ -2473,7 +2492,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v16-20261122-phvalid';
+  var IPC_BUILD = 'ipc-v17-20261122-uxdrop';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2714,7 +2733,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   };
   bagLoad();
 
-  /* ---------------- IPC ACCOUNTS (MongoDB Atlas via Render) ---------------- */
+  /* ---------------- IPC ACCOUNTS (the club's own backend) ---------------- */
   var AUTH_KEY = 'ipc-auth-v1';
   var USER_KEY = 'ipc-user-v2';
 
@@ -2991,19 +3010,19 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       '<div class="spec-row"><dt>FABRIC</dt><dd>' + esc(p.fabric) + '</dd></div>' +
       '<div class="spec-row"><dt>FIT</dt><dd>' + esc(p.fit) + '</dd></div>' +
       '<div class="spec-row"><dt>COLORWAY</dt><dd>' + esc(p.colors[0]) + '</dd></div>' +
-      '<div class="spec-row"><dt>SHIPPING</dt><dd>FREE nationwide — no minimum spend. Meetups around Metro Manila.</dd></div>' +
+      '<div class="spec-row"><dt>SHIPPING</dt><dd>FREE — no minimum spend, based on your location. Meetups around Metro Manila.</dd></div>' +
       '<div class="spec-row"><dt>PAYMENT</dt><dd>IPC Pay (QR) at checkout — verified by hand before anything ships.</dd></div>';
     /* availability — straight from the drop tag, never invented */
     var avail = $('#prodAvail');
     if (avail) {
       var stockCopy = {
         'PRE-ORDER': 'PRE-ORDER WINDOW — PRODUCED IN THE RUN, SHIPS WHEN IT LANDS',
-        'RESTOCK': 'IN STOCK — READY TO SHIP NATIONWIDE',
+        'RESTOCK': 'IN STOCK — READY TO SHIP',
         'LIMITED': 'LIMITED NUMBERED RUN — ONCE IT\'S GONE, IT\'S GONE',
         'CLUB ONLY': 'CLUB ONLY — MEMBERS GET FIRST ACCESS',
         'NEW DROP': 'JUST DROPPED — READY TO SHIP'
       };
-      avail.textContent = stockCopy[p.tag] || 'READY TO SHIP — FREE NATIONWIDE';
+      avail.textContent = stockCopy[p.tag] || 'READY TO SHIP — FREE';
       avail.className = 'avail-line show';
     }
     /* wishlist state on the page */
@@ -3574,7 +3593,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   }
   var IPC_TIERS = [
     { key: 'ROOKIE', min: 0,
-      perks: ['MEMBER ACCOUNT + LIVE ORDER TRACKING', 'FREE NATIONWIDE SHIPPING ON EVERY ORDER', 'CLUB VOUCHER ACCESS'] },
+      perks: ['MEMBER ACCOUNT + LIVE ORDER TRACKING', 'FREE SHIPPING ON EVERY ORDER — WHERE COVERAGE REACHES', 'CLUB VOUCHER ACCESS'] },
     { key: 'HOMIE', min: 250000,
       perks: ['EVERYTHING ROOKIE', 'PRIORITY PAYMENT VERIFICATION', 'FIRST DIBS ON RESTOCKS'] },
     { key: 'OG', min: 750000,
@@ -3633,20 +3652,55 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         return;
       }
       $('#ordersEmpty').style.display = 'none';
-      list.innerHTML = d.orders.map(function (o) {
-        return '<div class="order-row">' +
-          '<div><p class="ord-ref">' + IPC.esc(o.reference) + '</p>' +
-          '<p class="ord-meta">' + fmtDate(o.createdAt) + ' — ' + (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0) + ' PIECE(S) — ' + IPC.fmtP(o.totalCentavos) + '</p>' +
-          (IPC.trackLineHTML ? IPC.trackLineHTML(o) : '') + '</div>' +
-          '<div class="ord-side">' + IPC.pill(o.status) +
-          (o.payment && o.payment.paymentReference ? '<a href="#/pay/' + IPC.esc(o.payment.paymentReference) + '" class="btn-o btn-sm">VIEW PAYMENT</a>' : '') +
-          '</div></div>';
+      /* recent orders as an expandable list — newest one opens by default,
+         older orders collapse to a single summary line */
+      list.innerHTML = d.orders.map(function (o, idx) {
+        var pieces = (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0);
+        var cityLine = [o.city, o.province].filter(Boolean).join(', ');
+        var itemsHTML = (o.items || []).map(function (it) {
+          return '<p class="ord-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) +
+            (it.color ? ' · ' + IPC.esc(it.color) : '') + ' × ' + it.qty + '</span><span>' +
+            IPC.fmtP(((it.priceCentavos != null ? it.priceCentavos : it.priceC) || 0) * it.qty) + '</span></p>';
+        }).join('') || '<p class="orders-empty" style="padding:8px 0">NO LINE ITEMS</p>';
+        return '<details class="order-drop"' + (idx === 0 ? ' open' : '') + '>' +
+          '<summary>' +
+            '<span class="od-main"><span class="ord-ref">' + IPC.esc(o.reference) + '</span>' +
+            '<span class="ord-meta">' + fmtDate(o.createdAt) + ' — ' + pieces + (pieces === 1 ? ' PIECE' : ' PIECES') + '</span></span>' +
+            '<span class="od-side">' + IPC.fmtP(o.totalCentavos) + IPC.pill(o.status) + '<i class="od-chev" aria-hidden="true"></i></span>' +
+          '</summary>' +
+          '<div class="od-body">' +
+            '<p class="od-k">PIECES</p>' + itemsHTML +
+            (o.discountCentavos ? '<p class="ord-line"><span>VOUCHER ' + IPC.esc(o.voucherCode || '') + '</span><span>−' + IPC.fmtP(o.discountCentavos) + '</span></p>' : '') +
+            '<p class="ord-line ord-line-total"><span>TOTAL</span><span>' + IPC.fmtP(o.totalCentavos) + '</span></p>' +
+            '<p class="od-k">DELIVERY</p>' +
+            '<p class="od-addr">' + IPC.esc(o.addressLine || 'NO STREET GIVEN') + (cityLine ? '<br />' + IPC.esc(cityLine) + (o.postalCode ? ' ' + IPC.esc(o.postalCode) : '') : '') + '</p>' +
+            (IPC.trackLineHTML ? IPC.trackLineHTML(o) : '') +
+            (o.payment && o.payment.paymentReference ? '<a href="#/pay/' + IPC.esc(o.payment.paymentReference) + '" class="btn-o btn-sm od-pay">VIEW PAYMENT</a>' : '') +
+          '</div></details>';
       }).join('');
     }).catch(function (err) {
       list.innerHTML = '<p class="orders-empty">' + (err.status === 0 ? 'ACCOUNT SERVER NOT REACHABLE — TRY AGAIN IN A MINUTE' : 'COULDN\u2019T LOAD YOUR ORDERS — REFRESH AND TRY AGAIN') + '</p>';
     });
   };
+  /* log out needs a deliberate second tap — one click can be a pocket tap */
+  var acLogoutArmed = false, acLogoutTimer = null;
   $('#acLogout').addEventListener('click', function () {
+    var btn = $('#acLogout');
+    if (!acLogoutArmed) {
+      acLogoutArmed = true;
+      btn.classList.add('danger-arm');
+      btn.textContent = 'LOG OUT — SURE? TAP AGAIN';
+      acLogoutTimer = setTimeout(function () {
+        acLogoutArmed = false;
+        btn.classList.remove('danger-arm');
+        btn.textContent = 'LOG OUT';
+      }, 4000);
+      return;
+    }
+    clearTimeout(acLogoutTimer);
+    acLogoutArmed = false;
+    btn.classList.remove('danger-arm');
+    btn.textContent = 'LOG OUT';
     IPC.auth.logout().then(function () { IPC.toast('LOGGED OUT — SEE YOU AT THE NEXT DROP'); location.hash = '#/'; });
   });
   $('#acAdmin').addEventListener('click', function () { location.hash = '#/admin'; });
@@ -3766,7 +3820,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
             '<p class="adm-line"><span>SUBTOTAL</span><span>' + IPC.fmtP(o.subtotalCentavos || 0) + '</span></p>' +
             (o.discountCentavos ? '<p class="adm-line"><span>VOUCHER ' + IPC.esc(o.voucherCode || '') + '</span><span>−' +
               IPC.fmtP(o.discountCentavos) + '</span></p>' : '') +
-            '<p class="adm-line"><span>NATIONWIDE SHIPPING</span><span>FREE</span></p>' +
+            '<p class="adm-line"><span>SHIPPING</span><span>FREE — BASED ON LOCATION</span></p>' +
             '<p class="adm-line adm-line-total"><span>TOTAL</span><span>' + IPC.fmtP(o.totalCentavos || 0) + '</span></p>' +
             '</div>' +
             '<div><p class="ipc-voucher-k">CUSTOMER</p>' +
@@ -4007,12 +4061,18 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     if (a && a.classList.contains('active')) IPC.renderAccount();
     var ad = document.getElementById('v-admin');
     if (ad && ad.classList.contains('active')) IPC.renderAdmin();
-    /* logged-in visitors don't sit on the login/signup forms — unless they
-       came in with a ?next= route, which the auth forms redirect themselves */
+    /* logged-in visitors never sit on the login/signup forms. If they
+       hard-loaded a member route (bookmark on #/account, #/checkout),
+       auth restores AFTER the router has already bounced them here —
+       honor the pending ?next= target exactly like a fresh login. */
+    function leaveAuthForLoggedInUser() {
+      var nx = IPC.nextRoute; IPC.nextRoute = null;
+      location.hash = nx === 'checkout' ? '#/checkout' : (nx ? '#/' + nx : '#/account');
+    }
     var l = document.getElementById('v-login');
-    if (l && l.classList.contains('active') && IPC.auth.user && !IPC.nextRoute) location.hash = '#/account';
+    if (l && l.classList.contains('active') && IPC.auth.user) leaveAuthForLoggedInUser();
     var s = document.getElementById('v-signup');
-    if (s && s.classList.contains('active') && IPC.auth.user && !IPC.nextRoute) location.hash = '#/account';
+    if (s && s.classList.contains('active') && IPC.auth.user) leaveAuthForLoggedInUser();
   });
   setBagBadge();
 
