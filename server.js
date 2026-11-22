@@ -149,8 +149,48 @@ const PRODUCTS = [
 ];
 const SHIPPING_CENTAVOS = 0; /* FREE nationwide — no minimum spend (see FAQ) */
 
+/* The slugs the site ships with — a piece can only ride one of these or a
+   collection the team registered through the admin inventory. */
+const IPC_COLLECTION_SLUGS = ["graphic", "essentials", "limited", "accessories", "summer"];
+
 const PROOF_MAX_BYTES = 5 * 1024 * 1024; /* 5MB decoded */
 const PROOF_TYPES = { "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png" };
+
+/* Custom pieces the club adds from the admin inventory. The baked-in catalog
+   above stays the backbone; anything saved here rides on top of it and shows
+   up on the shop, its collection page and its own product page right away. */
+const PRODUCT_IMG_MAX_CHARS = 1600000; /* ~1.1MB binary after base64 — the client compresses before upload */
+const TAG_WHITELIST = ["", "NEW DROP", "PRE-ORDER", "RESTOCK", "LIMITED", "CLUB ONLY"];
+
+/* The client-facing shape of a saved piece — mirrors the baked-in catalog
+   fields (priceC, img, collection…) so the shop renders both kinds alike. */
+function productView(doc) {
+  return {
+    id: doc.id,
+    name: doc.name,
+    priceC: doc.priceCentavos,
+    tag: doc.tag || "",
+    img: doc.img,
+    alt: doc.alt || (doc.name + " — Indulge Playas Club piece"),
+    desc: doc.desc || "",
+    fabric: doc.fabric || "",
+    fit: doc.fit || "",
+    sizes: doc.sizes || ["OS"],
+    colors: doc.colors || [],
+    collection: doc.collection || "",
+    home: !!doc.home,
+    custom: true,
+  };
+}
+
+function normalizeProductCollection(raw) {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
 
 /* --------------------------------------------------------------- */
 /* Single-service mode (unchanged)                                  */
@@ -161,7 +201,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v18-20261122-alivetrack";
+const BUILD_STAMP = "ipc-v19-20261123-shopcontrol";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 function serveIndex(req, res) {
@@ -843,11 +883,36 @@ async function route(req, res) {
       }
     }
 
+    /* --- public catalog — custom pieces added from the admin inventory --- */
+    if (p === "/api/products") {
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        const docs = await d.collection("products")
+          .find({ active: { $ne: false } })
+          .sort({ createdAt: -1 }).limit(200).toArray();
+        const cols = await d.collection("collections")
+          .find({}).sort({ createdAt: -1 }).limit(50).toArray();
+        return send(res, 200, {
+          ok: true,
+          products: docs.map(productView),
+          collections: cols.map((c) => ({
+            slug: c.slug,
+            title: c.title,
+            blurb: c.blurb || "",
+            soon: !!c.soon,
+          })),
+        });
+      } catch (err) {
+        return mongoError(res, err, "catalog failed");
+      }
+    }
+
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
         p === "/api/admin/orders" || p === "/api/admin/users" ||
         p === "/api/admin/vouchers" || p === "/api/admin/inquiries" ||
-        p === "/api/admin/inventory") {
+        p === "/api/admin/inventory" || p === "/api/admin/products") {
       const found = await userFromReq(req).catch(() => null);
       if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
       if (found.user.role !== "admin") {
@@ -867,6 +932,25 @@ async function route(req, res) {
             .sort({ createdAt: -1 }).limit(200).toArray();
           return send(res, 200, { ok: true, inquiries: rows });
         }
+        if (p === "/api/admin/products") {
+          const docs = await d.collection("products")
+            .find({}).sort({ createdAt: -1 }).limit(200).toArray();
+          return send(res, 200, {
+            ok: true,
+            products: docs.map((doc) => ({
+              id: doc.id,
+              name: doc.name,
+              priceCentavos: doc.priceCentavos,
+              tag: doc.tag || "",
+              collection: doc.collection || "",
+              sizes: doc.sizes || [],
+              colors: doc.colors || [],
+              home: !!doc.home,
+              active: doc.active !== false,
+              createdAt: doc.createdAt,
+            })),
+          });
+        }
         if (p === "/api/admin/inventory") {
           const sold = await d.collection("orders").aggregate([
             { $match: { status: "paid" } },
@@ -875,7 +959,19 @@ async function route(req, res) {
           ]).toArray();
           const soldMap = {};
           sold.forEach((s) => { soldMap[s._id] = s; });
-          const inventory = PRODUCTS.map((p) => ({
+          const customDocs = await d.collection("products")
+            .find({}).sort({ createdAt: -1 }).limit(500).toArray();
+          const customRows = customDocs.map((doc) => ({
+            id: doc.id,
+            name: doc.name,
+            priceCentavos: doc.priceCentavos,
+            tag: doc.tag || "",
+            sizes: doc.sizes && doc.sizes.length ? doc.sizes : ["OS"],
+            colors: doc.colors || [],
+            custom: true,
+            active: doc.active !== false,
+          }));
+          const inventory = PRODUCTS.concat(customRows).map((p) => ({
             id: p.id,
             name: p.name,
             priceCentavos: p.priceCentavos,
@@ -884,6 +980,8 @@ async function route(req, res) {
             colors: p.colors,
             unitsSold: (soldMap[p.id] && soldMap[p.id].units) || 0,
             revenueCentavos: (soldMap[p.id] && soldMap[p.id].revenue) || 0,
+            custom: !!p.custom,
+            active: p.active !== false,
           }));
           return send(res, 200, { ok: true, inventory });
         }
@@ -1047,6 +1145,10 @@ async function route(req, res) {
   if (p === "/api/admin/members/remove") return handleMemberRemove(req, res);
   if (p === "/api/admin/members/restore") return handleMemberRestore(req, res);
   if (p === "/api/ipc-pay/maya-webhook") return handleMayaWebhook(req, res);
+
+  /* --- club inventory: the team adds their own pieces straight to the shop --- */
+  if (p === "/api/admin/products/remove") return handleAdminProductRemove(req, res);
+  if (p === "/api/admin/products") return handleAdminProductSave(req, res);
 
   return send(res, 404, { ok: false, reason: "not_found" });
 }
@@ -2050,6 +2152,144 @@ async function handleAdminTracking(req, res) {
     });
   } catch (err) {
     return mongoError(res, err, "tracking update failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* CLUB INVENTORY — ADD A PIECE. The team types the piece in, drops   */
+/* a photo, picks the collection, and it shows up on the shop and    */
+/* its collection page on its own. Baked-in pieces stay the core;    */
+/* everything saved here lives in the products collection.            */
+/* --------------------------------------------------------------- */
+
+async function handleAdminProductSave(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  /* the photo rides in the body — 4MB covers a compressed product shot */
+  const body = await readBody(req, res, 4 * 1024 * 1024);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+
+  const name = String(body.name ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
+  const priceC = Math.round(Number(body.priceC));
+  const tag = String(body.tag ?? "").trim().toUpperCase().slice(0, 24);
+  const collection = normalizeProductCollection(body.collection);
+  const sizes = (Array.isArray(body.sizes) ? body.sizes : [])
+    .map((s) => String(s ?? "").trim().toUpperCase().slice(0, 12)).filter(Boolean).slice(0, 12);
+  const colors = (Array.isArray(body.colors) ? body.colors : [])
+    .map((s) => String(s ?? "").trim().toUpperCase().slice(0, 24)).filter(Boolean).slice(0, 12);
+  const desc = String(body.desc ?? "").trim().slice(0, 1200);
+  const fabric = String(body.fabric ?? "").trim().slice(0, 200);
+  const fit = String(body.fit ?? "").trim().slice(0, 200);
+  const alt = String(body.alt ?? "").trim().slice(0, 200);
+  const home = !!body.home;
+  const img = String(body.img ?? "").trim();
+
+  if (name.length < 2) return fail(res, 422, "invalid", "GIVE THE PIECE A NAME — AT LEAST 2 CHARACTERS.");
+  if (!Number.isFinite(priceC) || priceC < 100 || priceC > 10000000) {
+    return fail(res, 422, "invalid", "THE PRICE MUST SIT BETWEEN \u20B11 AND \u20B1100,000.");
+  }
+  if (TAG_WHITELIST.indexOf(tag) < 0) tag = "";
+  if (!collection) return fail(res, 422, "invalid", "PICK OR NAME A COLLECTION — THE SHOP ORGANIZES BY IT.");
+  if (!sizes.length) return fail(res, 422, "invalid", "LIST AT LEAST ONE SIZE — 'OS' COUNTS FOR ONE-SIZE PIECES.");
+  if (!colors.length) return fail(res, 422, "invalid", "LIST AT LEAST ONE COLORWAY.");
+  if (!img) return fail(res, 422, "invalid", "THE PIECE NEEDS A PHOTO — DROP ONE IN OR PASTE AN IMAGE LINK.");
+  const isDataImg = /^data:image\/(?:jpeg|jpg|png);base64,[A-Za-z0-9+/=\s]+$/.test(img);
+  const isUrlImg = /^https:\/\/\S{1,480}$/i.test(img);
+  if (!isDataImg && !isUrlImg) {
+    return fail(res, 422, "invalid", "THE PHOTO MUST BE A JPG/PNG UPLOAD OR AN HTTPS IMAGE LINK.");
+  }
+  if (isDataImg && img.length > PRODUCT_IMG_MAX_CHARS) {
+    return fail(res, 413, "too_large", "THAT PHOTO IS TOO HEAVY — A SMALLER ONE UPLOADS CLEAN.");
+  }
+
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const now = new Date();
+
+    /* a brand-new collection gets registered the moment the piece lands */
+    const isNewCol = body.newCollection && typeof body.newCollection === "object";
+    if (isNewCol) {
+      const title = String(body.newCollection.title ?? "").trim().replace(/\s+/g, " ").slice(0, 60) || collection.toUpperCase();
+      const blurb = String(body.newCollection.blurb ?? "").trim().slice(0, 240);
+      await d.collection("collections").updateOne(
+        { slug: collection },
+        { $set: { slug: collection, title, blurb, soon: false, updatedAt: now }, $setOnInsert: { createdAt: now } },
+        { upsert: true }
+      );
+    } else {
+      const known = IPC_COLLECTION_SLUGS.includes(collection) ||
+        (await d.collection("collections").findOne({ slug: collection }));
+      if (!known) {
+        return fail(res, 422, "invalid", "THAT COLLECTION DOESN'T EXIST YET — ADD IT AS A NEW COLLECTION.");
+      }
+    }
+
+    let doc;
+    const editingId = String(body.id ?? "").trim();
+    if (editingId) {
+      const existing = await d.collection("products").findOne({ id: editingId });
+      if (!existing) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
+      const update = await d.collection("products").updateOne(
+        { id: editingId },
+        { $set: {
+          name, priceCentavos: priceC, tag, collection,
+          sizes, colors, desc, fabric, fit, alt, home, img,
+          active: body.active === undefined ? existing.active !== false : !!body.active,
+          updatedAt: now,
+        } }
+      );
+      if (update.modifiedCount !== 1 && update.matchedCount !== 1) {
+        return fail(res, 500, "save_failed", "THE PIECE DIDN'T SAVE — TRY AGAIN.");
+      }
+      doc = await d.collection("products").findOne({ id: editingId });
+      console.log("[ipc-pay] product updated " + editingId + " (" + name + ") by " + found.user.email);
+      return send(res, 200, { ok: true, product: productView(doc), message: "PIECE UPDATED — THE SHOP CARRIES IT NOW." });
+    }
+
+    let id = "ipc-" + collection.slice(0, 16) + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    while (await d.collection("products").findOne({ id })) {
+      id = "ipc-" + collection.slice(0, 16) + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+    doc = {
+      id, name, priceCentavos: priceC, tag, collection,
+      sizes, colors, desc, fabric, fit, alt, home, img,
+      active: true,
+      createdBy: found.user.email,
+      createdAt: now, updatedAt: now,
+    };
+    await d.collection("products").insertOne(doc);
+    console.log("[ipc-pay] product added " + id + " (" + name + ") by " + found.user.email);
+    return send(res, 200, { ok: true, product: productView(doc), message: "PIECE ADDED — IT'S LIVE ON THE SHOP AND ITS COLLECTION." });
+  } catch (err) {
+    return mongoError(res, err, "product save failed");
+  }
+}
+
+async function handleAdminProductRemove(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = String(body.id ?? "").trim();
+  if (!id) return fail(res, 422, "invalid", "MISSING PIECE ID.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    /* soft pull — order history keeps pointing at the piece, the shop just stops carrying it */
+    const update = await d.collection("products").updateOne(
+      { id },
+      { $set: { active: false, updatedAt: new Date() } }
+    );
+    if (update.matchedCount !== 1) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
+    console.log("[ipc-pay] product pulled " + id + " by " + found.user.email);
+    return send(res, 200, { ok: true, message: "PIECE PULLED FROM THE SHOP — PAST ORDERS STAY ON RECORD." });
+  } catch (err) {
+    return mongoError(res, err, "product remove failed");
   }
 }
 

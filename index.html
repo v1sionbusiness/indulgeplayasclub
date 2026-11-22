@@ -2094,6 +2094,16 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
             </div>
           </details>
         </div>
+        <div class="acct-card" id="accTrackCard">
+          <h3>SHIP TRACKER</h3>
+          <p class="orders-empty" style="margin-bottom:12px">PASTE AN ORDER NUMBER — THE TRACKER PULLS THAT ORDER'S DELIVERY JOURNEY UP ON ITS OWN.</p>
+          <form class="acc-track-form" id="accTrackForm" novalidate>
+            <input type="text" id="accTrackRef" placeholder="ORDER NUMBER — E.G. IPC-8F2K91" maxlength="24" autocomplete="off" />
+            <button type="submit" class="btn-w btn-sm">TRACK IT</button>
+          </form>
+          <p class="form-msg" id="accTrackMsg" role="status"></p>
+          <div id="accTrackResult"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2152,7 +2162,44 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
         <div id="admUsers"></div>
       </div>
       <div class="adm-pane" id="pane-inventory">
-        <p class="count-chip">WHAT THE CLUB HAS SOLD — UNITS AND VERIFIED REVENUE PER PIECE.</p>
+        <p class="count-chip">WHAT THE CLUB CARRIES — ADD PIECES HERE AND THEY WALK ONTO THE SHOP AND COLLECTIONS ON THEIR OWN.</p>
+        <form class="ipc-prod-form" id="ipcProdForm" style="display:none" novalidate>
+          <p class="k">ADD A PIECE — IT GOES LIVE THE MOMENT IT SAVES</p>
+          <div class="ipc-prod-grid">
+            <label>PIECE NAME *<input type="text" id="ipcProdName" maxlength="60" placeholder="E.G. CLUB CREWNECK" /></label>
+            <label>PRICE IN PESOS *<input type="number" id="ipcProdPrice" min="1" max="100000" step="1" placeholder="E.G. 950" /></label>
+            <label>TAG<input type="text" id="ipcProdTag" maxlength="24" list="ipcProdTagList" placeholder="PICK OR LEAVE EMPTY" />
+              <datalist id="ipcProdTagList"><option value=""></option><option value="NEW DROP"></option><option value="PRE-ORDER"></option><option value="RESTOCK"></option><option value="LIMITED"></option><option value="CLUB ONLY"></option></datalist>
+            </label>
+            <label>SIZES * (COMMA SEPARATED)<input type="text" id="ipcProdSizes" placeholder="E.G. S, M, L, XL — OR OS" /></label>
+            <label>COLORS * (COMMA SEPARATED)<input type="text" id="ipcProdColors" placeholder="E.G. JET BLACK, BONE" /></label>
+            <label>COLLECTION *<select id="ipcProdCol"></select></label>
+          </div>
+          <div class="ipc-prod-newcol" id="ipcProdNewCol" style="display:none">
+            <div class="ipc-prod-grid">
+              <label>NEW COLLECTION NAME *<input type="text" id="ipcProdColTitle" maxlength="60" placeholder="E.G. HEAVYWEIGHT SERIES" /></label>
+              <label>COLLECTION LINK (URL SLUG)<input type="text" id="ipcProdColSlug" maxlength="40" placeholder="E.G. heavyweight — LEAVE EMPTY TO AUTO-BUILD" /></label>
+            </div>
+            <label>ONE LINE ABOUT THE COLLECTION<input type="text" id="ipcProdColBlurb" maxlength="240" placeholder="E.G. The heavy fleece run — built for the cold mornings." /></label>
+          </div>
+          <label class="ipc-prod-wide">DESCRIPTION<textarea id="ipcProdDesc" maxlength="1200" rows="3" placeholder="What it is, how it wears, what it's built from."></textarea></label>
+          <div class="ipc-prod-grid">
+            <label>FABRIC<input type="text" id="ipcProdFabric" maxlength="200" placeholder="E.G. 400 GSM brushed fleece" /></label>
+            <label>FIT<input type="text" id="ipcProdFit" maxlength="200" placeholder="E.G. Boxy — true to size" /></label>
+            <label>ALT TEXT (ACCESSIBILITY)<input type="text" id="ipcProdAlt" maxlength="200" placeholder="Describe the photo in a line" /></label>
+          </div>
+          <div class="ipc-prod-img-row">
+            <label>PIECE PHOTO — JPG/PNG (IT COMPRESSES ON ITS WAY UP)<input type="file" id="ipcProdImg" accept="image/jpeg,image/png,image/webp" /></label>
+            <label>OR PASTE AN HTTPS IMAGE LINK<input type="text" id="ipcProdImgUrl" placeholder="HTTPS://…" /></label>
+            <div class="ipc-prod-prev" id="ipcProdPrev" style="display:none"><img id="ipcProdPrevImg" alt="Piece photo preview" /></div>
+          </div>
+          <label class="ipc-prod-check"><input type="checkbox" id="ipcProdHome" /> SHOW IT IN THE SHOP'S FEATURED ROTATION TOO</label>
+          <div class="ipc-prod-actions">
+            <button type="submit" class="btn-w btn-sm" id="ipcProdSave">SAVE THE PIECE</button>
+            <button type="button" class="btn-o btn-sm" id="ipcProdCancel">CLOSE</button>
+          </div>
+          <p class="form-msg" id="ipcProdMsg" role="status"></p>
+        </form>
         <div id="admInventory" style="margin-top:18px"></div>
       </div>
       <div class="adm-pane" id="pane-contacts">
@@ -2516,7 +2563,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v18-20261122-alivetrack';
+  var IPC_BUILD = 'ipc-v19-20261123-shopcontrol';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2628,6 +2675,36 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   IPC.byId = function (id) {
     for (var i = 0; i < IPC.PRODUCTS.length; i++) if (IPC.PRODUCTS[i].id === id) return IPC.PRODUCTS[i];
     return null;
+  };
+  /* ---- club catalog refresh — pieces the team adds from the admin inventory
+     ride on top of the baked-in shelf. Runs at boot and after every save; if
+     the server doesn't answer, the baked shelf keeps the shop open. ---- */
+  IPC.refreshCatalog = function () {
+    return IPC.api('/api/products').then(function (d) {
+      var added = 0;
+      (d.products || []).forEach(function (p) {
+        if (!p || !p.id || !p.name) return;
+        var found = -1;
+        for (var i = 0; i < IPC.PRODUCTS.length; i++) if (IPC.PRODUCTS[i].id === p.id) { found = i; break; }
+        if (found >= 0) IPC.PRODUCTS[found] = p;
+        else { IPC.PRODUCTS.push(p); added++; }
+      });
+      (d.collections || []).forEach(function (c) {
+        if (!c || !c.slug) return;
+        var known = false;
+        for (var j = 0; j < IPC.COLLECTIONS.length; j++) if (IPC.COLLECTIONS[j].slug === c.slug) { known = true; break; }
+        if (!known) IPC.COLLECTIONS.push(c);
+      });
+      return added;
+    }).catch(function () { return 0; });
+  };
+  /* re-render whatever catalog view is on screen after a refresh */
+  IPC.catalogRefreshView = function () {
+    var h = location.hash || '';
+    if (h.indexOf('#/shop') === 0 && IPC.renderShop) IPC.renderShop();
+    else if (h.indexOf('#/collection/') === 0 && IPC.renderCollections) IPC.renderCollections();
+    else if (h.indexOf('#/product/') === 0 && IPC.renderProduct) IPC.renderProduct(decodeURIComponent(h.slice(10)));
+    if (IPC.renderShopChips) IPC.renderShopChips();
   };
   IPC.STATUS = {
     pending: { label: 'PENDING', cls: 'p-pending' },
@@ -2976,14 +3053,30 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     if (count) count.textContent = list.length + (list.length === 1 ? ' PIECE' : ' PIECES') + ' IN THE CLUB';
     IPC.observeReveals(host);
   };
-  $$('#shopFilters .filter-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      $$('#shopFilters .filter-chip').forEach(function (c) { c.classList.remove('active'); });
-      chip.classList.add('active');
+  /* collection chips render from IPC.COLLECTIONS — a collection the team adds
+     from the admin inventory grows its own chip here, no rebuild needed */
+  IPC.renderShopChips = function () {
+    var host = $('#shopFilters');
+    if (!host) return;
+    var cur = shopFilter || 'all';
+    host.innerHTML =
+      '<button type="button" class="filter-chip' + (cur === 'all' ? ' active' : '') + '" data-col="all">ALL</button>' +
+      IPC.COLLECTIONS.map(function (c) {
+        return '<button type="button" class="filter-chip' + (c.slug === cur ? ' active' : '') +
+          '" data-col="' + esc(c.slug) + '">' + esc(c.title) + (c.soon ? ' — SOON' : '') + '</button>';
+      }).join('');
+  };
+  /* one delegated listener on the container — survives every chip re-render */
+  var filtersHost = $('#shopFilters');
+  if (filtersHost) {
+    filtersHost.addEventListener('click', function (ev) {
+      var chip = ev.target.closest ? ev.target.closest('.filter-chip') : null;
+      if (!chip) return;
       shopFilter = chip.getAttribute('data-col');
       IPC.renderShop();
     });
-  });
+  }
+  IPC.renderShopChips();
   var searchEl = $('#shopSearch');
   if (searchEl) searchEl.addEventListener('input', function () { shopQuery = searchEl.value; IPC.renderShop(); });
   var sortEl = $('#shopSort');
@@ -3353,7 +3446,7 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
   IPC.drawIpcQr = drawIpcQr;
   drawIpcQr(); /* render the official QR into both panels at boot — was previously never invoked */
   /* ---------------- IPC PAY ORDER SCREEN ---------------- */
-  var poState = { ref: null, timer: null, status: null, paidHandledRef: null };
+  var poState = { ref: null, timer: null, status: null, paidHandledRef: null, trkStatus: null };
   IPC.stopPayPoll = function () {
     if (poState.timer) { clearInterval(poState.timer); poState.timer = null; }
   };
@@ -3362,6 +3455,11 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
     var order = data.order || (pay && pay.order) || {};
     poState.status = pay.status;
     IPC.currentPaymentStatus = pay.status;
+    /* the journey is over — delivered or cancelled: stand the refresh loop down,
+       the page keeps its final state instead of re-pulling every 15 seconds */
+    var trk = order && order.tracking;
+    poState.trkStatus = trk ? trk.status : null;
+    if (trk && (trk.status === 'delivered' || trk.status === 'cancelled')) IPC.stopPayPoll();
     var returnCart = $('#poReturnCart');
     if (returnCart) returnCart.style.display = 'none';
     $('#poNotfound').style.display = 'none';
@@ -3445,7 +3543,10 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
       return;
     }
     loadPay(ref).then(function () {
-      /* live status — poll while this view is open */
+      /* live status — poll while this view is open. A settled journey
+         (delivered / cancelled) never starts the loop at all — the screen
+         keeps its final state instead of re-pulling every 15 seconds. */
+      if (poState.trkStatus === 'delivered' || poState.trkStatus === 'cancelled') return;
       poState.timer = setInterval(function () { loadPay(poState.ref, true); }, 15000);
     });
   };
@@ -4543,12 +4644,18 @@ setTimeout(function () {
     '.ipc-auto-tile{cursor:pointer;transition:opacity .2s}',
     '.ipc-auto-tile:hover{outline:1px solid var(--line-2)}',
     '.ipc-auto-tile.off{opacity:.55}',
-    /* delivery stepper — the journey made visual: rail fills, dots pulse, steps land one by one */
+    /* delivery stepper — the journey made visual: rail fills, dots pulse, steps land one by one.
+       The sheen lives INSIDE the fill (overflow:hidden) so the glow never escapes its rail box. */
     '.ipc-stepper{display:flex;position:relative;margin:16px 0 4px}',
     '.ipc-stepper::before{content:"";position:absolute;top:9px;left:12.5%;right:12.5%;height:2px;background:var(--line-2)}',
-    '.tk-fill{position:absolute;top:9px;left:12.5%;height:2px;background:var(--white);z-index:1;width:0;overflow:visible;animation:tkGrow 1s var(--ease) .25s forwards}',
+    '.tk-fill{position:absolute;top:9px;left:12.5%;height:2px;background:var(--white);z-index:1;width:0;overflow:hidden;animation:tkGrow 1s var(--ease) .25s forwards}',
     '.tk-fill::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);transform:translateX(-100%);animation:tkSheen 2.6s linear 1.2s infinite}',
-    '.tk-fill::after{content:"";position:absolute;right:-3px;top:-2px;width:6px;height:6px;border-radius:50%;background:var(--white)}',
+    '.tk-tip{position:absolute;top:6px;left:calc(12.5% + var(--w,0%));width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--white);z-index:2;opacity:0;animation:tkTipIn .4s var(--ease) 1.05s forwards}',
+    '@keyframes tkTipIn{to{opacity:1}}',
+    /* settled — the journey is over: animations stand down, the rail just shows the result */
+    '.ipc-stepper.settled .tk-fill{animation:none;width:var(--w,0%)}',
+    '.ipc-stepper.settled .tk-fill::before{display:none}',
+    '.ipc-stepper.settled .tk-tip{display:none}',
     '@keyframes tkGrow{to{width:var(--w,0%)}}',
     '@keyframes tkSheen{to{transform:translateX(220%)}}',
     '.tk-step{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px;position:relative;z-index:2;animation:tkIn .5s var(--ease) both}',
@@ -4567,10 +4674,17 @@ setTimeout(function () {
     '.tk-step.done .tk-lab,.tk-step.cur .tk-lab{color:var(--text)}',
     '.tk-date{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--faint);opacity:.85}',
     '.tk-step.cur .tk-date{color:var(--muted)}',
-    '.ipc-track-latest{display:flex;align-items:baseline;gap:10px;margin-top:14px;padding:11px 14px;border:1px dashed var(--line-2);font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;line-height:1.7}',
+    '.ipc-track-latest{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin-top:14px;padding:11px 14px;border:1px dashed var(--line-2);font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;line-height:1.7}',
     '.ipc-track-latest b{color:var(--text)}',
     '.tk-live{display:inline-flex;align-items:center;gap:6px;font-size:8px;font-weight:700;letter-spacing:.2em;color:var(--text);white-space:nowrap}',
     '.tk-live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--white);animation:blink 1.6s infinite}',
+    /* delivered — the LIVE blink stands down too, a still mark is the honest one */
+    '.tk-live.tk-done::before{animation:none;background:var(--text)}',
+    /* account ship tracker — paste an order number, the journey pulls up */
+    '.acc-track-form{display:flex;gap:10px;flex-wrap:wrap}',
+    '.acc-track-form input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line-2);color:var(--text);padding:10px 12px;font:inherit;font-size:11px;letter-spacing:.04em;border-radius:0}',
+    '.acc-track-form input:focus{outline:none;border-color:var(--text)}',
+    '#accTrackResult .ipc-track-panel{margin-top:14px}',
     '.ipc-track-cancel{margin-top:14px;padding:12px 14px;border:1px solid rgba(255,90,90,.45);background:rgba(255,90,90,.06);font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;line-height:1.8}',
     '.ipc-track-cancel b{color:var(--text)}',
     '.ipc-track-feed li{padding:6px 0}',
@@ -4614,14 +4728,18 @@ setTimeout(function () {
       var cd = last.at ? new Date(last.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
       return '<div class="ipc-track-cancel"><b>CANCELLED</b>' + (last.note ? ' — ' + esc(last.note) : '') + (cd ? ' · ' + cd : '') + '</div>';
     }
+    /* delivered — the journey is complete: stand the animation down, every step lands done */
+    var settled = t.status === 'delivered';
     var idx = Math.max(0, STAGE_ORDER.indexOf(t.status));
     var steps = STAGE_ORDER.map(function (st, i) {
-      var cls = i < idx ? ' done' : (i === idx ? ' cur' : '');
+      var cls = (settled || i < idx) ? ' done' : (i === idx ? ' cur' : '');
       var d = stageDate(t, st);
       return '<div class="tk-step' + cls + '"><span class="tk-dot"></span><span class="tk-lab">' + STAGES[st] +
         '</span><span class="tk-date">' + (d || (i === 0 ? 'TODAY' : 'PENDING')) + '</span></div>';
     }).join('');
-    return '<div class="ipc-stepper"><span class="tk-fill" style="--w:' + (idx / STAGE_ORDER.length * 100) + '%"></span>' + steps + '</div>';
+    var w = Math.round(idx / STAGE_ORDER.length * 100);
+    return '<div class="ipc-stepper' + (settled ? ' settled' : '') + '" style="--w:' + w + '%">' +
+      '<span class="tk-fill"></span>' + (idx > 0 && !settled ? '<i class="tk-tip"></i>' : '') + steps + '</div>';
   }
   function latestHTML(t) {
     var hist = (t && t.history) || [];
@@ -4629,7 +4747,11 @@ setTimeout(function () {
     if (!last) return '';
     var at = last.at ? new Date(last.at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '';
     var by = IPC.teamLabel(last.by);
-    return '<p class="ipc-track-latest"><span class="tk-live">LIVE</span><span><b>' + esc(STAGES[last.status] || last.status) + '</b>' +
+    /* delivered — no more blinking LIVE; a still mark tells the truth */
+    var tag = t.status === 'delivered'
+      ? '<span class="tk-live tk-done">DELIVERED</span>'
+      : '<span class="tk-live">LIVE</span>';
+    return '<p class="ipc-track-latest">' + tag + '<span><b>' + esc(STAGES[last.status] || last.status) + '</b>' +
       (last.note ? ' — ' + esc(last.note) : '') + (at ? ' · ' + at : '') + (by ? ' · ' + esc(by) : '') + '</span></p>';
   }
   function feedHTML(t) {
@@ -4772,6 +4894,32 @@ setTimeout(function () {
         });
     }
   });
+
+  /* ---------- ship tracker — the account lets a member pull any of their
+     order numbers up onto the tracker without digging through history ---------- */
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form || form.id !== 'accTrackForm') return;
+    ev.preventDefault();
+    var msg = $('#accTrackMsg'), host = $('#accTrackResult'), inp = $('#accTrackRef');
+    if (!msg || !host || !inp) return;
+    var ref = String(inp.value || '').trim().toUpperCase();
+    var show = function (t, ok) { msg.textContent = t; msg.className = 'form-msg show ' + (ok ? 'ok' : 'err'); };
+    if (!/^[A-Z0-9][A-Z0-9-]{3,23}$/.test(ref)) { show('DROP THE ORDER NUMBER IN FIRST — IT LOOKS LIKE IPC-8F2K91.', false); return; }
+    show('PULLING THE TRACKER…', true);
+    IPC.api('/api/track/' + encodeURIComponent(ref)).then(function (d) {
+      msg.textContent = ''; msg.className = 'form-msg';
+      var t = d.tracking || {};
+      host.innerHTML = '<div class="ipc-track-panel"><p class="k">SHIP TRACKER — ORDER ' + esc(t.reference || ref) +
+        (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + trackPill(t.status) +
+        stepperHTML(t) + (t.status === 'cancelled' ? '' : latestHTML(t)) + feedHTML(t) +
+        (t.trackingUrl ? '<p style="margin-top:12px"><a class="btn-o btn-sm" href="' + esc(t.trackingUrl) + '" target="_blank" rel="noopener">OPEN COURIER TRACKING</a></p>' : '') +
+        '</div>';
+    }).catch(function (err) {
+      host.innerHTML = '';
+      show(String((err && err.message) || 'TRACKING NOT FOUND — CHECK THE NUMBER AND TRY AGAIN.').toUpperCase(), false);
+    });
+  });
 })();
 </script>
 
@@ -4912,23 +5060,220 @@ setTimeout(function () {
       .catch(function (err) { say(((err.message || 'PASSWORD CHANGE FAILED.') + '').toUpperCase(), false); });
   });
 
-  /* ---- admin: inventory + contacts loaders ---- */
+  /* ---- admin: inventory + the club's own product shelf ---- */
+  var prodStyle = document.createElement('style');
+  prodStyle.textContent = [
+    '.ipc-prod-form{border:1px solid var(--line-2);background:var(--panel);padding:18px 20px;margin-top:16px}',
+    '.ipc-prod-form .k{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin:0 0 14px}',
+    '.ipc-prod-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}',
+    '@media(max-width:860px){.ipc-prod-grid{grid-template-columns:1fr}}',
+    '.ipc-prod-form label{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--faint);margin-bottom:10px;text-transform:uppercase;line-height:1.6}',
+    '.ipc-prod-form input[type=text],.ipc-prod-form input[type=number],.ipc-prod-form select,.ipc-prod-form textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);color:var(--text);padding:9px 10px;font:inherit;font-size:11px;border-radius:0;margin-top:6px}',
+    '.ipc-prod-form input:focus,.ipc-prod-form select:focus,.ipc-prod-form textarea:focus{outline:none;border-color:var(--text)}',
+    '.ipc-prod-form textarea{resize:vertical}',
+    '.ipc-prod-newcol{border:1px dashed var(--line-2);padding:12px 14px;margin:4px 0 10px}',
+    '.ipc-prod-wide{display:block!important}',
+    '.ipc-prod-img-row{display:grid;grid-template-columns:1fr 1fr 140px;gap:12px;align-items:start}',
+    '@media(max-width:860px){.ipc-prod-img-row{grid-template-columns:1fr}}',
+    '.ipc-prod-prev{border:1px solid var(--line-2);padding:6px;min-height:70px;display:flex;align-items:center;justify-content:center}',
+    '.ipc-prod-prev img{max-width:100%;max-height:120px;display:block}',
+    '.ipc-prod-check{display:flex!important;align-items:center;gap:8px;font-family:var(--mono);font-size:9px!important;letter-spacing:.14em;color:var(--muted)!important;margin:12px 0}',
+    '.ipc-prod-check input{width:auto!important;margin:0}',
+    '.ipc-prod-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}',
+    '.prod-flag{font-family:var(--mono);font-size:8px;letter-spacing:.16em;border:1px solid var(--line-2);padding:2px 6px;margin-left:8px;color:var(--muted);white-space:nowrap}',
+    '.prod-flag.core{color:var(--faint)}',
+    '.prod-flag.off{color:var(--muted);opacity:.7}',
+    '.ipc-prod-row td{vertical-align:middle}',
+    'tr.ipc-prod-inactive td{opacity:.5}'
+  ].join('');
+  document.head.appendChild(prodStyle);
+
+  /* the add-a-piece form — open, populate the collection picker, wire the photo */
+  var prodImgData = '';
+  function compressProdImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!/^image\/(jpeg|jpg|png|webp)$/.test(file.type)) { reject(new Error('JPG OR PNG PHOTOS ONLY.')); return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        try {
+          var max = 900;
+          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          var scale = Math.min(1, max / Math.max(w, h));
+          var c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(w * scale));
+          c.height = Math.max(1, Math.round(h * scale));
+          var ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          var out = c.toDataURL('image/jpeg', 0.82);
+          if (out.length > 1500000) { reject(new Error('THAT PHOTO IS STILL TOO HEAVY — TRY A SMALLER ONE.')); return; }
+          resolve(out);
+        } catch (e) { reject(new Error('COULD NOT READ THAT PHOTO.')); }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('COULD NOT READ THAT PHOTO.')); };
+      img.src = url;
+    });
+  }
+  function fillColSelect() {
+    var sel = $('#ipcProdCol');
+    if (!sel) return;
+    var cur = sel.value;
+    var opts = ['<option value="">PICK A COLLECTION…</option>'];
+    IPC.COLLECTIONS.forEach(function (c) {
+      opts.push('<option value="' + esc(c.slug) + '">' + esc(c.title) + (c.soon ? ' (SOON)' : '') + '</option>');
+    });
+    opts.push('<option value="__new">+ ADD A NEW COLLECTION</option>');
+    sel.innerHTML = opts.join('');
+    var stillThere = false;
+    IPC.COLLECTIONS.forEach(function (c) { if (c.slug === cur) stillThere = true; });
+    if (stillThere) sel.value = cur;
+  }
+  function resetProdForm() {
+    prodImgData = '';
+    ['#ipcProdName', '#ipcProdPrice', '#ipcProdTag', '#ipcProdSizes', '#ipcProdColors',
+     '#ipcProdColTitle', '#ipcProdColSlug', '#ipcProdColBlurb', '#ipcProdDesc',
+     '#ipcProdFabric', '#ipcProdFit', '#ipcProdAlt', '#ipcProdImgUrl'].forEach(function (s) {
+      var el = $(s); if (el) el.value = '';
+    });
+    var col = $('#ipcProdCol'); if (col) col.value = '';
+    var chk = $('#ipcProdHome'); if (chk) chk.checked = false;
+    var f = $('#ipcProdImg'); if (f) { try { f.value = ''; } catch (e) {} }
+    var prev = $('#ipcProdPrev'); if (prev) prev.style.display = 'none';
+    var pimg = $('#ipcProdPrevImg'); if (pimg) pimg.src = '';
+    var nc = $('#ipcProdNewCol'); if (nc) nc.style.display = 'none';
+    var msg = $('#ipcProdMsg'); if (msg) { msg.textContent = ''; msg.className = 'form-msg'; }
+  }
+  function openProdForm() {
+    var form = $('#ipcProdForm');
+    if (!form) return;
+    fillColSelect();
+    form.style.display = 'block';
+    if (form.scrollIntoView) try { form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+  }
+  var prodFormWired = false;
+  function wireProdForm() {
+    if (prodFormWired) return;
+    prodFormWired = true;
+    var form = $('#ipcProdForm');
+    if (!form) return;
+    var msg = $('#ipcProdMsg');
+    var show = function (t, ok) { if (msg) { msg.textContent = t; msg.className = 'form-msg show ' + (ok ? 'ok' : 'err'); } };
+    $('#ipcProdCol').addEventListener('change', function () {
+      var nc = $('#ipcProdNewCol');
+      if (nc) nc.style.display = this.value === '__new' ? 'block' : 'none';
+    });
+    $('#ipcProdImg').addEventListener('change', function () {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      show('COMPRESSING THE PHOTO…', true);
+      compressProdImage(file).then(function (dataUrl) {
+        prodImgData = dataUrl;
+        var prev = $('#ipcProdPrev'), pimg = $('#ipcProdPrevImg');
+        if (pimg) pimg.src = dataUrl;
+        if (prev) prev.style.display = 'flex';
+        show('PHOTO READY — ' + Math.round(dataUrl.length / 1365) + 'KB ON THE WIRE.', true);
+      }).catch(function (err) {
+        prodImgData = '';
+        show(String(err.message || 'PHOTO FAILED'), false);
+      });
+    });
+    $('#ipcProdImgUrl').addEventListener('input', function () {
+      var v = String(this.value || '').trim();
+      if (/^https:\/\/\S+$/i.test(v)) {
+        prodImgData = v;
+        var prev = $('#ipcProdPrev'), pimg = $('#ipcProdPrevImg');
+        if (pimg) pimg.src = v;
+        if (prev) prev.style.display = 'flex';
+      } else if (!prodImgData || prodImgData.indexOf('data:') === 0) {
+        /* typed-out URL — clear the link-based preview, keep an uploaded photo */
+      }
+    });
+    $('#ipcProdCancel').addEventListener('click', function () {
+      form.style.display = 'none';
+      resetProdForm();
+    });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var name = String(($('#ipcProdName') || {}).value || '').trim();
+      var priceP = parseFloat(($('#ipcProdPrice') || {}).value);
+      var sizes = String(($('#ipcProdSizes') || {}).value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      var colors = String(($('#ipcProdColors') || {}).value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      var colVal = String(($('#ipcProdCol') || {}).value || '');
+      var imgVal = prodImgData || String(($('#ipcProdImgUrl') || {}).value || '').trim();
+      if (name.length < 2) { show('GIVE THE PIECE A NAME.', false); return; }
+      if (!Number.isFinite(priceP) || priceP <= 0) { show('DROP THE PRICE IN PESOS.', false); return; }
+      if (!sizes.length) { show('LIST THE SIZES — COMMA SEPARATED, "OS" FOR ONE-SIZE.', false); return; }
+      if (!colors.length) { show('LIST AT LEAST ONE COLORWAY.', false); return; }
+      if (!colVal) { show('PICK THE COLLECTION THIS PIECE RIDES.', false); return; }
+      if (!imgVal) { show('THE PIECE NEEDS A PHOTO OR AN IMAGE LINK.', false); return; }
+      var payload = {
+        name: name,
+        priceC: Math.round(priceP * 100),
+        tag: String(($('#ipcProdTag') || {}).value || '').trim(),
+        sizes: sizes,
+        colors: colors,
+        desc: String(($('#ipcProdDesc') || {}).value || '').trim(),
+        fabric: String(($('#ipcProdFabric') || {}).value || '').trim(),
+        fit: String(($('#ipcProdFit') || {}).value || '').trim(),
+        alt: String(($('#ipcProdAlt') || {}).value || '').trim(),
+        home: !!($('#ipcProdHome') || {}).checked,
+        img: imgVal
+      };
+      if (colVal === '__new') {
+        var title = String(($('#ipcProdColTitle') || {}).value || '').trim();
+        if (title.length < 2) { show('NAME THE NEW COLLECTION.', false); return; }
+        payload.collection = String(($('#ipcProdColSlug') || {}).value || title);
+        payload.newCollection = {
+          title: title,
+          blurb: String(($('#ipcProdColBlurb') || {}).value || '').trim()
+        };
+      } else {
+        payload.collection = colVal;
+      }
+      var btn = $('#ipcProdSave');
+      if (btn) { btn.disabled = true; btn.textContent = 'SAVING…'; }
+      IPC.api('/api/admin/products', { method: 'POST', body: payload }).then(function (d) {
+        IPC.toast(d.message || 'PIECE ADDED — LIVE ON THE SHOP');
+        form.style.display = 'none';
+        resetProdForm();
+        loadInventory();
+        return IPC.refreshCatalog().then(function (added) {
+          if (added > 0 || IPC.catalogRefreshView) IPC.catalogRefreshView();
+        });
+      }).catch(function (err) {
+        show(String(((err && err.message) || 'THE PIECE DIDN\'T SAVE — TRY AGAIN.') + '').toUpperCase(), false);
+      }).then(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'SAVE THE PIECE'; }
+      });
+    });
+  }
   function renderInventory(items) {
     var host = $('#admInventory');
     if (!host) return;
-    if (!items.length) { host.innerHTML = '<p class="adm-empty">NO PRODUCTS YET.</p>'; return; }
-    var totalUnits = 0, totalRev = 0;
-    host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-      '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th></tr></thead><tbody>' +
-      items.map(function (p) {
-        totalUnits += p.unitsSold; totalRev += p.revenueCentavos;
-        return '<tr><td><b>' + esc(p.name) + '</b></td><td>' + IPC.fmtP(p.priceCentavos) + '</td><td>' + esc(p.tag || '—') + '</td><td>' + esc(p.sizes.join(' · ')) + '</td><td>' + p.unitsSold + '</td><td><b>' + IPC.fmtP(p.revenueCentavos) + '</b></td></tr>';
-      }).join('') +
-      '</tbody></table></div><p class="count-chip" style="margin-top:14px">TOTALS — ' + totalUnits + ' UNITS · ' + IPC.fmtP(totalRev) + ' VERIFIED</p>';
+    wireProdForm();
+    var customCount = 0, offCount = 0;
+    items.forEach(function (p) { if (p.custom) customCount++; if (p.active === false) offCount++; });
+    var rows = items.map(function (p) {
+      var flags = (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') +
+        (p.active === false ? '<span class="prod-flag off">PULLED</span>' : '');
+      return '<tr class="ipc-prod-row' + (p.active === false ? ' ipc-prod-inactive' : '') + '">' +
+        '<td><b>' + esc(p.name) + '</b>' + flags + '</td><td>' + IPC.fmtP(p.priceCentavos) + '</td><td>' + esc(p.tag || '—') + '</td>' +
+        '<td>' + esc((p.sizes || []).join(' · ')) + '</td><td>' + (p.unitsSold || 0) + '</td><td><b>' + IPC.fmtP(p.revenueCentavos) + '</b></td>' +
+        '<td>' + (p.custom ? '<button type="button" class="btn-o btn-sm" data-prod-remove="' + esc(p.id) + '"' + (p.active === false ? ' disabled' : '') + '>' + (p.active === false ? 'PULLED' : 'PULL') + '</button>' : '<small>—</small>') + '</td></tr>';
+    }).join('');
+    host.innerHTML =
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">' +
+      '<button type="button" class="btn-w btn-sm" id="ipcProdAdd">+ ADD A PIECE</button>' +
+      '<p class="count-chip" style="margin:0">' + customCount + ' CLUB-ADDED' + (offCount ? ' · ' + offCount + ' PULLED' : '') + ' — PULLED PIECES STAY OFF THE SHOP, PAST ORDERS KEEP THEIR RECORD</p></div>' +
+      '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+      '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th><th>SHELF</th></tr></thead><tbody>' +
+      rows + '</tbody></table></div>';
   }
   function loadInventory() {
     var host = $('#admInventory');
     if (!host) return;
+    wireProdForm();
     host.innerHTML = '<p class="adm-empty">LOADING INVENTORY…</p>';
     IPC.api('/api/admin/inventory').then(function (d) { renderInventory(d.inventory || []); })
       .catch(function (err) { host.innerHTML = '<p class="adm-empty">' + esc(((err.message || 'INVENTORY FAILED') + '').toUpperCase()) + '</p>'; });
@@ -4954,6 +5299,36 @@ setTimeout(function () {
       if (pane === 'contacts') loadInquiries();
     });
   });
+  /* add-a-piece + pull-from-shelf — delegated, survives every inventory re-render */
+  document.addEventListener('click', function (ev) {
+    var add = ev.target.closest ? ev.target.closest('#ipcProdAdd') : null;
+    if (add) { openProdForm(); return; }
+    var pull = ev.target.closest ? ev.target.closest('[data-prod-remove]') : null;
+    if (pull && !pull.disabled) {
+      var pid = pull.getAttribute('data-prod-remove');
+      var row = pull.closest('tr');
+      var pname = row ? (row.querySelector('b') || {}).textContent || '' : '';
+      if (!window.confirm('PULL "' + pname.trim().toUpperCase() + '" OFF THE SHOP?\n\nPAST ORDERS KEEP THEIR RECORD — THE PIECE JUST STOPS SHOWING.')) return;
+      pull.disabled = true;
+      IPC.api('/api/admin/products/remove', { method: 'POST', body: { id: pid } })
+        .then(function (d) {
+          IPC.toast(d.message || 'PIECE PULLED FROM THE SHOP');
+          loadInventory();
+          return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
+        })
+        .catch(function (err) {
+          pull.disabled = false;
+          IPC.toast(String(((err && err.message) || 'PULL FAILED') + '').toUpperCase());
+        });
+    }
+  });
+  /* boot — pull the club's saved pieces onto the shelf as soon as the page is up.
+     Silent on failure: the baked catalog keeps the shop open without the server. */
+  if (IPC.refreshCatalog) {
+    IPC.refreshCatalog().then(function (added) {
+      if (added > 0 && IPC.catalogRefreshView) IPC.catalogRefreshView();
+    });
+  }
   } catch (err) {
     if (window.console) console.error('IPC premium wiring init:', err);
   }
