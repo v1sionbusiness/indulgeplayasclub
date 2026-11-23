@@ -414,7 +414,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v28-20261124-clubops";
+const BUILD_STAMP = "ipc-v29-20261124-maintmode";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -1196,6 +1196,50 @@ async function autoVerifyPayment(d, pay) {
 /* The server                                                       */
 /* =============================================================== */
 
+/* ---------- MAINTENANCE MODE — the club closes the floor ----------
+   The state lives in the settings doc and is read through a short
+   cache, so gating costs nothing while the site is open. While the
+   wall is up: admins always pass, logged-in members pass only when
+   the club allows it, guests and everyone else get a 503. The config
+   and auth endpoints stay open so the stand-by screen can render and
+   admins can still sign in. If the database is unreachable the site
+   stays OPEN — a closed store must never be a state the shop can't
+   recover from. ---------------------------------------------------- */
+let maintCache = { at: 0, state: { enabled: false, allowMembers: true, message: "" } };
+async function maintenanceState() {
+  const now = Date.now();
+  if (maintCache.state && now - maintCache.at < 10000) return maintCache.state;
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const cfg = await d.collection("settings").findOne({ _id: "club" });
+    const m = (cfg && cfg.maintenance) || {};
+    maintCache = {
+      at: now,
+      state: {
+        enabled: !!m.enabled,
+        allowMembers: m.allowMembers !== false,
+        message: String(m.message || "").slice(0, 240),
+      },
+    };
+  } catch { /* keep the last known state — default open */ }
+  return maintCache.state;
+}
+function maintenanceExempt(p) {
+  return p === "/api/config" || p === "/healthz" || p === "/api/ipc-pay/health" ||
+    p.indexOf("/api/auth/") === 0 || p.indexOf("/api/admin/") === 0;
+}
+async function maintenanceGate(req, res, p) {
+  const st = await maintenanceState();
+  if (!st.enabled) return false;
+  if (maintenanceExempt(p)) return false;
+  const found = await userFromReq(req).catch(() => null);
+  if (found && found.user && found.user.role === "admin") return false;
+  if (st.allowMembers && found) return false;
+  fail(res, 503, "maintenance", st.message || "THE CLUB IS SETTING THE FLOOR — STAND BY FOR THE DROP.");
+  return true;
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, CORS);
@@ -1213,6 +1257,11 @@ async function route(req, res) {
     (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
     req.socket.remoteAddress ||
     "unknown";
+
+  /* the club can close the floor while it sets up a drop — non-admin API
+     traffic gets a 503 while the wall is up. The SPA itself still serves
+     so visitors see the stand-by screen, not a dead connection. */
+  if (p.indexOf("/api/") === 0 && (await maintenanceGate(req, res, p))) return;
 
   /* ---------------- GET routes ---------------- */
   if (req.method === "GET") {
@@ -1821,6 +1870,7 @@ async function route(req, res) {
   if (p === "/api/admin/streets/remove") return handleAdminStreetRemove(req, res);
   if (p === "/api/analytics/event") return handleAnalyticsEvent(req, res, ip);
   if (p === "/api/admin/config") return handleConfigSet(req, res);
+  if (p === "/api/admin/maintenance") return handleMaintenanceSet(req, res);
   if (p === "/api/admin/collections/state") return handleCollectionState(req, res);
 
   return send(res, 404, { ok: false, reason: "not_found" });
@@ -4147,13 +4197,53 @@ async function handleAdminFunnel(req, res) {
 
 async function handleConfigGet(req, res) {
   let usdPhpRate = 58;
+  let maintenance = { enabled: false, allowMembers: true, message: "" };
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     const cfg = await d.collection("settings").findOne({ _id: "club" });
     if (cfg && Number(cfg.usdPhpRate) > 0) usdPhpRate = Number(cfg.usdPhpRate);
+    const m = (cfg && cfg.maintenance) || {};
+    maintenance = {
+      enabled: !!m.enabled,
+      allowMembers: m.allowMembers !== false,
+      message: String(m.message || "").slice(0, 240),
+    };
   } catch { /* defaults hold */ }
-  return send(res, 200, { ok: true, usdPhpRate });
+  return send(res, 200, { ok: true, usdPhpRate, maintenance });
+}
+
+/* the wall switch — admin-only, logged with who flipped it and when */
+async function handleMaintenanceSet(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const enabled = !!body.enabled;
+  const allowMembers = body.allowMembers === undefined ? true : !!body.allowMembers;
+  const message = String(body.message ?? "").trim().slice(0, 240);
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("settings").updateOne(
+      { _id: "club" },
+      { $set: { maintenance: { enabled, allowMembers, message, updatedAt: new Date(), updatedBy: found.user.email } } },
+      { upsert: true }
+    );
+    maintCache = { at: 0, state: null }; /* the gate re-reads on the next request */
+    await logActivity(d, found.user.email, "settings_maintenance", "settings", "site_wall",
+      enabled ? "SITE CLOSED — WALL UP" : "SITE REOPENED",
+      (enabled ? "WALL UP" : "WALL DOWN") + " · MEMBERS " + (allowMembers ? "LET THROUGH" : "BLOCKED") +
+        (message ? " · MESSAGE: " + message.slice(0, 120) : ""));
+    return send(res, 200, { ok: true, maintenance: { enabled, allowMembers, message },
+      message: enabled
+        ? (allowMembers ? "THE WALL IS UP — ADMINS AND LOGGED-IN MEMBERS STILL SEE THE SITE."
+          : "THE WALL IS UP — ADMINS ONLY UNTIL IT COMES DOWN.")
+        : "THE FLOOR IS OPEN — THE CLUB IS BACK IN BUSINESS." });
+  } catch (err) {
+    return mongoError(res, err, "maintenance save failed");
+  }
 }
 
 async function handleConfigSet(req, res) {

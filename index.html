@@ -2749,7 +2749,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v28-20261124-clubops';
+  var IPC_BUILD = 'ipc-v29-20261124-maintmode';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2993,6 +2993,7 @@ img.tc-true{filter:none !important}
         if (p.home === 'main' && p.featured) p.homeMain = true;
       });
       IPC.catalogFresh = true;
+      IPC.__lastCatalogAt = Date.now();
       (d.collections || []).forEach(function (c) {
         if (!c || !c.slug) return;
         var known = false;
@@ -3374,6 +3375,13 @@ img.tc-true{filter:none !important}
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
         if (!r.ok) {
+          /* the club closed the floor — raise the wall right away instead
+             of letting the page fill with error toasts */
+          if (r.status === 503 && d && d.reason === 'maintenance') {
+            IPC.cfg = IPC.cfg || {};
+            IPC.cfg.maintenance = { enabled: true, allowMembers: false, message: (d && d.message) || '' };
+            if (IPC.applyMaintenance) { try { IPC.applyMaintenance(); } catch (eM) {} }
+          }
           var e = new Error((d && d.message) || 'REQUEST FAILED');
           e.status = r.status;
           e.reason = d && d.reason;
@@ -3582,7 +3590,10 @@ img.tc-true{filter:none !important}
       /* per-surface visibility: the ALL shelf answers to the shop switch,
          a collection page answers to the collection switch */
       if (shopFilter === 'all' || shopFilter === 'summer') { if (p.shopVisible === false) return false; }
-      else if (p.collectionVisible === false) return false;
+      /* a collection page answers to the collection switch AND the shop
+         switch — a piece pulled from the shop can never keep selling off a
+         collection page, no matter what an old visibility row says */
+      else if (p.collectionVisible === false || p.shopVisible === false) return false;
       if (shopFilter !== 'all' && p.collection !== shopFilter) return false;
       if (q && (p.name + ' ' + p.colors.join(' ') + ' ' + (IPC.colTitle(p.collection) || '')).toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -3870,7 +3881,7 @@ img.tc-true{filter:none !important}
           '<div class="col-soon-body"><p class="soon-p">IN THE LAB — FIRST ACCESS GOES TO THE MAILING LIST.</p><a href="#top" class="btn-o btn-sm" data-anchor="#newsletter">JOIN THE LIST</a></div>' +
         '</section>';
       }
-      var items = IPC.PRODUCTS.filter(function (p) { return p.collection === c.slug; });
+      var items = IPC.PRODUCTS.filter(function (p) { return p.collection === c.slug && !p.hidden && p.shopVisible !== false; });
       return '<section class="col-card reveal">' +
         '<div class="col-head">' +
           '<div><p class="kicker dark" style="margin-bottom:14px">' + esc(c.title) + '</p>' +
@@ -5206,16 +5217,87 @@ img.tc-true{filter:none !important}
   var esc = IPC.esc;
 
   /* club config — USD approximation rate, fetched once */
-  IPC.cfg = { usdPhpRate: 58 };
+  IPC.cfg = { usdPhpRate: 58, maintenance: { enabled: false, allowMembers: true, message: '' } };
   (function () {
     IPC.api('/api/config').then(function (d) {
       if (d && d.usdPhpRate > 0) IPC.cfg.usdPhpRate = d.usdPhpRate;
+      if (d && d.maintenance) IPC.cfg.maintenance = d.maintenance;
+      if (IPC.applyMaintenance) IPC.applyMaintenance();
     }).catch(function () {});
   })();
+  /* re-read the club config when the tab wakes up — the wall can go up or
+     down while this visitor sat in another tab, and the catalog ages too */
+  IPC.refreshClubConfig = function () {
+    return IPC.api('/api/config').then(function (d) {
+      if (d && d.usdPhpRate > 0) IPC.cfg.usdPhpRate = d.usdPhpRate;
+      if (d && d.maintenance) IPC.cfg.maintenance = d.maintenance;
+      if (IPC.applyMaintenance) IPC.applyMaintenance();
+      return d;
+    }).catch(function () { return null; });
+  };
   IPC.fmtUsd = function (centavos) {
     var usd = (Number(centavos) || 0) / 100 / IPC.cfg.usdPhpRate;
     return '\u2248 $' + usd.toFixed(2) + ' USD';
   };
+
+  /* ---------------- THE WALL — maintenance / drop stand-by ----------------
+     The club can close the floor while it sets up a drop or works on the
+     site. Admins always see through it; logged-in members only when the
+     club allows; everyone else gets the stand-by screen. Login, signup,
+     account and admin stay reachable so the team can sign in and work. */
+  var WALL_ROUTES = ['login', 'signup', 'account', 'admin'];
+  IPC.applyMaintenance = function () {
+    var m = IPC.cfg.maintenance || {};
+    var u = IPC.auth ? IPC.auth.user : null;
+    var isAdmin = !!(u && u.role === 'admin');
+    var locked = !!m.enabled && !isAdmin && !(m.allowMembers !== false && !!u);
+    var head = (location.hash || '#/').replace(/^#\/?/, '').split('?')[0].split('/')[0] || 'home';
+    if (WALL_ROUTES.indexOf(head) >= 0) locked = false;
+    var wall = document.getElementById('ipcWall');
+    if (!wall) {
+      wall = document.createElement('div');
+      wall.id = 'ipcWall';
+      wall.className = 'ipc-wall';
+      wall.innerHTML =
+        '<div class="ipc-wall-card">' +
+        '<p class="ipc-wall-kicker">INDULGE PLAYAS CLUB</p>' +
+        '<h2 class="ipc-wall-title">STAND<br />BY<span class="dim">.</span></h2>' +
+        '<p class="ipc-wall-msg"></p>' +
+        '<p class="ipc-wall-note">THE DOORS OPEN AGAIN THE MOMENT THE CLUB IS READY. ADMINS — SIGN IN TO WORK.</p>' +
+        '<a href="#/login" class="cf-send" data-route="login"><span class="cf-send-label">ACCOUNT — SIGN IN</span>' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg></a>' +
+        '</div>';
+      document.body.appendChild(wall);
+      var ws = document.createElement('style');
+      ws.textContent =
+        '.ipc-wall{position:fixed;inset:0;background:var(--bg);z-index:950;display:none;align-items:center;justify-content:center;text-align:center;padding:28px}' +
+        '.ipc-wall.show{display:flex}' +
+        '.ipc-wall-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.3em;color:var(--faint);text-transform:uppercase;display:flex;align-items:center;gap:12px;justify-content:center}' +
+        '.ipc-wall-kicker::before,.ipc-wall-kicker::after{content:"";width:26px;height:1px;background:var(--line-2);display:inline-block}' +
+        '.ipc-wall-title{font-family:var(--display);font-size:clamp(54px,13vw,120px);color:var(--text);line-height:.92;text-transform:uppercase;margin-top:22px}' +
+        '.ipc-wall-title .dim{color:var(--faint)}' +
+        '.ipc-wall-msg{font-family:var(--mono);font-size:12px;letter-spacing:.18em;color:var(--muted);max-width:540px;margin:28px auto 0;text-transform:uppercase;line-height:2}' +
+        '.ipc-wall-note{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--faint);max-width:460px;margin:14px auto 0;text-transform:uppercase;line-height:1.9}' +
+        'body.ipc-locked .nav-links a[data-route]:not([data-route="account"]),body.ipc-locked .mmenu .mlink:not([data-route="account"]),body.ipc-locked .mmenu .mlink[data-route="pay"]{display:none}';
+      document.head.appendChild(ws);
+    }
+    wall.classList.toggle('show', locked);
+    document.body.classList.toggle('ipc-locked', locked);
+    var msgEl = wall.querySelector('.ipc-wall-msg');
+    if (msgEl) msgEl.textContent = (locked && m.message) ? m.message : 'THE CLUB IS SETTING THE FLOOR — STAND BY FOR THE DROP.';
+    return locked;
+  };
+  document.addEventListener('ipc:auth', function () { if (IPC.applyMaintenance) IPC.applyMaintenance(); });
+  window.addEventListener('hashchange', function () { if (IPC.applyMaintenance) IPC.applyMaintenance(); });
+  /* the wall flips and catalog edits land while this tab slept — wake,
+     re-read the club config, and repaint a catalog older than a minute */
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden || !IPC.api) return;
+    if (IPC.refreshClubConfig) IPC.refreshClubConfig();
+    if (IPC.__lastCatalogAt && Date.now() - IPC.__lastCatalogAt > 60000 && IPC.refreshCatalog) {
+      IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); }).catch(function () {});
+    }
+  });
 
   /* privacy-friendly funnel events — first-party, no cookies, no PII.
      The visitor id is a random string in localStorage; that's the whole record. */
@@ -6862,6 +6944,15 @@ setTimeout(function () {
       '<form id="usdForm" class="rev-form"><label>RATE (PHP PER 1 USD)<input id="usdRate" type="number" min="20" max="120" step="0.5" /></label>' +
       '<button type="submit" class="btn-o btn-sm">SAVE THE RATE</button>' +
       '<p class="form-msg" id="usdMsg" role="status" aria-live="polite"></p></form></div>' +
+      '<div class="club-card" style="margin-top:18px"><h4>THE WALL — CLOSE THE SITE WHILE YOU WORK</h4>' +
+      '<p>FLIP THIS WHILE YOU SET UP A DROP OR FIX THINGS. ADMINS ALWAYS SEE THROUGH THE WALL; LOGGED-IN MEMBERS ONLY WHEN YOU LET THEM; EVERYONE ELSE GETS THE STAND-BY SCREEN. LOGIN, ACCOUNT AND ADMIN STAY OPEN SO THE TEAM CAN SIGN IN.</p>' +
+      '<form id="maintForm" class="rev-form" novalidate>' +
+      '<label class="ipc-prod-check"><input type="checkbox" id="maintOn" /> CLOSE THE WEBSITE — WALL UP</label>' +
+      '<label class="ipc-prod-check"><input type="checkbox" id="maintMembers" /> LET LOGGED-IN MEMBERS THROUGH</label>' +
+      '<label>MESSAGE ON THE WALL<input id="maintMsg" maxlength="240" placeholder="E.G. STAND BY — THE NEW DROP LANDS AT 8PM SHARP." /></label>' +
+      '<button type="submit" class="btn-w btn-sm">SAVE THE WALL</button>' +
+      '<p class="form-msg" id="maintMsgLine" role="status" aria-live="polite"></p>' +
+      '</form></div>' +
       '<div class="sop-card" style="margin-top:18px"><h4 style="font-family:var(--mono);font-size:11px;letter-spacing:.22em">REFUND SOP — ONE PATH, NO ARGUMENTS</h4>' +
       '<ol>' +
       '<li>A refund applies ONLY when the piece is unworn, unwashed, tags on — or when the club shipped the wrong item / the item arrived damaged.</li>' +
@@ -6870,6 +6961,18 @@ setTimeout(function () {
       '<li>Return the peso amount to the member\u2019s Maya/GCash by the reference they paid from, then paste the transfer reference into the tracking note.</li>' +
       '<li>Everything stays in the audit trail — who approved, when, and the money reference. Never mark an unpaid refund as paid.</li>' +
       '</ol></div>';
+    /* the wall card pre-fills with the state the club last saved */
+    var mw = IPC.cfg.maintenance || {};
+    var mOn = $('#maintOn'), mMem = $('#maintMembers'), mMsg = $('#maintMsg');
+    if (mOn) mOn.checked = !!mw.enabled;
+    if (mMem) mMem.checked = mw.allowMembers !== false;
+    if (mMsg && !mMsg.value) mMsg.value = mw.message || '';
+    if (IPC.refreshClubConfig) IPC.refreshClubConfig().then(function () {
+      var m2 = IPC.cfg.maintenance || {};
+      if (mOn) mOn.checked = !!m2.enabled;
+      if (mMem) mMem.checked = m2.allowMembers !== false;
+      if (mMsg) mMsg.value = m2.message || mMsg.value;
+    });
   }
 
   /* ---------- funnel strip ---------- */
@@ -7084,6 +7187,35 @@ setTimeout(function () {
           um.textContent = String(((err && err.message) || 'SAVE FAILED') + '').toUpperCase();
           um.className = 'form-msg err show';
         });
+    }
+    var mf = ev.target && ev.target.id === 'maintForm' ? ev.target : null;
+    if (mf) {
+      ev.preventDefault();
+      var mm = $('#maintMsgLine');
+      var showM = function (t, ok) { if (mm) { mm.textContent = t; mm.className = 'form-msg show ' + (ok ? 'ok' : 'err'); } };
+      var payload = {
+        enabled: !!($('#maintOn') || {}).checked,
+        allowMembers: !!($('#maintMembers') || {}).checked,
+        message: String(($('#maintMsg') || {}).value || '').trim(),
+      };
+      if (payload.enabled && !payload.message.trim()) {
+        showM('GIVE THE WALL A MESSAGE — VISITORS READ IT WHILE THE DOORS ARE SHUT.', false);
+        return;
+      }
+      var btn = mf.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; }
+      IPC.api('/api/admin/maintenance', { method: 'POST', body: payload })
+        .then(function (d) {
+          showM(d.message || 'THE WALL STATE SAVED.', true);
+          IPC.cfg.maintenance = d.maintenance || IPC.cfg.maintenance;
+          if (IPC.applyMaintenance) IPC.applyMaintenance();
+          /* the wall state lands in the audit trail too — refresh the pane */
+          loadFunnel();
+        })
+        .catch(function (err) {
+          showM(String(((err && err.message) || 'WALL SAVE FAILED') + '').toUpperCase(), false);
+        })
+        .then(function () { if (btn) btn.disabled = false; });
     }
   });
 
