@@ -85,6 +85,30 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+/* Security headers — every response (API, HTML, assets) carries the same set.
+   CSP keeps 'unsafe-inline' because the whole storefront ships as one inline
+   script/style document; tightening that is a later pass. Clickjacking is
+   closed with frame-ancestors 'none' + X-Frame-Options DENY. */
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join("; "),
+};
+
 /* --------------------------------------------------------------- */
 /* Rate limits (tiny in-memory buckets — fine for a club site)      */
 /* --------------------------------------------------------------- */
@@ -164,7 +188,9 @@ const TAG_WHITELIST = ["", "NEW DROP", "PRE-ORDER", "RESTOCK", "LIMITED", "CLUB 
 
 /* The client-facing shape of a saved piece — mirrors the baked-in catalog
    fields (priceC, img, collection…) so the shop renders both kinds alike. */
-function productView(doc) {
+function productView(doc, soldUnits) {
+  const batch = Math.round(Number(doc.batchSize) || 0);
+  const sold = Math.round(Number(soldUnits) || 0);
   return {
     id: doc.id,
     name: doc.name,
@@ -180,6 +206,11 @@ function productView(doc) {
     collection: doc.collection || "",
     home: !!doc.home,
     custom: true,
+    modelInfo: doc.modelInfo || "",
+    /* honest scarcity: batch remainder when the club set a batch size */
+    batchSize: batch > 0 ? batch : 0,
+    unitsSold: sold,
+    remaining: batch > 0 ? Math.max(0, batch - sold) : null,
   };
 }
 
@@ -201,7 +232,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v20-20261123-auditfixes";
+const BUILD_STAMP = "ipc-v21-20261123-growthimpl";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 function serveIndex(req, res) {
@@ -367,6 +398,7 @@ function serveIndex(req, res) {
       res.writeHead(304, {
         ETag: etag,
         "Cache-Control": "no-cache",
+        ...SECURITY_HEADERS,
       });
       return res.end();
     }
@@ -374,12 +406,116 @@ function serveIndex(req, res) {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-cache",
       ETag: etag,
+      ...SECURITY_HEADERS,
     });
     res.end(html);
     return true;
   } catch {
     return false; // no index.html here → caller falls back to the health JSON
   }
+}
+
+/* --------------------------------------------------------------- */
+/* Static assets (extracted build images + tiny client libs)         */
+/* --------------------------------------------------------------- */
+
+const SITE_ORIGIN = process.env.IPC_SITE_ORIGIN || "https://indulgeplayasclub.onrender.com";
+const ASSETS_DIR = path.join(__dirname, "assets");
+const ASSET_TYPES = {
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+  ".webp": "image/webp", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".css": "text/css; charset=utf-8", ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8", ".woff2": "font/woff2",
+};
+
+function serveStaticAsset(req, res, pathname) {
+  const rel = pathname.replace(/^\/assets\//, "").replace(/\\/g, "/");
+  /* one flat allow-list — no traversal, no surprises */
+  if (!/^[a-z0-9][a-z0-9\-./]*$/i.test(rel) || rel.includes("..") || rel.includes("//")) {
+    return fail(res, 404, "not_found", "NO SUCH ASSET.");
+  }
+  const file = path.join(ASSETS_DIR, rel);
+  if (!file.startsWith(ASSETS_DIR)) return fail(res, 404, "not_found", "NO SUCH ASSET.");
+  let data;
+  try { data = fs.readFileSync(file); } catch { return fail(res, 404, "not_found", "NO SUCH ASSET."); }
+  const etag = '"' + crypto.createHash("sha1").update(data).digest("hex").slice(0, 24) + '"';
+  const inm = String(req.headers["if-none-match"] || "");
+  const cache = rel.endsWith(".js") || rel.endsWith(".json")
+    ? "public, max-age=86400"
+    : "public, max-age=2592000";
+  if (inm.indexOf(etag.slice(1, -1)) >= 0) {
+    res.writeHead(304, { ETag: etag, "Cache-Control": cache, ...SECURITY_HEADERS });
+    return res.end();
+  }
+  res.writeHead(200, {
+    "Content-Type": ASSET_TYPES[path.extname(file).toLowerCase()] || "application/octet-stream",
+    "Cache-Control": cache,
+    ETag: etag,
+    ...SECURITY_HEADERS,
+  });
+  return res.end(data);
+}
+
+/* robots.txt — allow everything, point at the sitemap */
+function serveRobots(res) {
+  const body = "User-agent: *\nAllow: /\n\nSitemap: " + SITE_ORIGIN + "/sitemap.xml\n";
+  res.writeHead(200, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "public, max-age=3600",
+    ...SECURITY_HEADERS,
+  });
+  return res.end(body);
+}
+
+/* sitemap.xml — clean path routes plus every live product and collection */
+async function serveSitemap(req, res) {
+  let productUrls = "";
+  let collectionUrls = "";
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const prods = await d.collection("products").find({ active: { $ne: false } })
+      .project({ id: 1, updatedAt: 1 }).limit(500).toArray();
+    productUrls = prods.map((p) =>
+      "  <url><loc>" + SITE_ORIGIN + "/p/" + encodeURIComponent(p.id) + "</loc><priority>0.8</priority></url>"
+    ).join("\n");
+    const cols = await d.collection("collections").find({})
+      .project({ slug: 1 }).limit(200).toArray();
+    collectionUrls = cols.map((c) =>
+      "  <url><loc>" + SITE_ORIGIN + "/collection/" + encodeURIComponent(c.slug) + "</loc><priority>0.7</priority></url>"
+    ).join("\n");
+  } catch { /* sitemap still serves the static routes */ }
+  const now = new Date().toISOString().slice(0, 10);
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/</loc><priority>1.0</priority></url>\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/shop</loc><priority>0.9</priority></url>\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/story</loc><priority>0.6</priority></url>\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/faq</loc><priority>0.5</priority></url>\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/terms</loc><priority>0.3</priority></url>\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/privacy</loc><priority>0.3</priority></url>\n' +
+    '  <url><loc>' + SITE_ORIGIN + '/contact</loc><priority>0.5</priority></url>\n' +
+    collectionUrls + "\n" + productUrls + "\n" +
+    '</urlset>';
+  res.writeHead(200, {
+    "Content-Type": "application/xml; charset=utf-8",
+    "Cache-Control": "public, max-age=3600",
+    ...SECURITY_HEADERS,
+  });
+  return res.end(xml);
+}
+
+/* Clean app paths → SPA. /shop, /p/<id>, /collection/<slug>, /track/<ref>, … */
+const APP_PATHS = new Set(["shop", "story", "faq", "terms", "privacy", "contact",
+  "account", "admin", "bag", "checkout", "login", "signup", "lookbook", "collections"]);
+function looksLikeAppPath(p) {
+  const seg = p.replace(/^\/+|\/+$/g, "").split("/");
+  if (seg.length === 0) return false;
+  if (APP_PATHS.has(seg[0])) return true;
+  /* /p/<id>, /collection/<slug>, /pay/<ref>, /track/<ref> */
+  return (seg.length === 2 && ["p", "collection", "pay", "track"].includes(seg[0]));
 }
 
 /* --------------------------------------------------------------- */
@@ -391,6 +527,7 @@ function send(res, status, obj) {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     ...CORS,
+    ...SECURITY_HEADERS,
   });
   res.end(JSON.stringify(obj));
 }
@@ -720,6 +857,7 @@ async function autoVerifyPayment(d, pay) {
       { $set: { paymentRejections: [] }, $unset: { paymentCooldownUntil: "" } }
     );
     await ensureTracking(d, fresh.orderReference, "IPC TEAM");
+    await creditReferralIfAny(d, fresh.orderReference);
     const orderForEmail = await d.collection("orders").findOne({ reference: fresh.orderReference });
     await sendPaymentEmail({ ...fresh, status: "paid" }, orderForEmail, "PAID",
       "IPC Pay read your payment screenshot — the Maya amount and transaction reference matched your order. Your order is confirmed and order tracking is now live in your account.");
@@ -771,9 +909,21 @@ async function route(req, res) {
         });
     }
     if (p === "/healthz") return send(res, 200, HEALTH);
+    /* Static build assets — images, the QR encoder, geo suggestions.
+       Long-lived caching + ETag revalidation; the HTML itself stays no-cache. */
+    if (p.startsWith("/assets/")) return serveStaticAsset(req, res, p);
+    if (p === "/robots.txt") return serveRobots(res);
+    if (p === "/sitemap.xml") return serveSitemap(req, res);
     if (p === "/" || p === "/index.html") {
       if (serveIndex(req, res)) return;
       return send(res, 200, HEALTH);
+    }
+    /* Clean path routes — shareable, indexable versions of the hash views.
+      The SPA boots, translates the path to its hash route and renders;
+      nothing inside the app changes. Unknown extension-less paths fall
+      through to the SPA too (deep links never 404). */
+    if (looksLikeAppPath(p)) {
+      if (serveIndex(req, res)) return;
     }
 
     /* --- account: who am I --- */
@@ -798,6 +948,20 @@ async function route(req, res) {
       } catch (err) {
         user.membership = null; /* DB hiccup — the profile still loads */
       }
+      /* club extras: personal referral code (auto-issued on first look),
+         birthday voucher trigger, and whether 2FA is armed */
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        const fresh = await findUserById(user.id);
+        if (fresh) {
+          user.twoFAEnabled = !!fresh.twoFAEnabled;
+          const code = await ensureReferralCode(d, fresh);
+          user.referral = { code: code || fresh.referralCode, count: fresh.referralCount || 0 };
+          const bdayCode = await ensureBirthdayVoucher(d, fresh);
+          if (bdayCode) user.birthdayVoucher = bdayCode;
+        }
+      } catch { /* profile extras never block the profile */ }
       return send(res, 200, { ok: true, user });
     }
 
@@ -825,11 +989,13 @@ async function route(req, res) {
       }
     }
 
-    /* --- one payment (owner or admin) --- */
+    /* --- one payment (owner, admin, or the guest with the receipt token) --- */
     const payMatch = p.match(/^\/api\/payments\/([A-Za-z0-9-]+)$/);
     if (payMatch) {
       const found = await userFromReq(req).catch(() => null);
-      if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+      const guestToken = new URL(req.url, "http://x").searchParams.get("guestToken") || "";
+      const guestOk = /^[a-f0-9]{32,128}$/.test(guestToken);
+      if (!found && !guestOk) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
       try {
         const { connect } = require("./ipc-pay/mongo");
         const d = await connect();
@@ -837,14 +1003,16 @@ async function route(req, res) {
           .findOne({ paymentReference: payMatch[1].toUpperCase() });
         if (!pay) return fail(res, 404, "not_found", "NO PAYMENT FOUND FOR THAT REFERENCE.");
         const order = await d.collection("orders").findOne({ reference: pay.orderReference });
-        const isOwner = String(pay.userId) === String(found.user._id) ||
-          (order && String(order.userId) === String(found.user._id));
-        if (!isOwner && found.user.role !== "admin") {
+        const isOwner = (found && (String(pay.userId) === String(found.user._id) ||
+          (order && String(order.userId) === String(found.user._id))));
+        /* guests prove ownership with the one-off receipt token */
+        const guestMatch = !found && order && order.guestToken === guestToken;
+        if (!isOwner && !guestMatch && (!found || found.user.role !== "admin")) {
           return fail(res, 403, "forbidden", "THIS PAYMENT BELONGS TO ANOTHER ACCOUNT.");
         }
         return send(res, 200, {
           ok: true,
-          payment: paymentView(pay, order, found.user.role === "admin"),
+          payment: paymentView(pay, order, found && found.user.role === "admin"),
         });
       } catch (err) {
         return mongoError(res, err, "payment lookup failed");
@@ -893,20 +1061,39 @@ async function route(req, res) {
           .sort({ createdAt: -1 }).limit(200).toArray();
         const cols = await d.collection("collections")
           .find({}).sort({ createdAt: -1 }).limit(50).toArray();
+        /* honest scarcity: units sold per piece from PAID orders */
+        const soldRows = await d.collection("orders").aggregate([
+          { $match: { status: "paid" } },
+          { $unwind: "$items" },
+          { $group: { _id: "$items.productId", units: { $sum: "$items.qty" } } },
+        ]).toArray();
+        const soldMap = {};
+        soldRows.forEach((s) => { soldMap[s._id] = s.units; });
         return send(res, 200, {
           ok: true,
-          products: docs.map(productView),
+          products: docs.map((doc) => productView(doc, soldMap[doc.id] || 0)),
           collections: cols.map((c) => ({
             slug: c.slug,
             title: c.title,
             blurb: c.blurb || "",
             soon: !!c.soon,
+            launchState: c.launchState || "none",
+            tierGate: c.tierGate || "none",
+            launchAt: c.launchAt || null,
+            storyNote: c.storyNote || "",
           })),
         });
       } catch (err) {
         return mongoError(res, err, "catalog failed");
       }
     }
+
+    /* --- growth platform: reviews, community wall, config, admin views --- */
+    if (p === "/api/reviews") return handleReviewsGet(req, res, req.url);
+    if (p === "/api/streets") return handleStreetsGet(req, res);
+    if (p === "/api/config") return handleConfigGet(req, res);
+    if (p === "/api/admin/reviews") return handleAdminReviews(req, res);
+    if (p === "/api/admin/funnel") return handleAdminFunnel(req, res);
 
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
@@ -945,6 +1132,12 @@ async function route(req, res) {
               collection: doc.collection || "",
               sizes: doc.sizes || [],
               colors: doc.colors || [],
+              desc: doc.desc || "",
+              fabric: doc.fabric || "",
+              fit: doc.fit || "",
+              alt: doc.alt || "",
+              modelInfo: doc.modelInfo || "",
+              batchSize: doc.batchSize || 0,
               home: !!doc.home,
               active: doc.active !== false,
               createdAt: doc.createdAt,
@@ -1116,6 +1309,14 @@ async function route(req, res) {
     return handleAuth(req, res, ip, p);
   }
 
+  /* --- self-service password reset + admin two-factor --- */
+  if (p === "/api/auth/forgot") return handleForgotPassword(req, res, ip);
+  if (p === "/api/auth/reset") return handleResetPassword(req, res, ip);
+  if (p === "/api/auth/2fa/setup") return handle2faSetup(req, res);
+  if (p === "/api/auth/2fa/enable") return handle2faEnable(req, res);
+  if (p === "/api/auth/2fa/disable") return handle2faDisable(req, res);
+  if (p === "/api/auth/2fa/verify") return handle2faVerify(req, res, ip);
+
   if (p === "/api/auth/password") return handlePasswordChange(req, res);
 
   /* --- newsletter signup: small body, self rate-limited --- */
@@ -1125,16 +1326,33 @@ async function route(req, res) {
   if (p === "/api/admin/role") return handleAdminRole(req, res);
 
   /* --- voucher validation + admin voucher management: 20KB --- */
-  if (p === "/api/vouchers/validate") return handleValidateVoucher(req, res);
+  if (p === "/api/vouchers/validate") {
+    if (rateLimited(ip, 20, 15 * 60 * 1000, "voucher")) {
+      return fail(res, 429, "rate_limited", "TOO MANY VOUCHER CHECKS — GIVE IT A FEW MINUTES.");
+    }
+    return handleValidateVoucher(req, res);
+  }
   if (p === "/api/admin/vouchers") return handleAdminVoucherCreate(req, res);
   if (p === "/api/admin/vouchers/toggle") return handleAdminVoucherToggle(req, res);
 
-  /* --- orders: 20KB --- */
-  if (p === "/api/orders") return handleCreateOrder(req, res);
+  /* --- orders: 20KB — rate limited against scripted order spam --- */
+  if (p === "/api/orders") {
+    if (rateLimited(ip, 12, 15 * 60 * 1000, "orders")) {
+      return fail(res, 429, "rate_limited", "TOO MANY ORDERS IN A ROW — TAKE A BREATH AND TRY AGAIN.");
+    }
+    return handleCreateOrder(req, res);
+  }
+  /* attach a guest order to a freshly created account */
+  if (p === "/api/orders/link") return handleOrdersLink(req, res);
 
   /* --- proof upload: the ONE route allowed a big body (8MB covers a
-         5MB image after base64 inflation) --- */
-  if (p === "/api/payments/proof") return handleProof(req, res);
+         5MB image after base64 inflation) — rate limited + capped per order --- */
+  if (p === "/api/payments/proof") {
+    if (rateLimited(ip, 10, 15 * 60 * 1000, "proof")) {
+      return fail(res, 429, "rate_limited", "TOO MANY PROOF UPLOADS — TRY AGAIN IN A FEW MINUTES.");
+    }
+    return handleProof(req, res);
+  }
 
   /* --- admin decision: 20KB --- */
   if (p === "/api/admin/decision") return handleDecision(req, res);
@@ -1150,6 +1368,15 @@ async function route(req, res) {
   /* --- club inventory: the team adds their own pieces straight to the shop --- */
   if (p === "/api/admin/products/remove") return handleAdminProductRemove(req, res);
   if (p === "/api/admin/products") return handleAdminProductSave(req, res);
+
+  /* --- growth platform: reviews, streets, funnel, config, launch states --- */
+  if (p === "/api/reviews") return handleReviewCreate(req, res);
+  if (p === "/api/admin/reviews/moderate") return handleAdminReviewModerate(req, res);
+  if (p === "/api/admin/streets") return handleAdminStreetAdd(req, res);
+  if (p === "/api/admin/streets/remove") return handleAdminStreetRemove(req, res);
+  if (p === "/api/analytics/event") return handleAnalyticsEvent(req, res, ip);
+  if (p === "/api/admin/config") return handleConfigSet(req, res);
+  if (p === "/api/admin/collections/state") return handleCollectionState(req, res);
 
   return send(res, 404, { ok: false, reason: "not_found" });
 }
@@ -1369,6 +1596,9 @@ async function handleAuth(req, res, ip, p) {
       let phone;
       try { phone = normalizePhilippineMobile(body.phone); }
       catch (err) { return fail(res, 422, "invalid_phone", err.message); }
+      /* optional birth month — powers the birthday voucher (1-12) */
+      let birthMonth = Math.round(Number(body.birthMonth));
+      if (!Number.isFinite(birthMonth) || birthMonth < 1 || birthMonth > 12) birthMonth = 0;
       if (!name) return fail(res, 422, "invalid", "DROP YOUR NAME TO JOIN THE CLUB.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return fail(res, 422, "invalid", "THAT EMAIL DOESN'T LOOK RIGHT.");
@@ -1390,7 +1620,7 @@ async function handleAuth(req, res, ip, p) {
       if (phoneOwner) {
         return fail(res, 409, "phone_taken", "THIS MOBILE NUMBER IS ALREADY LINKED TO AN IPC ACCOUNT. LOG IN INSTEAD.");
       }
-      const user = await insertUser({ email, name, password, phone, role: "customer" });
+      const user = await insertUser({ email, name, password, phone, role: "customer", birthMonth });
       const token = await createSession(user);
       return send(res, 200, { ok: true, token, user: publicUser(user) });
     }
@@ -1414,6 +1644,24 @@ async function handleAuth(req, res, ip, p) {
       if (user.status === "removed") {
         return fail(res, 403, "account_removed",
           "THIS ACCOUNT WAS REMOVED BY THE CLUB. MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
+      }
+      /* admin two-factor: password alone never issues a session */
+      if (user.twoFAEnabled && user.twoFASecret) {
+        const challenge = crypto.randomBytes(24).toString("hex");
+        try {
+          const { connect } = require("./ipc-pay/mongo");
+          const d = await connect();
+          await d.collection("twoFALogins").insertOne({
+            challenge,
+            userId: user._id,
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          });
+        } catch (err) {
+          return mongoError(res, err, "2fa challenge failed");
+        }
+        return send(res, 200, { ok: false, twoFactorRequired: true, challenge,
+          message: "ENTER THE 6-DIGIT CODE FROM YOUR AUTHENTICATOR APP." });
       }
       const token = await createSession(user);
       return send(res, 200, { ok: true, token, user: publicUser(user) });
@@ -1662,10 +1910,13 @@ async function handleAdminVoucherToggle(req, res) {
 
 async function handleCreateOrder(req, res) {
   const found = await userFromReq(req).catch(() => null);
-  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CHECK OUT.");
   const body = await readBody(req, res, 20000);
   if (body === null) return;
   if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  /* guest checkout: no account required — the order still stores the full
+     customer block and carries a one-off receipt token for the pay screen */
+  const guestMode = !found && body.guest === true;
+  if (!found && !guestMode) return fail(res, 401, "unauthorized", "LOG IN TO CHECK OUT.");
 
   const rawItems = Array.isArray(body.items) ? body.items : [];
   if (rawItems.length === 0) {
@@ -1675,7 +1926,27 @@ async function handleCreateOrder(req, res) {
     return fail(res, 422, "invalid", "TOO MANY LINES IN ONE ORDER — SPLIT IT UP.");
   }
   const lines = [];
-  for (const raw of rawItems) {    const product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+  let dbForCatalog = null;
+  for (const raw of rawItems) {
+    let product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+    /* club-added pieces live in Atlas — the baked-in catalog is not enough */
+    if (!product) {
+      try {
+        if (!dbForCatalog) {
+          const { connect } = require("./ipc-pay/mongo");
+          dbForCatalog = await connect();
+        }
+        const doc = await dbForCatalog.collection("products")
+          .findOne({ id: String(raw.productId ?? ""), active: { $ne: false } });
+        if (doc) {
+          product = {
+            id: doc.id, name: doc.name, priceCentavos: doc.priceCentavos,
+            sizes: doc.sizes || ["OS"], colors: doc.colors || [],
+            collection: doc.collection || "",
+          };
+        }
+      } catch { /* falls through to the unknown-product error */ }
+    }
     if (!product) {
       return fail(res, 422, "invalid", "UNKNOWN PRODUCT IN YOUR BAG — REFRESH AND TRY AGAIN.");
     }
@@ -1698,6 +1969,7 @@ async function handleCreateOrder(req, res) {
       color,
       qty,
       priceCentavos: product.priceCentavos,
+      collection: product.collection || "",
     });
   }
 
@@ -1722,14 +1994,51 @@ async function handleCreateOrder(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     voucherDatabase = d;
-    const cooldownSeconds = await paymentCooldownSeconds(d, found.user._id);
+
+    /* tier-gated drops: a collection in its announced window only sells
+       to the tiers the club granted early access. Guests count as ROOKIE. */
+    const gateSlugs = [...new Set(lines.map((l) => l.collection).filter(Boolean))];
+    if (gateSlugs.length) {
+      const gatedCols = await d.collection("collections")
+        .find({ slug: { $in: gateSlugs }, launchState: "announced" }).toArray();
+      if (gatedCols.length) {
+        let buyerTier = "ROOKIE";
+        if (found) {
+          const paid = await paidSummary(d, found.user.email);
+          buyerTier = tierForPaid(paid.spentCentavos);
+        }
+        for (const col of gatedCols) {
+          const need = TIER_RANK[col.tierGate] || 0;
+          if (TIER_RANK[buyerTier] < need) {
+            const title = col.title || col.slug.toUpperCase();
+            const opensAt = col.launchAt
+              ? new Date(col.launchAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })
+              : "the public drop";
+            return fail(res, 403, "tier_gate",
+              title + " IS IN ITS EARLY-ACCESS WINDOW — " + col.tierGate + " MEMBERS AND ABOVE GET FIRST DIBS. IT OPENS TO EVERYONE AT " + opensAt + ".");
+          }
+        }
+      }
+    }
+
+    const guestToken = guestMode ? crypto.randomBytes(24).toString("hex") : null;
+    const guestEmail = guestMode
+      ? String((c.email ?? "")).trim().toLowerCase().slice(0, 120)
+      : found.user.email;
+    if (guestMode && !guestEmail) {
+      return fail(res, 422, "invalid", "DROP YOUR EMAIL SO THE CLUB CAN SEND YOUR RECEIPT.");
+    }
+    const cooldownSeconds = found ? await paymentCooldownSeconds(d, found.user._id) : 0;
     if (cooldownSeconds > 0) return rejectPaymentDuringCooldown(res, cooldownSeconds);
-    const phone = await linkAccountPhone(d, found.user, rawPhone);
+    const phone = found ? await linkAccountPhone(d, found.user, rawPhone) : normalizePhilippineMobile(rawPhone);
     const reference = await nextReference("order");
     const paymentReference = await nextReference("payment");
     const now = new Date();
     const voucherCodeInput = String(body.voucherCode || "").trim();
     let voucherResult = null;
+    if (voucherCodeInput && !found) {
+      return fail(res, 422, "voucher_needs_account", "VOUCHERS WORK WITH A CLUB ACCOUNT — LOG IN OR CREATE ONE AND YOUR BAG COMES WITH YOU.");
+    }
     if (voucherCodeInput) {
       voucherResult = await resolveVoucher(d, voucherCodeInput, found.user, phone, subtotalCentavos);
       const v = voucherResult.voucher;
@@ -1761,8 +2070,10 @@ async function handleCreateOrder(req, res) {
 
     const orderDoc = {
       reference,
-      userId: found.user._id,
-      email: found.user.email,
+      userId: found ? found.user._id : null,
+      email: guestEmail,
+      guest: guestMode,
+      ...(guestToken ? { guestToken } : {}),
       customerName: name,
       phone,
       phoneNormalized: phone,
@@ -1787,8 +2098,9 @@ async function handleCreateOrder(req, res) {
     const paymentDoc = {
       paymentReference,
       orderReference: reference,
-      userId: found.user._id,
-      email: found.user.email,
+      userId: found ? found.user._id : null,
+      email: guestEmail,
+      ...(guestToken ? { guestToken } : {}),
       amountCentavos: totalCentavos,
       currency: "PHP",
       status: "pending",      method: "qr",
@@ -1810,6 +2122,8 @@ async function handleCreateOrder(req, res) {
       discountCentavos,
       voucherCode: voucherResult ? voucherResult.code : null,
       shippingCentavos: SHIPPING_CENTAVOS,
+      guest: guestMode,
+      ...(guestToken ? { guestToken } : {}),
     });
   } catch (err) {
     if (voucherReservation && voucherDatabase && !orderSaved) {
@@ -1837,12 +2151,15 @@ async function handleCreateOrder(req, res) {
 /* --------------------------------------------------------------- */
 
 async function handleProof(req, res) {
-  const found = await userFromReq(req).catch(() => null);
-  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
-
   const body = await readBody(req, res, 8 * 1024 * 1024);
   if (body === null) return; // oversize → socket destroyed
   if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED UPLOAD — SEND THE FORM AGAIN.");
+
+  const found = await userFromReq(req).catch(() => null);
+  /* guests submit proof with their one-off receipt token */
+  const guestToken = String(body.guestToken ?? "").trim();
+  const guestOk = /^[a-f0-9]{32,128}$/.test(guestToken);
+  if (!found && !guestOk) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
 
   const reference = String(body.reference ?? "").trim().toUpperCase();
   const refNo = String(body.refNo ?? "").trim().slice(0, 40);
@@ -1876,12 +2193,19 @@ async function handleProof(req, res) {
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
-    const cooldownSeconds = await paymentCooldownSeconds(d, found.user._id);
+    const cooldownSeconds = found ? await paymentCooldownSeconds(d, found.user._id) : 0;
     if (cooldownSeconds > 0) return rejectPaymentDuringCooldown(res, cooldownSeconds);
     const pay = await d.collection("payments").findOne({ paymentReference: reference });
     if (!pay) return fail(res, 404, "not_found", "NO PAYMENT FOUND FOR THAT REFERENCE.");
-    if (String(pay.userId) !== String(found.user._id)) {
-      return fail(res, 403, "forbidden", "THIS PAYMENT BELONGS TO ANOTHER ACCOUNT.");
+    if (found) {
+      if (String(pay.userId) !== String(found.user._id)) {
+        return fail(res, 403, "forbidden", "THIS PAYMENT BELONGS TO ANOTHER ACCOUNT.");
+      }
+    } else {
+      const guestOrder = await d.collection("orders").findOne({ reference: pay.orderReference });
+      if (!guestOrder || guestOrder.guestToken !== guestToken) {
+        return fail(res, 403, "forbidden", "THIS PAYMENT BELONGS TO ANOTHER ACCOUNT.");
+      }
     }
     if (pay.status === "paid") {
       return fail(res, 422, "already_paid", "THIS PAYMENT IS ALREADY VERIFIED AND PAID.");
@@ -1906,6 +2230,12 @@ async function handleProof(req, res) {
     }
 
     const now = new Date();
+    /* proof submissions are capped per payment — a failing order cannot
+       accumulate unlimited screenshots (each carries a fresh OCR pass) */
+    if ((pay.proofSubmissions || 0) >= 6) {
+      return fail(res, 429, "proof_cap",
+        "THIS ORDER HAS HIT ITS PROOF LIMIT — CONTACT THE CLUB AND WE'LL SORT IT OUT.");
+    }
     const proofUpdate = await d.collection("payments").updateOne(
       { _id: pay._id, status: { $nin: ["paid", "failed"] } },
       {
@@ -1916,6 +2246,7 @@ async function handleProof(req, res) {
           proofSubmittedAt: now,
           ...(decoded ? { proofDataUrl: `data:${proofMime};base64,${decoded.toString("base64")}` } : {}),
         },
+        $inc: { proofSubmissions: 1 },
       }
     );
     if (proofUpdate.modifiedCount !== 1) {
@@ -2011,6 +2342,7 @@ async function handleDecision(req, res) {
     );
     if (action === "approve") {
       await ensureTracking(d, pay.orderReference, "IPC TEAM");
+      await creditReferralIfAny(d, pay.orderReference);
     }
 
     if (action === "reject") {
@@ -2184,6 +2516,9 @@ async function handleAdminProductSave(req, res) {
   const fabric = String(body.fabric ?? "").trim().slice(0, 200);
   const fit = String(body.fit ?? "").trim().slice(0, 200);
   const alt = String(body.alt ?? "").trim().slice(0, 200);
+  /* honest scarcity + fit confidence: optional batch size and model line */
+  const batchSize = Math.max(0, Math.round(Number(body.batchSize) || 0));
+  const modelInfo = String(body.modelInfo ?? "").trim().slice(0, 160);
   const home = !!body.home;
   const img = String(body.img ?? "").trim();
 
@@ -2238,6 +2573,7 @@ async function handleAdminProductSave(req, res) {
         { $set: {
           name, priceCentavos: priceC, tag, collection,
           sizes, colors, desc, fabric, fit, alt, home, img,
+          batchSize, modelInfo,
           active: body.active === undefined ? existing.active !== false : !!body.active,
           updatedAt: now,
         } }
@@ -2257,6 +2593,7 @@ async function handleAdminProductSave(req, res) {
     doc = {
       id, name, priceCentavos: priceC, tag, collection,
       sizes, colors, desc, fabric, fit, alt, home, img,
+      batchSize, modelInfo,
       active: true,
       createdBy: found.user.email,
       createdAt: now, updatedAt: now,
@@ -2596,6 +2933,7 @@ async function handleMayaWebhook(req, res) {
       { $set: { status: "paid", updatedAt: now } }
     );
     await ensureTracking(d, pay.orderReference, "IPC TEAM");
+    await creditReferralIfAny(d, pay.orderReference);
     const orderForEmail = await d.collection("orders").findOne({ reference: pay.orderReference });
     await sendPaymentEmail({ ...pay, status: "paid" }, orderForEmail, "PAID",
       "Maya confirmed your payment automatically. Your order is confirmed and order tracking is now live in your account.");
@@ -2603,6 +2941,766 @@ async function handleMayaWebhook(req, res) {
     return send(res, 200, { ok: true, status: "paid" });
   } catch (err) {
     return mongoError(res, err, "webhook failed");
+  }
+}
+
+/* =============================================================== */
+/* GROWTH PLATFORM — reviews, referral, birthday, 2FA, forgot-      */
+/* password, guest checkout, launch gates, community, funnel        */
+/* analytics, club config. Everything lives in the same Atlas db    */
+/* and follows the same handler style as the rest of this file.     */
+/* =============================================================== */
+
+/* ---------- TOTP (RFC 6238) — standard library only, no deps ----- */
+
+function b32Encode(buf) {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0, value = 0, out = "";
+  for (const b of buf) {
+    value = (value << 8) | b; bits += 8;
+    while (bits >= 5) { out += A[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += A[(value << (5 - bits)) & 31];
+  return out;
+}
+
+function b32Decode(s) {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0, value = 0; const out = [];
+  for (const c of String(s || "").toUpperCase().replace(/=+$/, "")) {
+    const idx = A.indexOf(c);
+    if (idx < 0) continue;
+    value = (value << 5) | idx; bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; }
+  }
+  return Buffer.from(out);
+}
+
+function totpCode(secretB32, timeStep) {
+  const key = b32Decode(secretB32);
+  if (!key.length) return "";
+  const buf = Buffer.alloc(8);
+  buf.writeUInt32BE(Math.floor(timeStep / 2 ** 32), 0);
+  buf.writeUInt32BE(timeStep >>> 0, 4);
+  const hmac = crypto.createHmac("sha1", key).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0xf;
+  const code = ((hmac[off] & 0x7f) << 24) | (hmac[off + 1] << 16) | (hmac[off + 2] << 8) | hmac[off + 3];
+  return String(code % 1000000).padStart(6, "0");
+}
+
+function verifyTotp(secretB32, code) {
+  const step = Math.floor(Date.now() / 30000);
+  const want = String(code ?? "").trim();
+  for (const s of [step - 1, step, step + 1]) {
+    if (totpCode(secretB32, s) === want) return true;
+  }
+  return false;
+}
+
+/* ---------- generic EmailJS send (server-side) ------------------- */
+
+async function sendClubEmail(templateId, params) {
+  const publicKey = process.env.EMAILJS_PUBLIC_KEY || "";
+  const serviceId = process.env.EMAILJS_SERVICE_ID || "";
+  if (!publicKey || !serviceId || !templateId) return false;
+  try {
+    const response = await fetch(EMAILJS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id: serviceId,
+        template_id: templateId,
+        user_id: publicKey,
+        template_params: params,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error("EmailJS responded " + response.status);
+    return true;
+  } catch (err) {
+    console.error("[ipc-email] send failed:", err.message);
+    return false;
+  }
+}
+
+/* ---------- MEMBER SELF-SERVICE FORGOT PASSWORD ------------------ */
+/* Request → single-use hashed token (30 min) → emailed link.
+   The response is identical whether or not the email exists, so the
+   endpoint can never be used to probe accounts. */
+
+async function handleForgotPassword(req, res, ip) {
+  if (rateLimited(ip, 5, 15 * 60 * 1000, "forgot")) {
+    return fail(res, 429, "rate_limited", "TOO MANY RESET REQUESTS — TRY AGAIN IN A FEW MINUTES.");
+  }
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+  const okMsg = "IF THAT EMAIL IS IN THE CLUB, A RESET LINK IS ON ITS WAY. CHECK YOUR INBOX (AND SPAM) — THE LINK WORKS ONCE FOR 30 MINUTES.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return send(res, 200, { ok: true, message: okMsg });
+  try {
+    const user = await findUserByEmail(email).catch(() => null);
+    if (!user || user.status === "removed") return send(res, 200, { ok: true, message: okMsg });
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const token = crypto.randomBytes(24).toString("hex");
+    await d.collection("passwordResets").insertOne({
+      userId: user._id,
+      email,
+      tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      usedAt: null,
+    });
+    const sent = await sendClubEmail(process.env.EMAILJS_RESET_TEMPLATE_ID || "", {
+      to_email: email,
+      customer_name: user.name || "IPC member",
+      reset_link: SITE_ORIGIN + "/reset?token=" + token,
+      reset_token: token,
+      reply_to: "INDULGE PLAYAS CLUB",
+    });
+    if (!sent) console.warn("[ipc-auth] reset email skipped — set EMAILJS_RESET_TEMPLATE_ID on the host to enable it. Token still valid: " + SITE_ORIGIN + "/reset?token=" + token);
+    return send(res, 200, { ok: true, message: okMsg, emailSent: sent });
+  } catch (err) {
+    return mongoError(res, err, "reset request failed");
+  }
+}
+
+async function handleResetPassword(req, res, ip) {
+  if (rateLimited(ip, 10, 15 * 60 * 1000, "reset")) {
+    return fail(res, 429, "rate_limited", "TOO MANY ATTEMPTS — WAIT A FEW MINUTES.");
+  }
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const token = String(body.token ?? "").trim();
+  const newPassword = String(body.password ?? "");
+  if (!/^[a-f0-9]{48}$/.test(token)) return fail(res, 422, "invalid", "THAT RESET LINK IS NOT VALID.");
+  if (newPassword.length < 8 || newPassword.length > 72) {
+    return fail(res, 422, "invalid", "PASSWORD NEEDS AT LEAST 8 CHARACTERS.");
+  }
+  try {
+    const { connect, hashPassword } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const rec = await d.collection("passwordResets").findOne({
+      tokenHash,
+      usedAt: null,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!rec) {
+      return fail(res, 422, "invalid_token", "THAT RESET LINK EXPIRED OR WAS ALREADY USED — REQUEST A FRESH ONE.");
+    }
+    const user = await findUserById(rec.userId);
+    if (!user || user.status === "removed") {
+      return fail(res, 422, "invalid_token", "THAT ACCOUNT NO LONGER EXISTS.");
+    }
+    const next = hashPassword(newPassword);
+    await d.collection("users").updateOne(
+      { _id: user._id },
+      { $set: { salt: next.salt, hash: next.hash, passwordChangedAt: new Date() } }
+    );
+    /* single-use — burn the token and kill every session */
+    await d.collection("passwordResets").updateOne(
+      { _id: rec._id },
+      { $set: { usedAt: new Date() } }
+    );
+    await d.collection("sessions").deleteMany({ userId: user._id });
+    console.log("[ipc-auth] self-service password reset completed for " + user.email);
+    return send(res, 200, { ok: true, message: "PASSWORD UPDATED — LOG IN WITH YOUR NEW PASSWORD." });
+  } catch (err) {
+    return mongoError(res, err, "reset failed");
+  }
+}
+
+/* ---------- ADMIN TWO-FACTOR (TOTP) ------------------------------ */
+/* Setup → secret + otpauth URI (QR drawn client-side) → enable with
+   a live code → every admin login now demands the rotating code. */
+
+async function handle2faSetup(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const { connect } = require("./ipc-pay/mongo");
+  const d = await connect();
+  const user = await findUserById(found.user._id);
+  if (user && user.twoFAEnabled) {
+    return fail(res, 409, "already_enabled", "TWO-FACTOR IS ALREADY ON — DISABLE IT FIRST TO RE-ENROLL.");
+  }
+  const secret = b32Encode(crypto.randomBytes(20));
+  await d.collection("users").updateOne(
+    { _id: found.user._id },
+    { $set: { twoFASecret: secret, twoFAEnabled: false, twoFASetupAt: new Date() } }
+  );
+  const otpauth = "otpauth://totp/IPC:" + encodeURIComponent(found.user.email) +
+    "?issuer=Indulge%20Playas%20Club&secret=" + secret + "&algorithm=SHA1&digits=6&period=30";
+  return send(res, 200, { ok: true, secret, otpauth, message: "SCAN OR TYPE THE KEY INTO YOUR AUTHENTICATOR APP, THEN CONFIRM WITH A LIVE CODE." });
+}
+
+async function handle2faEnable(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const { connect } = require("./ipc-pay/mongo");
+  const d = await connect();
+  const user = await findUserById(found.user._id);
+  if (!user || !user.twoFASecret) return fail(res, 422, "no_setup", "RUN SETUP FIRST.");
+  if (!verifyTotp(user.twoFASecret, body.code)) {
+    return fail(res, 422, "bad_code", "THAT CODE DIDN'T MATCH — CHECK YOUR AUTHENTICATOR AND TRY THE NEXT ONE.");
+  }
+  await d.collection("users").updateOne(
+    { _id: user._id },
+    { $set: { twoFAEnabled: true, twoFAEnabledAt: new Date() } }
+  );
+  await d.collection("sessions").deleteMany({ userId: user._id, token: { $ne: found.token } });
+  console.log("[ipc-auth] 2FA enabled for " + user.email);
+  return send(res, 200, { ok: true, message: "TWO-FACTOR IS ON — EVERY ADMIN LOGIN NOW NEEDS YOUR AUTHENTICATOR CODE." });
+}
+
+async function handle2faDisable(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const { connect, verifyPassword } = require("./ipc-pay/mongo");
+  const d = await connect();
+  const user = await findUserById(found.user._id);
+  if (!user) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (!verifyPassword(String(body.password ?? ""), user.salt, user.hash)) {
+    return fail(res, 401, "bad_credentials", "PASSWORD CHECK FAILED — TWO-FACTOR STAYS ON.");
+  }
+  if (user.twoFAEnabled && !verifyTotp(user.twoFASecret, body.code)) {
+    return fail(res, 422, "bad_code", "THAT CODE DIDN'T MATCH — TWO-FACTOR STAYS ON.");
+  }
+  await d.collection("users").updateOne(
+    { _id: user._id },
+    { $unset: { twoFASecret: "", twoFAEnabled: "", twoFAEnabledAt: "", twoFASetupAt: "" } }
+  );
+  await d.collection("sessions").deleteMany({ userId: user._id, token: { $ne: found.token } });
+  console.log("[ipc-auth] 2FA disabled for " + user.email);
+  return send(res, 200, { ok: true, message: "TWO-FACTOR IS OFF." });
+}
+
+async function handle2faVerify(req, res, ip) {
+  if (rateLimited(ip, 10, 15 * 60 * 1000, "2fa")) {
+    return fail(res, 429, "rate_limited", "TOO MANY CODE ATTEMPTS — WAIT A FEW MINUTES.");
+  }
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const challenge = String(body.challenge ?? "").trim();
+  if (!/^[a-f0-9]{48}$/.test(challenge)) return fail(res, 422, "invalid", "THAT LOGIN CHALLENGE EXPIRED — START AGAIN.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rec = await d.collection("twoFALogins").findOne({
+      challenge,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!rec) return fail(res, 422, "invalid", "THAT LOGIN CHALLENGE EXPIRED — START AGAIN.");
+    const user = await findUserById(rec.userId);
+    if (!user || user.status === "removed" || !user.twoFAEnabled || !user.twoFASecret) {
+      return fail(res, 422, "invalid", "START THE LOGIN AGAIN.");
+    }
+    if (!verifyTotp(user.twoFASecret, body.code)) {
+      return fail(res, 422, "bad_code", "THAT CODE DIDN'T MATCH — TRY THE NEXT ONE.");
+    }
+    await d.collection("twoFALogins").deleteOne({ _id: rec._id });
+    const token = await createSession(user);
+    console.log("[ipc-auth] 2FA login ok: " + user.email);
+    return send(res, 200, { ok: true, token, user: publicUser(user) });
+  } catch (err) {
+    return mongoError(res, err, "2fa verification failed");
+  }
+}
+
+/* ---------- PRODUCT REVIEWS — verified buyers, admin moderated --- */
+
+async function handleReviewsGet(req, res, p) {
+  const q = new URL("http://x" + p.replace(/^#/, "")).searchParams;
+  const productId = String(q.get("productId") ?? "").trim().slice(0, 60);
+  if (!productId) return fail(res, 422, "invalid", "MISSING productId.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("reviews").find({ productId, status: "approved" })
+      .sort({ createdAt: -1 }).limit(50).toArray();
+    const agg = await d.collection("reviews").aggregate([
+      { $match: { productId, status: "approved" } },
+      { $group: { _id: null, n: { $sum: 1 }, avg: { $avg: "$rating" },
+        fit5: { $avg: "$fitTrue" } } },
+    ]).toArray();
+    return send(res, 200, {
+      ok: true,
+      reviews: rows.map((r) => ({
+        id: String(r._id), rating: r.rating, title: r.title || "",
+        body: r.body, name: r.displayName, createdAt: r.createdAt, fitTrue: !!r.fitTrue,
+      })),
+      summary: {
+        count: (agg[0] && agg[0].n) || 0,
+        avgRating: agg[0] ? Math.round(agg[0].avg * 10) / 10 : 0,
+        fitsTruePct: agg[0] ? Math.round(agg[0].fit5 * 100) : 0,
+      },
+    });
+  } catch (err) {
+    return mongoError(res, err, "reviews failed");
+  }
+}
+
+async function handleReviewCreate(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const productId = String(body.productId ?? "").trim().slice(0, 60);
+  const rating = Math.round(Number(body.rating));
+  const title = String(body.title ?? "").trim().slice(0, 80);
+  const text = String(body.body ?? "").trim().slice(0, 600);
+  const fitTrue = !!body.fitTrue;
+  if (!productId) return fail(res, 422, "invalid", "MISSING productId.");
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return fail(res, 422, "invalid", "PICK A RATING FROM 1 TO 5.");
+  }
+  if (text.length < 4) return fail(res, 422, "invalid", "SAY A LINE ABOUT THE PIECE — AT LEAST A FEW WORDS.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    /* verified buyer: a PAID order containing this piece under this email */
+    const bought = await d.collection("orders").countDocuments({
+      email: found.user.email,
+      status: "paid",
+      items: { $elemMatch: { productId } },
+    });
+    if (!bought) {
+      return fail(res, 403, "not_verified", "REVIEWS ARE FOR VERIFIED BUYERS ONLY — PAY FOR THE PIECE FIRST AND IT UNLOCKS.");
+    }
+    const existing = await d.collection("reviews").findOne({
+      productId, email: found.user.email, status: { $ne: "rejected" },
+    });
+    if (existing) {
+      return fail(res, 409, "already_reviewed", "YOU ALREADY REVIEWED THIS PIECE — ONE REVIEW PER MEMBER PER PIECE.");
+    }
+    await d.collection("reviews").insertOne({
+      productId,
+      email: found.user.email,
+      userId: found.user._id,
+      displayName: (found.user.name || "IPC MEMBER").split(" ")[0].toUpperCase().slice(0, 24),
+      rating, title, body: text, fitTrue,
+      status: "pending",
+      createdAt: new Date(),
+    });
+    return send(res, 200, { ok: true, message: "REVIEW IN — THE CLUB CHECKS EVERY REVIEW BEFORE IT GOES LIVE." });
+  } catch (err) {
+    return mongoError(res, err, "review failed");
+  }
+}
+
+async function handleAdminReviews(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("reviews").find({}).sort({ createdAt: -1 }).limit(200).toArray();
+    return send(res, 200, {
+      ok: true,
+      reviews: rows.map((r) => ({
+        id: String(r._id), productId: r.productId, rating: r.rating,
+        title: r.title || "", body: r.body, name: r.displayName,
+        email: r.email, status: r.status, createdAt: r.createdAt, fitTrue: !!r.fitTrue,
+      })),
+    });
+  } catch (err) {
+    return mongoError(res, err, "admin reviews failed");
+  }
+}
+
+async function handleAdminReviewModerate(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const action = String(body.action ?? "").trim().toLowerCase();
+  if (!/^[a-f0-9]{24}$/.test(String(body.id ?? "").trim())) {
+    return fail(res, 422, "invalid", "MISSING REVIEW ID.");
+  }
+  if (!["approve", "reject"].includes(action)) {
+    return fail(res, 422, "invalid", "ACTION MUST BE approve OR reject.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const { ObjectId } = require("mongodb");
+    await d.collection("reviews").updateOne(
+      { _id: new ObjectId(String(body.id).trim()) },
+      { $set: { status: action === "approve" ? "approved" : "rejected", moderatedAt: new Date(), moderatedBy: found.user.email } }
+    );
+    return send(res, 200, { ok: true, message: action === "approve" ? "REVIEW IS LIVE." : "REVIEW HIDDEN." });
+  } catch (err) {
+    return mongoError(res, err, "moderation failed");
+  }
+}
+
+/* ---------- ON THE STREETS — club-curated community wall ---------- */
+
+async function handleStreetsGet(req, res) {
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("streets").find({ active: { $ne: false } })
+      .sort({ createdAt: -1 }).limit(24).toArray();
+    return send(res, 200, {
+      ok: true,
+      posts: rows.map((r) => ({
+        id: String(r._id), name: r.name, city: r.city || "",
+        caption: r.caption || "", img: r.img, createdAt: r.createdAt,
+      })),
+    });
+  } catch (err) {
+    return mongoError(res, err, "streets failed");
+  }
+}
+
+async function handleAdminStreetAdd(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 4 * 1024 * 1024);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const name = String(body.name ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
+  const city = String(body.city ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
+  const caption = String(body.caption ?? "").trim().slice(0, 240);
+  const img = String(body.img ?? "").trim();
+  if (name.length < 2) return fail(res, 422, "invalid", "GIVE THE PLAYA A NAME.");
+  if (!img) return fail(res, 422, "invalid", "THE POST NEEDS A PHOTO.");
+  const isDataImg = /^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/.test(img);
+  const isUrlImg = /^https:\/\/\S{1,480}$/i.test(img);
+  if (!isDataImg && !isUrlImg) {
+    return fail(res, 422, "invalid", "THE PHOTO MUST BE A JPG/PNG UPLOAD OR AN HTTPS IMAGE LINK.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("streets").insertOne({
+      name, city, caption, img,
+      addedBy: found.user.email,
+      active: true,
+      createdAt: new Date(),
+    });
+    return send(res, 200, { ok: true, message: "ON THE STREETS — THE POST IS LIVE." });
+  } catch (err) {
+    return mongoError(res, err, "streets save failed");
+  }
+}
+
+async function handleAdminStreetRemove(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  if (!/^[a-f0-9]{24}$/.test(String(body.id ?? "").trim())) {
+    return fail(res, 422, "invalid", "MISSING POST ID.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const { ObjectId } = require("mongodb");
+    await d.collection("streets").updateOne(
+      { _id: new ObjectId(String(body.id).trim()) },
+      { $set: { active: false } }
+    );
+    return send(res, 200, { ok: true, message: "POST TAKEN DOWN." });
+  } catch (err) {
+    return mongoError(res, err, "streets removal failed");
+  }
+}
+
+/* ---------- PRIVACY-FRIENDLY FUNNEL ANALYTICS -------------------- */
+/* First-party, no cookies, no PII: one random per-browser id kept in
+   localStorage, event name, day. That is the entire record. */
+
+const ANALYTICS_EVENTS = new Set(["view_product", "add_to_bag", "checkout_start", "paid"]);
+
+async function handleAnalyticsEvent(req, res, ip) {
+  if (rateLimited(ip, 120, 60 * 1000, "analytics")) {
+    return send(res, 200, { ok: true, dropped: true });
+  }
+  const body = await readBody(req, res, 2000);
+  if (body === null) return;
+  const name = String(body.name ?? "");
+  if (!ANALYTICS_EVENTS.has(name)) return send(res, 200, { ok: true, dropped: true });
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("analyticsEvents").insertOne({
+      name,
+      visitor: String(body.visitor ?? "").replace(/[^a-z0-9-]/gi, "").slice(0, 40),
+      product: String(body.product ?? "").replace(/[^a-z0-9\-]/gi, "").slice(0, 60),
+      valueCentavos: Math.max(0, Math.round(Number(body.valueCentavos) || 0)),
+      createdAt: new Date(),
+    });
+    return send(res, 200, { ok: true });
+  } catch { /* analytics never blocks the shop */ return send(res, 200, { ok: true }); }
+}
+
+async function handleAdminFunnel(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("analyticsEvents").aggregate([
+      { $match: { createdAt: { $gte: new Date(Date.now() - 30 * 86400000) } } },
+      { $group: { _id: "$name", n: { $sum: 1 }, visitors: { $addToSet: "$visitor" } } },
+    ]).toArray();
+    const out = {};
+    rows.forEach((r) => { out[r._id] = { count: r.n, visitors: r.visitors.length }; });
+    ["view_product", "add_to_bag", "checkout_start", "paid"].forEach((k) => {
+      if (!out[k]) out[k] = { count: 0, visitors: 0 };
+    });
+    return send(res, 200, { ok: true, funnel: out });
+  } catch (err) {
+    return mongoError(res, err, "funnel failed");
+  }
+}
+
+/* ---------- CLUB CONFIG — shared settings the site reads ---------- */
+
+async function handleConfigGet(req, res) {
+  let usdPhpRate = 58;
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const cfg = await d.collection("settings").findOne({ _id: "club" });
+    if (cfg && Number(cfg.usdPhpRate) > 0) usdPhpRate = Number(cfg.usdPhpRate);
+  } catch { /* defaults hold */ }
+  return send(res, 200, { ok: true, usdPhpRate });
+}
+
+async function handleConfigSet(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const rate = Number(body.usdPhpRate);
+  if (!Number.isFinite(rate) || rate < 20 || rate > 120) {
+    return fail(res, 422, "invalid", "THE RATE MUST SIT BETWEEN 20 AND 120 PESOS PER DOLLAR.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("settings").updateOne(
+      { _id: "club" },
+      { $set: { usdPhpRate: rate, updatedAt: new Date(), updatedBy: found.user.email } },
+      { upsert: true }
+    );
+    return send(res, 200, { ok: true, usdPhpRate: rate, message: "USD APPROXIMATION UPDATED ACROSS THE SHOP." });
+  } catch (err) {
+    return mongoError(res, err, "config failed");
+  }
+}
+
+/* ---------- COLLECTION LAUNCH STATES + TIER GATES ---------------- */
+
+const LAUNCH_STATES = ["none", "announced", "live", "soldout"];
+const TIER_GATES = ["none", "HOMIE", "OG", "VIP"];
+const TIER_RANK = { ROOKIE: 0, HOMIE: 1, OG: 2, VIP: 3 };
+
+async function handleCollectionState(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found || found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const slug = normalizeProductCollection(body.slug);
+  const launchState = String(body.launchState ?? "none");
+  const tierGate = String(body.tierGate ?? "none").toUpperCase();
+  const storyNote = String(body.storyNote ?? "").trim().slice(0, 600);
+  if (!slug) return fail(res, 422, "invalid", "MISSING COLLECTION SLUG.");
+  if (!LAUNCH_STATES.includes(launchState)) return fail(res, 422, "invalid", "LAUNCH STATE MUST BE none, announced, live OR soldout.");
+  if (!TIER_GATES.includes(tierGate)) return fail(res, 422, "invalid", "TIER GATE MUST BE none, HOMIE, OG OR VIP.");
+  let launchAt = null;
+  if (body.launchAt) {
+    const t = new Date(String(body.launchAt));
+    if (isNaN(t.getTime())) return fail(res, 422, "invalid", "THAT LAUNCH DATE DIDN'T PARSE.");
+    launchAt = t;
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("collections").updateOne(
+      { slug },
+      { $set: {
+        launchState, tierGate, storyNote,
+        ...(launchAt ? { launchAt } : {}),
+        ...(body.clearLaunchAt ? { launchAt: null } : {}),
+        updatedAt: new Date(),
+      }, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+    return send(res, 200, { ok: true, message: "COLLECTION STATE SAVED — THE HERO AND SHOP PICK IT UP ON THEIR NEXT LOAD." });
+  } catch (err) {
+    return mongoError(res, err, "collection state failed");
+  }
+}
+
+/* ---------- REFERRAL + BIRTHDAY — retention engines --------------- */
+
+async function ensureReferralCode(d, user) {
+  if (user.referralCode) return user.referralCode;
+  const base = (user.name || "PLAYA").replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 6) || "PLAYA";
+  for (let i = 0; i < 8; i++) {
+    const code = (base + String(Math.floor(1000 + Math.random() * 9000))).slice(0, 14);
+    const clash = await d.collection("users").findOne({ referralCode: code });
+    if (!clash) {
+      await d.collection("users").updateOne({ _id: user._id }, { $set: { referralCode: code } });
+      /* the friend's side: a fixed ₱100 voucher keyed to this member */
+      await d.collection("vouchers").updateOne(
+        { code, kind: "referral" },
+        { $set: {
+          code,
+          kind: "referral",
+          label: "REFERRAL — " + (user.name || "IPC MEMBER").toUpperCase().slice(0, 20),
+          type: "fixed",
+          value: 10000,
+          minSubtotalCentavos: 0,
+          maxUses: 0,
+          uses: 0,
+          active: true,
+          firstOrderOnly: false,
+          ownerEmail: user.email,
+          createdAt: new Date(),
+        }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true }
+      );
+      return code;
+    }
+  }
+  return null;
+}
+
+async function ensureBirthdayVoucher(d, user) {
+  if (!user.birthMonth || user.birthMonth < 1 || user.birthMonth > 12) return null;
+  const now = new Date();
+  const manilaMonth = Number(new Date(now.getTime() + 8 * 3600000).getMonth()) + 1;
+  if (manilaMonth !== user.birthMonth) return null;
+  const year = new Date(now.getTime() + 8 * 3600000).getFullYear();
+  const flag = "birthdayVoucher" + year;
+  if (user[flag]) return null;
+  const code = ("BDAY" + year + user.email.replace(/[^a-z0-9]/gi, "").slice(0, 6)).toUpperCase().slice(0, 24);
+  await d.collection("vouchers").updateOne(
+    { code, kind: "birthday" },
+    { $set: {
+      code,
+      kind: "birthday",
+      label: "BIRTHDAY VOUCHER — " + String(user.birthMonth),
+      type: "fixed",
+      value: 15000,
+      minSubtotalCentavos: 0,
+      maxUses: 1,
+      uses: 0,
+      active: true,
+      firstOrderOnly: false,
+      expiresAt: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+      createdAt: new Date(),
+    }, $setOnInsert: { createdAt: new Date() } },
+    { upsert: true }
+  );
+  await d.collection("users").updateOne({ _id: user._id }, { $set: { [flag]: true } });
+  await sendClubEmail(process.env.EMAILJS_BIRTHDAY_TEMPLATE_ID || "", {
+    to_email: user.email,
+    customer_name: user.name || "IPC member",
+    voucher_code: code,
+    reply_to: "INDULGE PLAYAS CLUB",
+  });
+  return code;
+}
+
+/* when a referral voucher's order gets PAID, credit the giver */
+async function creditReferralIfAny(d, orderReference) {
+  try {
+    const order = await d.collection("orders").findOne({ reference: orderReference });
+    if (!order || !order.voucherCode) return;
+    const voucher = await d.collection("vouchers").findOne({ code: order.voucherCode });
+    if (!voucher || voucher.kind !== "referral" || !voucher.ownerEmail) return;
+    if (voucher.ownerEmail === order.email) return; /* self-referral does nothing */
+    const giver = await d.collection("users").findOne({ email: voucher.ownerEmail });
+    if (!giver) return;
+    await d.collection("users").updateOne(
+      { _id: giver._id },
+      { $inc: { referralCount: 1 } }
+    );
+    /* the giver's thank-you: a fixed ₱100 credit voucher, 60 days */
+    const code = ("THANKS" + String(giver.referralCount || 1) + "-" + crypto.randomBytes(3).toString("hex")).toUpperCase().slice(0, 20);
+    await d.collection("vouchers").insertOne({
+      code,
+      kind: "referral_credit",
+      label: "REFERRAL CREDIT — FRIEND PAID",
+      type: "fixed",
+      value: 10000,
+      minSubtotalCentavos: 0,
+      maxUses: 1,
+      uses: 0,
+      active: true,
+      firstOrderOnly: false,
+      ownerEmail: giver.email,
+      expiresAt: new Date(Date.now() + 60 * 86400000),
+      createdAt: new Date(),
+    });
+    await sendClubEmail(process.env.EMAILJS_REFERRAL_TEMPLATE_ID || "", {
+      to_email: giver.email,
+      customer_name: giver.name || "IPC member",
+      voucher_code: code,
+      reply_to: "INDULGE PLAYAS CLUB",
+    });
+    console.log("[ipc-club] referral credit " + code + " issued to " + giver.email);
+  } catch (err) {
+    console.error("[ipc-club] referral credit failed:", err && err.message);
+  }
+}
+
+/* guest order → account linking after signup */
+async function handleOrdersLink(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const reference = String(body.reference ?? "").trim().toUpperCase();
+  const guestToken = String(body.guestToken ?? "").trim();
+  if (!/^[A-Za-z0-9-]+$/.test(reference)) return fail(res, 422, "invalid", "THAT ORDER REFERENCE DOESN'T LOOK RIGHT.");
+  if (!/^[a-f0-9]{32,128}$/.test(guestToken)) return fail(res, 422, "invalid", "MISSING GUEST RECEIPT TOKEN.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const order = await d.collection("orders").findOne({ reference });
+    if (!order) return fail(res, 404, "not_found", "NO ORDER FOUND FOR THAT REFERENCE.");
+    if (order.userId) {
+      return fail(res, 409, "already_linked", "THAT ORDER ALREADY BELONGS TO AN ACCOUNT.");
+    }
+    if (order.guestToken !== guestToken) {
+      return fail(res, 403, "forbidden", "THAT RECEIPT TOKEN DOESN'T MATCH THIS ORDER.");
+    }
+    await d.collection("orders").updateOne(
+      { _id: order._id, userId: null },
+      { $set: { userId: found.user._id, email: found.user.email, linkedAt: new Date() } }
+    );
+    await d.collection("payments").updateMany(
+      { orderReference: reference, userId: null },
+      { $set: { userId: found.user._id } }
+    );
+    return send(res, 200, { ok: true, message: "ORDER ATTACHED TO YOUR ACCOUNT — IT NOW SHOWS UNDER YOUR HISTORY AND TRACKER." });
+  } catch (err) {
+    return mongoError(res, err, "order link failed");
   }
 }
 

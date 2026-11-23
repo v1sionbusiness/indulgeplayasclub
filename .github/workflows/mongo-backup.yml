@@ -1,0 +1,47 @@
+name: Weekly MongoDB Backup
+
+on:
+  schedule:
+    # Sunday 08:00 UTC = 16:00 Asia/Manila
+    - cron: "0 8 * * 0"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install MongoDB database tools
+        run: |
+          curl -fsSL https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.11.0.tgz -o tools.tgz
+          tar -xzf tools.tgz
+          sudo mv mongodb-database-tools-*/bin/mongodump /usr/local/bin/
+          mongodump --version
+
+      - name: Dump the IPC database
+        env:
+          MONGODB_BACKUP_URI: ${{ secrets.MONGODB_BACKUP_URI }}
+        run: |
+          if [ -z "$MONGODB_BACKUP_URI" ]; then
+            echo "::error::MONGODB_BACKUP_URI secret is missing — add it under Settings → Secrets → Actions (see docs/BACKUP_RESTORE.md)."
+            exit 1
+          fi
+          mongodump --uri="$MONGODB_BACKUP_URI" --out dump/
+          # a stale-backup guard: an empty dump must fail the run loudly
+          if [ ! -d dump ] || [ -z "$(find dump -name '*.bson' -print -quit)" ]; then
+            echo "::error::The dump contains no BSON files — check the backup URI."
+            exit 1
+          fi
+          echo "collections dumped: $(find dump -name '*.bson' | wc -l)"
+
+      - name: Zip the dump
+        run: |
+          STAMP=$(date -u +%Y%m%d-%H%M)
+          zip -qr "ipc-mongo-${STAMP}.zip" dump/
+          echo "artifact=ipc-mongo-${STAMP}.zip" >> "$GITHUB_ENV"
+
+      - name: Store the backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact }}
+          path: ${{ env.artifact }}
+          retention-days: 90

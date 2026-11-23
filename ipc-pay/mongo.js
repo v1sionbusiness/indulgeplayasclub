@@ -237,12 +237,14 @@ function findUserById(id) {
   return connect().then((d) => d.collection("users").findOne({ _id: id }));
 }
 
-function insertUser({ email, name, password, role, phone }) {
+function insertUser({ email, name, password, role, phone, birthMonth }) {
   const { salt, hash } = hashPassword(password);
   const doc = {
     email: String(email).toLowerCase(),
     name: String(name),
     ...(phone ? { phone: String(phone) } : {}),
+    /* optional birth month (1-12) — powers the birthday voucher */
+    ...(Number(birthMonth) >= 1 && Number(birthMonth) <= 12 ? { birthMonth: Math.round(Number(birthMonth)) } : {}),
     salt,
     hash,
     role: role === "admin" ? "admin" : "customer",
