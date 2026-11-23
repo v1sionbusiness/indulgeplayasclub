@@ -255,7 +255,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v22-20261123-productmeta";
+const BUILD_STAMP = "ipc-v23-20261123-accountfixes";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -1081,7 +1081,13 @@ async function route(req, res) {
       try {
         const { connect } = require("./ipc-pay/mongo");
         const d = await connect();
-        const fresh = await findUserById(user.id);
+        /* fresh = the full document userFromReq already loaded this request.
+           This used to re-fetch with findUserById(user.id) — a STRING id that
+           never matches the ObjectId _id, so fresh was always null and
+           twoFAEnabled / referral / birthdayVoucher never reached the client:
+           the account page kept reading TWO-FACTOR OFF after the
+           authenticator was armed. */
+        const fresh = found.user;
         if (fresh) {
           user.twoFAEnabled = !!fresh.twoFAEnabled;
           const code = await ensureReferralCode(d, fresh);

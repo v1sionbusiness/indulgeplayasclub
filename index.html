@@ -453,13 +453,14 @@ textarea.inp{min-height:110px;resize:vertical}
 .remember-row{display:flex;align-items:center;gap:10px;margin:6px 0 18px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
 .remember-row input{accent-color:#fff;width:15px;height:15px}
 .forgot-line{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--faint);margin-top:18px;line-height:1.9;text-transform:uppercase}
-.acct-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:56px;margin-top:44px;align-items:start}
-.acct-card{border:1px solid var(--line);background:var(--panel);padding:28px}
-.acct-card h3{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase;margin-bottom:18px}
-.acct-id-row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:26px;align-items:start}
+#ipcMemberCard{grid-column:1/-1}
+.acct-card{border:1px solid var(--line);background:var(--panel);padding:22px}
+.acct-card h3{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase;margin-bottom:12px}
+.acct-id-row{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px}
 .acct-id-row span:first-child{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;padding-top:2px}
 .acct-id-row span:last-child{color:var(--text);text-align:right;word-break:break-word}
-.acct-actions{margin-top:22px;display:flex;flex-direction:column;gap:12px}
+.acct-actions{margin-top:16px;display:flex;flex-direction:column;gap:10px}
 .acct-actions .btn-o,.acct-actions .btn-w{justify-content:center}
 .orders-list{display:flex;flex-direction:column;gap:14px;margin-top:18px}
 .order-row{border:1px solid var(--line);background:var(--panel);padding:18px 20px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
@@ -507,8 +508,8 @@ textarea.inp{min-height:110px;resize:vertical}
 .stat-tile{background:var(--panel);padding:24px}
 .stat-n{font-family:var(--display);font-size:clamp(26px,3.5vw,40px)}
 .stat-k{font-family:var(--mono);font-size:9px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-top:8px}
-.adm-tabs{display:flex;gap:0;margin-top:44px;border:1px solid var(--line-2);width:max-content;max-width:100%;flex-wrap:wrap}
-.adm-tab{font-family:var(--mono);font-size:11px;letter-spacing:.2em;padding:12px 22px;text-transform:uppercase;color:var(--muted);transition:all .2s}
+.adm-tabs{display:flex;gap:0;margin-top:28px;border:1px solid var(--line-2);width:100%;max-width:100%;flex-wrap:wrap}
+.adm-tab{font-family:var(--mono);font-size:11px;letter-spacing:.2em;padding:12px 18px;flex:1 1 auto;text-align:center;white-space:nowrap;text-transform:uppercase;color:var(--muted);transition:all .2s}
 .adm-tab.active{background:var(--white);color:var(--black);font-weight:700}
 .adm-pane{display:none;margin-top:30px}
 .adm-pane.active{display:block}
@@ -1608,7 +1609,6 @@ img.tc-true{filter:none !important}
      ================================================================ -->
 <div class="view" id="v-contact">
   <section class="contact contact-standalone ipc-glass-page">
-    <img class="contact-arc" src="/assets/img/contact-arc.jpg" loading="lazy" decoding="async" alt="" aria-hidden="true" />
     <div class="ipc-glass-field" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="contact-inner">
       <div class="contact-brand reveal-sm"><span class="contact-brand-mark">IPC</span><span>INDULGE PLAYAS CLUB<small>THE CLUB INBOX / EST. 2023</small></span></div>
@@ -2112,12 +2112,7 @@ img.tc-true{filter:none !important}
       </div>
       <button type="submit" class="btn-w" id="liSubmit" style="width:100%;justify-content:center">LOG IN</button>
       <p class="form-msg" id="liMsg" role="status" aria-live="polite"></p>
-      <p class="forgot-line">FORGOT YOUR PASSWORD? <button type="button" class="tc-toggle" id="liForgotBtn" style="padding:4px 8px">RESET IT BY EMAIL</button> — OR DM @INDULGEPLAYASCLUB ON INSTAGRAM.</p>
-    </form>
-    <form class="rev-form" id="liForgotForm" style="display:none" novalidate>
-      <label>ACCOUNT EMAIL<input id="liForgotEmail" type="email" maxlength="120" placeholder="YOU@MAIL.COM" autocomplete="email" /></label>
-      <button type="submit" class="btn-w btn-sm">SEND THE RESET LINK</button>
-      <p class="form-msg" id="liForgotMsg" role="status" aria-live="polite"></p>
+      <p class="forgot-line">FORGOT YOUR PASSWORD? DM @INDULGEPLAYASCLUB ON INSTAGRAM — THE CLUB SETS YOU UP WITH A NEW ONE.</p>
     </form>
   </div>
 </div>
@@ -2169,13 +2164,6 @@ img.tc-true{filter:none !important}
       <button type="submit" class="btn-w" id="suSubmit" style="width:100%;justify-content:center;margin-top:6px">CREATE ACCOUNT</button>
       <p class="form-msg" id="suMsg" role="status" aria-live="polite"></p>
       <p class="forgot-line">SIGN-UP RUNS ON THE CLUB'S OWN SERVER — EMAIL AND PASSWORD ONLY. NO GOOGLE, NO FACEBOOK, NO OUTSIDE LOGINS.</p>
-    </form>
-    <form class="rev-form" id="resetForm" style="display:none" novalidate>
-      <p class="kicker" style="margin:0">PICK A NEW PASSWORD</p>
-      <input type="password" id="resetPw" placeholder="NEW PASSWORD — 8+ CHARACTERS" maxlength="72" autocomplete="new-password" />
-      <input type="password" id="resetPw2" placeholder="REPEAT IT" maxlength="72" autocomplete="new-password" />
-      <button type="submit" class="btn-w btn-sm">UPDATE PASSWORD</button>
-      <p class="form-msg" id="resetMsg" role="status" aria-live="polite"></p>
     </form>
   </div>
 </div>
@@ -2713,7 +2701,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v22-20261123-productmeta';
+  var IPC_BUILD = 'ipc-v23-20261123-accountfixes';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -4038,61 +4026,9 @@ img.tc-true{filter:none !important}
       return r;
     });
   });
-  (function () {
-    var fb = $('#liForgotBtn'), ff = $('#liForgotForm');
-    if (!fb || !ff) return;
-    fb.addEventListener('click', function () {
-      ff.style.display = ff.style.display === 'none' ? 'grid' : 'none';
-    });
-    ff.addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      var msg = $('#liForgotMsg');
-      msg.textContent = 'SENDING…'; msg.className = 'form-msg show';
-      IPC.api('/api/auth/forgot', { method: 'POST', body: { email: $('#liForgotEmail').value.trim() } })
-        .then(function (d) { msg.textContent = d.message || 'CHECK YOUR INBOX.'; msg.className = 'form-msg ok show'; })
-        .catch(function (e) { msg.textContent = (e.message || 'COULD NOT SEND — TRY AGAIN.').toUpperCase(); msg.className = 'form-msg err show'; });
-    });
-  })();
-  /* password-reset deep link: /reset?token=… → the reset form on the signup view.
-     Runs on a timer because the path→hash translation (which sets the token)
-     lives in the router block that parses right after this one. */
-  (function () {
-    function activateResetForm() {
-      var token = null;
-      try { token = sessionStorage.getItem('IPC.resetToken'); } catch (e) {}
-      if (!token) return;
-      var form = document.getElementById('resetForm');
-      if (!form) return;
-      if (form.dataset.armed === '1') return;
-      form.dataset.armed = '1';
-      var suForm = document.getElementById('signupForm');
-      if (suForm) suForm.style.display = 'none';
-      form.style.display = 'grid';
-      form.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        var msg = $('#resetMsg');
-        var pw = $('#resetPw').value, pw2 = $('#resetPw2').value;
-        if (pw.length < 8) { msg.textContent = 'PASSWORD NEEDS AT LEAST 8 CHARACTERS.'; msg.className = 'form-msg err show'; return; }
-        if (pw !== pw2) { msg.textContent = 'THE TWO PASSWORDS DON\u2019T MATCH.'; msg.className = 'form-msg err show'; return; }
-        msg.textContent = 'UPDATING…'; msg.className = 'form-msg show';
-        IPC.api('/api/auth/reset', { method: 'POST', body: { token: token, password: pw } })
-          .then(function (d) {
-            try { sessionStorage.removeItem('IPC.resetToken'); } catch (e) {}
-            msg.textContent = d.message || 'PASSWORD UPDATED — LOG IN WITH IT NOW.';
-            msg.className = 'form-msg ok show';
-            form.style.display = 'none';
-            if (suForm) suForm.style.display = '';
-            location.hash = '#/login';
-          })
-          .catch(function (e) {
-            msg.textContent = ((e && e.message) || 'RESET FAILED — REQUEST A FRESH LINK.').toUpperCase();
-            msg.className = 'form-msg err show';
-          });
-      });
-    }
-    setTimeout(activateResetForm, 0);
-    window.addEventListener('hashchange', activateResetForm);
-  })();
+  /* the email reset flow is retired until the club has a mailbox to send
+     from — password help goes through @indulgeplayasclub on Instagram and
+     the admin's RESET PW in the members pane */
   wireAuthForm('signupForm', 'suSubmit', 'suMsg', function () {
     var suPhone = $('#suPhone') ? $('#suPhone').value.trim() : '';
     /* one mobile number is one club ID — catch bad formats before the
@@ -4847,15 +4783,6 @@ img.tc-true{filter:none !important}
     if (head === 'p' && seg[1]) { location.replace('#/product/' + encodeURIComponent(seg[1])); return; }
     if (head === 'collection' && seg[1]) { location.replace('#/collection/' + encodeURIComponent(seg[1])); return; }
     if (head === 'pay' && seg[1]) { location.replace('#/pay/' + encodeURIComponent(seg[1])); return; }
-    /* password-reset email links: /reset?token=… → the signup view hosts the reset form */
-    if (head === 'reset') {
-      try {
-        var t = new URLSearchParams(location.search).get('token');
-        if (t) sessionStorage.setItem('IPC.resetToken', t);
-      } catch (e) {}
-      location.replace('#/signup');
-      return;
-    }
     if (map[head]) { location.replace(map[head]); return; }
   })();
 

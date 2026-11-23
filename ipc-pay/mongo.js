@@ -34,7 +34,7 @@
  */
 
 const crypto = require("node:crypto");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const URI = (process.env.MONGODB_URI || "").trim();
 const DB_NAME = (process.env.MONGODB_DB || "ipc").trim();
@@ -234,7 +234,11 @@ function findUserByPhone(phone) {
 
 
 function findUserById(id) {
-  return connect().then((d) => d.collection("users").findOne({ _id: id }));
+  /* accept 24-hex strings as well as ObjectId — a raw string _id never
+     matches in Mongo and silently returns null (this bit the /me lookup) */
+  const key =
+    typeof id === "string" && /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : id;
+  return connect().then((d) => d.collection("users").findOne({ _id: key }));
 }
 
 function insertUser({ email, name, password, role, phone, birthMonth }) {
