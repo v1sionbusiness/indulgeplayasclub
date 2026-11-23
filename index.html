@@ -2089,6 +2089,7 @@ img.tc-true{filter:none !important}
           <p class="pay-amount-k">ORDER TOTAL</p>
           <p class="pay-amount" id="poAmount">₱0</p>
           <p class="pay-ref-line" id="poRefs">—</p>
+          <div id="poReceipt" style="display:none"></div>
           <div id="ipcLiveQrOrder" class="qr-panel" style="margin-top:18px" role="img" aria-label="Official Maya QR Ph payment code"></div>
           <div class="pay-items-mini" id="poItems"></div>
         </div>
@@ -2121,6 +2122,79 @@ img.tc-true{filter:none !important}
     </div>
   </div>
 </div>
+
+<!-- ================================================================
+     VIEW — ORDER RECEIPT (v30)
+     A paper-styled official receipt for one order: pulled live from
+     the club's records, stamped with the REAL payment status, and
+     printable straight from the browser. No numbers are invented —
+     every line is the order's own record.
+     ================================================================ -->
+<div class="view" id="v-receipt">
+  <div class="rc-wrap">
+    <p class="rc-state" id="rcLoading">PULLING YOUR RECEIPT…</p>
+    <div class="rc-state" id="rcNotfound" style="display:none">
+      <p class="rc-state-big">RECEIPT NOT FOUND.</p>
+      <p>CHECK THE LINK — OR OPEN THE ORDER IN YOUR ACCOUNT AND TAP RECEIPT.</p>
+      <a href="#/account" class="btn-o btn-sm" style="margin-top:16px;display:inline-flex">BACK TO YOUR ACCOUNT</a>
+    </div>
+    <div id="rcMain" style="display:none"></div>
+  </div>
+</div>
+<style id="ipc-receipt-css">
+.rc-wrap{max-width:760px;margin:0 auto;padding:56px 20px 90px}
+.rc-state{text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px;letter-spacing:.08em;padding:60px 0;line-height:1.9}
+.rc-state-big{font-family:var(--display);font-size:22px;letter-spacing:.04em;color:var(--text);margin-bottom:10px}
+.rc-paper{position:relative;background:#F4F3EF;color:#101010;border-radius:6px;padding:34px 32px 28px;font-family:var(--mono);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.rc-paper::before{content:'';position:absolute;left:18px;right:18px;top:14px;border-top:1px dashed #b5b5b5}
+.rc-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:18px;border-bottom:2px solid #101010}
+.rc-brand img{height:44px;width:auto;filter:none;margin-bottom:10px}
+.rc-brand-name{font-family:var(--display);font-size:19px;letter-spacing:.02em;color:#101010}
+.rc-brand-sub{font-size:10px;letter-spacing:.24em;color:#5c5c5c;margin-top:4px}
+.rc-stamp{flex-shrink:0;border:3px solid currentColor;border-radius:3px;padding:8px 14px;font-family:var(--display);font-size:14px;letter-spacing:.1em;transform:rotate(-5deg);text-transform:uppercase;text-align:center;max-width:230px;line-height:1.3}
+.rc-stamp small{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;font-weight:400;margin-top:4px}
+.rc-stamp.is-paid{color:#0b6e3f}
+.rc-stamp.is-under{color:#101010}
+.rc-stamp.is-pending{color:#8a6a00}
+.rc-stamp.is-failed{color:#8f1d1d}
+.rc-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 26px;padding:16px 0;border-bottom:1px dashed #8b8b8b;font-size:12px}
+.rc-meta div{display:flex;justify-content:space-between;gap:12px;min-width:0}
+.rc-k{color:#5c5c5c;font-size:10px;letter-spacing:.14em;white-space:nowrap}
+.rc-v{font-weight:700;text-align:right;overflow-wrap:anywhere}
+.rc-table{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0 2px}
+.rc-table th{text-align:left;font-size:10px;letter-spacing:.16em;color:#5c5c5c;font-weight:400;padding:14px 0 7px;border-bottom:1px solid #101010}
+.rc-table th.r{text-align:right}
+.rc-table td{padding:10px 0;border-bottom:1px dashed #b5b5b5;vertical-align:top}
+.rc-table td.r{text-align:right;white-space:nowrap}
+.rc-item-name{font-weight:700;letter-spacing:.02em}
+.rc-item-sub{color:#5c5c5c;font-size:10px;letter-spacing:.1em;margin-top:3px}
+.rc-totals{margin-left:auto;max-width:340px;padding-top:12px;font-size:12px}
+.rc-totals .row{display:flex;justify-content:space-between;gap:14px;padding:4px 0}
+.rc-totals .row.big{border-top:2px solid #101010;margin-top:8px;padding-top:11px;font-family:var(--display);font-size:15px;letter-spacing:.02em}
+.rc-block{border-top:1px dashed #8b8b8b;margin-top:18px;padding-top:14px;font-size:12px}
+.rc-block .rc-k{display:block;margin-bottom:7px}
+.rc-block p{line-height:1.7}
+.rc-trackline{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;border:1.5px solid #101010;border-radius:999px;padding:6px 14px;font-size:11px;letter-spacing:.08em;font-weight:700}
+.rc-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.rc-btn{display:inline-flex;align-items:center;gap:8px;border:1.5px solid #101010;border-radius:999px;padding:11px 20px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:#101010;background:transparent;cursor:pointer;transition:background .18s var(--ease),color .18s var(--ease)}
+.rc-btn:hover{background:#101010;color:#F4F3EF}
+.rc-btn.solid{background:#101010;color:#F4F3EF}
+.rc-btn.solid:hover{background:#2a2a2a;border-color:#2a2a2a}
+.rc-back{margin-top:20px;text-align:center}
+.rc-back a{color:#5c5c5c;font-size:11px;letter-spacing:.16em;border-bottom:1px solid #5c5c5c;padding-bottom:2px}
+.rc-foot{margin-top:26px;padding-top:14px;border-top:1px dashed #8b8b8b;color:#5c5c5c;font-size:10px;letter-spacing:.06em;line-height:1.9;text-align:center}
+.rc-mini{display:inline-flex;align-items:center;gap:7px;margin-top:12px;border:1.5px solid var(--line-2);border-radius:999px;padding:8px 16px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--text);transition:border-color .18s var(--ease),background .18s var(--ease)}
+.rc-mini:hover{border-color:var(--white);background:rgba(255,255,255,.06)}
+@media print{
+  body.on-receipt{background:#fff}
+  body.on-receipt header.nav,body.on-receipt .footer,body.on-receipt .mmenu,body.on-receipt #toast,body.on-receipt .rc-back{display:none!important}
+  body.on-receipt .view{display:none!important}
+  body.on-receipt #v-receipt{display:block!important}
+  body.on-receipt .rc-wrap{padding:0;max-width:none}
+  body.on-receipt .rc-paper{box-shadow:none;border-radius:0;padding:24px}
+  body.on-receipt .rc-actions{display:none!important}
+}
+</style>
 
 <!-- ================================================================
      VIEW — LOG IN
@@ -2749,7 +2823,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v29-20261124-maintmode';
+  var IPC_BUILD = 'ipc-v30-20261124-receipt';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -4274,6 +4348,14 @@ img.tc-true{filter:none !important}
     if (IPC.hidePayTracking) IPC.hidePayTracking();
     $('#poAmount').textContent = IPC.fmtP(pay.amountCentavos);
     $('#poRefs').textContent = 'ORDER ' + pay.orderReference + ' — PAYMENT ' + pay.paymentReference;
+    /* the receipt is one tap away from every payment state — the order was
+       accepted the moment it was placed, and the receipt says exactly that */
+    var rcHost = $('#poReceipt');
+    if (rcHost) {
+      rcHost.style.display = 'block';
+      rcHost.innerHTML = '<a class="rc-mini" href="#/receipt/' + encodeURIComponent(pay.orderReference) + '">' +
+        (pay.status === 'paid' ? 'VIEW RECEIPT — PAYMENT RECEIVED' : 'VIEW ORDER RECEIPT') + '</a>';
+    }
     $('#poItems').innerHTML = (order.items || []).map(function (it) {
       return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + '</span><span>' + IPC.fmtP(it.priceCentavos * it.qty) + '</span></p>';
     }).join('') +
@@ -4407,6 +4489,91 @@ img.tc-true{filter:none !important}
       if (poState.trkStatus === 'delivered' || poState.trkStatus === 'cancelled') return;
       poState.timer = setInterval(function () { loadPay(poState.ref, true); }, 15000);
     });
+  };
+  /* ---------------- ORDER RECEIPT (v30) ----------------
+     One official receipt per order, rendered live from the club's own
+     records. The stamp is derived from the REAL payment status — a
+     pending order never wears a PAID stamp, no matter what. */
+  IPC.renderReceipt = function (ref) {
+    var loading = $('#rcLoading'), nf = $('#rcNotfound'), main = $('#rcMain');
+    if (!loading || !nf || !main) return;
+    nf.style.display = 'none';
+    main.style.display = 'none';
+    loading.style.display = 'block';
+    var suffix = (!IPC.auth.user && IPC.guestRef.tokenForPay()) ? '?guestToken=' + IPC.guestRef.tokenForPay() : '';
+    IPC.api('/api/receipt/' + encodeURIComponent(ref) + suffix).then(function (d) {
+      loading.style.display = 'none';
+      if (!d || !d.receipt) { nf.style.display = 'block'; return; }
+      main.innerHTML = IPC.receiptHTML(d.receipt);
+      main.style.display = 'block';
+      var pr = $('#rcPrint');
+      if (pr) pr.addEventListener('click', function () { window.print(); });
+      var cp = $('#rcCopy');
+      if (cp) cp.addEventListener('click', function () { IPC.copyText(d.receipt.reference, 'ORDER NUMBER'); });
+    }).catch(function () {
+      loading.style.display = 'none';
+      nf.style.display = 'block';
+    });
+  };
+  IPC.receiptHTML = function (r) {
+    var esc = IPC.esc;
+    var rcDate = function (v) {
+      if (!v) return '—';
+      try { return new Date(v).toLocaleString('en-PH', { timeZone: 'Asia/Manila', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).toUpperCase(); } catch (e) { return String(v).toUpperCase(); }
+    };
+    /* the stamp tells the truth — every payment state, no exceptions */
+    var stamp = {
+      paid: ['is-paid', 'PAYMENT RECEIVED', 'VERIFIED BY THE CLUB — ORDER UNLOCKED'],
+      under_verification: ['is-under', 'UNDER VERIFICATION', 'RECEIPT ON RECORD — PAYMENT BEING CHECKED'],
+      failed: ['is-failed', 'PAYMENT DECLINED', 'RECEIPT ON RECORD — ORDER NOT PAID']
+    }[r.paymentStatus] || ['is-pending', 'ORDER ACCEPTED', 'NOT A PAID RECEIPT YET — AWAITING PAYMENT'];
+    var c = r.customer || {};
+    var pay = r.payment || {};
+    var rows = (r.items || []).map(function (it) {
+      return '<tr><td><p class="rc-item-name">' + esc(it.name) + '</p><p class="rc-item-sub">' +
+        esc([it.size, it.color].filter(Boolean).join(' · ')) + '</p></td>' +
+        '<td class="r">× ' + Number(it.qty || 0) + '</td><td class="r">' +
+        IPC.fmtP((it.priceCentavos || 0) * (it.qty || 0)) + '</td></tr>';
+    }).join('');
+    var shipLabel = r.shippingCentavos == null ? '—' : (r.shippingCentavos > 0 ? IPC.fmtP(r.shippingCentavos) : 'FREE');
+    var logo = document.querySelector('.brand-mark');
+    var addr = [c.addressLine, [c.barangay, c.city, c.province].filter(Boolean).join(', '), c.postalCode].filter(Boolean);
+    var cLine = [c.name, c.phone].filter(Boolean).join(' · ');
+    return '<div class="rc-paper">' +
+      '<div class="rc-head"><div class="rc-brand">' +
+        (logo ? '<img src="' + logo.src + '" alt="Indulge Playas Club" />' : '') +
+        '<p class="rc-brand-name">INDULGE PLAYAS CLUB</p>' +
+        '<p class="rc-brand-sub">OFFICIAL ORDER RECEIPT</p>' +
+      '</div><div class="rc-stamp ' + stamp[0] + '">' + stamp[1] + '<small>' + stamp[2] + '</small></div></div>' +
+      '<div class="rc-meta">' +
+        '<div><span class="rc-k">ORDER NO.</span><span class="rc-v">' + esc(r.reference) + '</span></div>' +
+        '<div><span class="rc-k">DATE PLACED</span><span class="rc-v">' + rcDate(r.createdAt) + '</span></div>' +
+        (pay.paymentReference ? '<div><span class="rc-k">PAYMENT REF</span><span class="rc-v">' + esc(pay.paymentReference) + '</span></div>' : '') +
+        (pay.refNo ? '<div><span class="rc-k">E-WALLET REF</span><span class="rc-v">' + esc(pay.refNo) + '</span></div>' : '') +
+        (pay.verifiedAt ? '<div><span class="rc-k">PAYMENT VERIFIED</span><span class="rc-v">' + rcDate(pay.verifiedAt) + (pay.reviewedBy ? ' · ' + esc(pay.reviewedBy) : '') + '</span></div>' : '') +
+      '</div>' +
+      '<table class="rc-table"><thead><tr><th>PIECE</th><th class="r">QTY</th><th class="r">LINE</th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="3">NO LINE ITEMS ON RECORD</td></tr>') + '</tbody></table>' +
+      '<div class="rc-totals">' +
+        '<div class="row"><span class="rc-k">SUBTOTAL</span><span>' + IPC.fmtP(r.subtotalCentavos) + '</span></div>' +
+        (r.discountCentavos ? '<div class="row"><span class="rc-k">VOUCHER ' + esc(r.voucherCode || '') + '</span><span>−' + IPC.fmtP(r.discountCentavos) + '</span></div>' : '') +
+        '<div class="row"><span class="rc-k">SHIPPING' + (r.shippingZone ? ' · ' + esc(r.shippingZone) : '') + '</span><span>' + shipLabel + '</span></div>' +
+        '<div class="row big"><span>TOTAL</span><span>' + IPC.fmtP(r.totalCentavos) + '</span></div>' +
+      '</div>' +
+      '<div class="rc-block"><span class="rc-k">DELIVER TO</span>' +
+        '<p>' + esc(cLine || '—') + '<br />' + addr.map(function (x) { return esc(x); }).join('<br />') + '</p>' +
+        (r.tracking && r.tracking.number ? '<p style="margin-top:12px"><span class="rc-trackline">TRACKING ' + esc(r.tracking.number) +
+          (r.tracking.courier ? ' · ' + esc(r.tracking.courier) : '') + ' — ' + esc(String(r.tracking.status || '').toUpperCase()) + '</span></p>' : '') +
+      '</div>' +
+      '<div class="rc-actions">' +
+        '<button type="button" class="rc-btn solid" id="rcPrint">PRINT RECEIPT</button>' +
+        '<button type="button" class="rc-btn" id="rcCopy">COPY ORDER NUMBER</button>' +
+        (pay.paymentReference ? '<a class="rc-btn" href="#/pay/' + encodeURIComponent(pay.paymentReference) + '">OPEN PAYMENT SCREEN</a>' : '') +
+      '</div>' +
+      '<div class="rc-foot">THIS RECEIPT REFLECTS THE CLUB\u2019S RECORDS AS OF ' + rcDate(r.issuedAt) +
+        '. EVERY PAYMENT IS VERIFIED BY A HUMAN BEFORE ANYTHING SHIPS.<br />QUESTIONS? DM @INDULGEPLAYASCLUB OR OPEN A TICKET FROM YOUR ACCOUNT — INDULGE PLAYAS CLUB, LOCAL CLOTHING BRAND FROM THE PHILIPPINES.</div>' +
+      '</div>' +
+      '<div class="rc-back"><a href="#/account">BACK TO YOUR ACCOUNT</a> · <a href="#/shop">CONTINUE SHOPPING</a></div>';
   };
   $('#refForm').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -4781,6 +4948,7 @@ img.tc-true{filter:none !important}
             '<p class="od-k">DELIVERY</p>' +
             '<p class="od-addr">' + IPC.esc(o.addressLine || 'NO STREET GIVEN') + (cityLine ? '<br />' + IPC.esc(cityLine) + (o.postalCode ? ' ' + IPC.esc(o.postalCode) : '') : '') + '</p>' +
             (IPC.trackLineHTML ? IPC.trackLineHTML(o) : '') +
+            '<a href="#/receipt/' + IPC.esc(o.reference) + '" class="btn-o btn-sm od-pay">RECEIPT</a>' +
             (o.payment && o.payment.paymentReference ? '<a href="#/pay/' + IPC.esc(o.payment.paymentReference) + '" class="btn-o btn-sm od-pay">VIEW PAYMENT</a>' : '') +
           '</div></details>';
       }).join('');
@@ -5099,6 +5267,8 @@ img.tc-true{filter:none !important}
     var head = parts[0] || 'home';
     if (head === 'product' && parts[1]) return { name: 'product', param: parts[1], query: query };
     if (head === 'pay' && parts[1]) return { name: 'payorder', param: decodeURIComponent(parts[1]), query: query };
+    /* the official receipt for one order — #/receipt/<order number> */
+    if (head === 'receipt' && parts[1]) return { name: 'receipt', param: decodeURIComponent(parts[1]), query: query };
     /* a collection deep link opens the shop filtered to that run */
     if (head === 'collection' && parts[1]) { query.col = decodeURIComponent(parts[1]); return { name: 'shop', param: null, query: query }; }
     if (['shop', 'collections', 'story', 'faq', 'contact', 'terms', 'privacy', 'cart', 'checkout', 'pay', 'login', 'signup', 'account', 'admin'].indexOf(head) >= 0) {
@@ -5136,6 +5306,10 @@ img.tc-true{filter:none !important}
     if (r.name === 'cart') { IPC.renderBag(); }
     if (r.name === 'checkout') { IPC.renderCheckout(); }
     if (r.name === 'payorder') { IPC.renderPayOrder(r.param); }
+    if (r.name === 'receipt') { IPC.renderReceipt(r.param); }
+    /* print law: when the receipt view is on screen, printing the page
+       prints the receipt paper only — the chrome drops out via CSS */
+    document.body.classList.toggle('on-receipt', r.name === 'receipt');
     if (r.name === 'account') { IPC.renderAccount(); }
     if (r.name === 'admin') { IPC.renderAdmin(); }
     /* scroll */
@@ -5379,6 +5553,7 @@ img.tc-true{filter:none !important}
     if (head === 'p' && seg[1]) { location.replace('#/product/' + encodeURIComponent(seg[1])); return; }
     if (head === 'collection' && seg[1]) { location.replace('#/collection/' + encodeURIComponent(seg[1])); return; }
     if (head === 'pay' && seg[1]) { location.replace('#/pay/' + encodeURIComponent(seg[1])); return; }
+    if (head === 'receipt' && seg[1]) { location.replace('#/receipt/' + encodeURIComponent(seg[1])); return; }
     if (map[head]) { location.replace(map[head]); return; }
   })();
 
@@ -5391,6 +5566,7 @@ img.tc-true{filter:none !important}
     else if (r.name === 'product' && product) path = '/p/' + encodeURIComponent(product.id);
     else if (r.name === 'collections') path = '/collections';
     else if (r.name === 'payorder') path = '/pay';
+    else if (r.name === 'receipt') path = '/receipt';
     else if (['story', 'faq', 'terms', 'privacy', 'contact', 'account', 'checkout'].indexOf(r.name) >= 0) path = '/' + r.name;
     try {
       if (history.replaceState) history.replaceState(null, '', path + location.hash);
@@ -5522,6 +5698,7 @@ img.tc-true{filter:none !important}
         '<p>CURRENT STAGE: <b>' + esc(String(t.status || '').toUpperCase()) + '</b>' + (t.number ? ' — TRACKING NO. ' + esc(t.number) : '') + '</p>' +
         (lines ? '<ul class="ipc-tier-perks">' + lines + '</ul>' : '') +
         (t.trackingUrl ? '<p style="margin-top:10px"><a class="btn-o btn-sm" href="' + esc(t.trackingUrl) + '" target="_blank" rel="noopener">OPEN COURIER TRACKING</a></p>' : '') +
+        (t.reference ? '<p style="margin-top:10px"><a class="btn-o btn-sm" href="#/receipt/' + encodeURIComponent(t.reference) + '">VIEW RECEIPT</a></p>' : '') +
         '</div>';
       host.style.display = 'block';
     }).catch(function (e) {
@@ -6267,6 +6444,7 @@ setTimeout(function () {
         (t.courier ? ' · ' + esc(t.courier) : '') + '</p>' + trackPill(t.status) +
         stepperHTML(t) + (t.status === 'cancelled' ? '' : latestHTML(t)) + feedHTML(t) +
         (t.trackingUrl ? '<p style="margin-top:12px"><a class="btn-o btn-sm" href="' + esc(t.trackingUrl) + '" target="_blank" rel="noopener">OPEN COURIER TRACKING</a></p>' : '') +
+        (t.reference ? '<p style="margin-top:12px"><a class="btn-o btn-sm" href="#/receipt/' + encodeURIComponent(t.reference) + '">VIEW RECEIPT</a></p>' : '') +
         '</div>';
     }).catch(function (err) {
       host.innerHTML = '';

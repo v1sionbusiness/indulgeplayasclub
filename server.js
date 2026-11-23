@@ -414,7 +414,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v29-20261124-maintmode";
+const BUILD_STAMP = "ipc-v30-20261124-receipt";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -835,8 +835,8 @@ function looksLikeAppPath(p) {
   const seg = p.replace(/^\/+|\/+$/g, "").split("/");
   if (seg.length === 0) return false;
   if (APP_PATHS.has(seg[0])) return true;
-  /* /p/<id>, /collection/<slug>, /pay/<ref>, /track/<ref> */
-  return (seg.length === 2 && ["p", "collection", "pay", "track"].includes(seg[0]));
+  /* /p/<id>, /collection/<slug>, /pay/<ref>, /track/<ref>, /receipt/<ref> */
+  return (seg.length === 2 && ["p", "collection", "pay", "track", "receipt"].includes(seg[0]));
 }
 
 /* --------------------------------------------------------------- */
@@ -1010,6 +1010,64 @@ function paymentView(p, order, includeProof) {
     };
   }
   return out;
+}
+
+/* Receipt view — everything the printed/onscreen receipt needs, pulled
+   straight from the order + payment records. Nothing is invented here:
+   the stamp the customer sees is derived from the REAL payment status,
+   and the money lines are the exact numbers the order locked in. */
+function receiptView(o, pay) {
+  const shippingCentavos = (o.shippingCentavos == null && o.subtotalCentavos != null && o.totalCentavos != null)
+    ? o.totalCentavos - o.subtotalCentavos + (o.discountCentavos || 0)
+    : (o.shippingCentavos == null ? null : o.shippingCentavos);
+  return {
+    kind: "receipt",
+    reference: o.reference,
+    createdAt: o.createdAt,
+    issuedAt: (pay && pay.verifiedAt) || o.updatedAt || o.createdAt,
+    orderStatus: o.status,
+    paymentStatus: pay ? pay.status : null,
+    customer: {
+      name: o.customerName || "",
+      email: o.email || "",
+      phone: o.phone || "",
+      addressLine: o.addressLine || "",
+      barangay: o.barangay || "",
+      city: o.city || "",
+      province: o.province || "",
+      postalCode: o.postalCode || "",
+    },
+    items: (o.items || []).map((it) => ({
+      name: it.name,
+      size: it.size,
+      color: it.color || null,
+      qty: it.qty,
+      priceCentavos: it.priceCentavos,
+    })),
+    subtotalCentavos: o.subtotalCentavos,
+    discountCentavos: o.discountCentavos || 0,
+    voucherCode: o.voucherCode || null,
+    shippingCentavos,
+    shippingZone: o.shippingZone || null,
+    totalCentavos: o.totalCentavos,
+    payment: pay ? {
+      paymentReference: pay.paymentReference,
+      status: pay.status,
+      method: pay.method || "qr",
+      refNo: pay.refNo || null,
+      proofPresent: Boolean(pay.proofDataUrl),
+      verifiedAt: pay.verifiedAt || null,
+      amountCentavos: pay.amountCentavos,
+      currency: pay.currency || "PHP",
+      /* customers read "IPC TEAM" — the reviewer's identity stays admin-only */
+      reviewedBy: pay.reviewedBy ? "IPC TEAM" : null,
+    } : null,
+    tracking: o.tracking ? {
+      number: o.tracking.number || null,
+      courier: o.tracking.courier || null,
+      status: o.tracking.status || null,
+    } : null,
+  };
 }
 
 /* --------------------------------------------------------------- */
@@ -1394,6 +1452,35 @@ async function route(req, res) {
         });
       } catch (err) {
         return mongoError(res, err, "payment lookup failed");
+      }
+    }
+
+    /* --- one receipt — owner, admin, or the guest with the receipt token.
+           Same ownership law as the payment screen: nobody pulls a receipt
+           for an order they can't prove is theirs. --- */
+    const rcMatch = p.match(/^\/api\/receipt\/([A-Za-z0-9-]+)$/);
+    if (rcMatch) {
+      const found = await userFromReq(req).catch(() => null);
+      const guestToken = new URL(req.url, "http://x").searchParams.get("guestToken") || "";
+      const guestOk = /^[a-f0-9]{32,128}$/.test(guestToken);
+      if (!found && !guestOk) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        const order = await d.collection("orders")
+          .findOne({ reference: rcMatch[1].toUpperCase() });
+        if (!order) return fail(res, 404, "not_found", "NO ORDER FOUND FOR THAT NUMBER.");
+        const isOwner = found && (String(order.userId) === String(found.user._id) ||
+          (order.email && found.user.email && String(order.email).toLowerCase() === String(found.user.email).toLowerCase()));
+        const guestMatch = !found && order.guestToken && order.guestToken === guestToken;
+        if (!isOwner && !guestMatch && (!found || found.user.role !== "admin")) {
+          return fail(res, 403, "forbidden", "THIS RECEIPT BELONGS TO ANOTHER ACCOUNT.");
+        }
+        const pay = await d.collection("payments")
+          .findOne({ orderReference: order.reference });
+        return send(res, 200, { ok: true, receipt: receiptView(order, pay) });
+      } catch (err) {
+        return mongoError(res, err, "receipt lookup failed");
       }
     }
 
