@@ -2713,7 +2713,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v21-20261123-growthimpl';
+  var IPC_BUILD = 'ipc-v22-20261123-productmeta';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2863,7 +2863,13 @@ img.tc-true{filter:none !important}
   IPC.catalogRefreshView = function () {
     var h = location.hash || '';
     if (h.indexOf('#/shop') === 0 && IPC.renderShop) IPC.renderShop();
-    else if (h.indexOf('#/collection/') === 0 && IPC.renderCollections) IPC.renderCollections();
+    else if (h.indexOf('#/collection/') === 0 && IPC.renderShop) {
+      /* a direct collection URL is the filtered shop — restore the filter
+         and story note after the catalog merge lands (same as the router) */
+      if (IPC.setShopFilter) IPC.setShopFilter(decodeURIComponent(h.slice(13)));
+      else IPC.renderShop();
+    }
+    else if (h.indexOf('#/collections') === 0 && IPC.renderCollections) IPC.renderCollections();
     else if (h.indexOf('#/product/') === 0 && IPC.renderProduct) IPC.renderProduct(decodeURIComponent(h.slice(10)));
     if (IPC.renderShopChips) IPC.renderShopChips();
   };
@@ -4684,7 +4690,10 @@ img.tc-true{filter:none !important}
       : r.name.charAt(0).toUpperCase() + r.name.slice(1) + ' — INDULGE PLAYAS CLUB';
     /* clean URL + canonical + og:url + Product JSON-LD for this route */
     IPC.shareState(r, r.name === 'product' ? IPC.byId(r.param) : null);
-    if (r.name === 'home') { IPC.renderLaunch(); IPC.renderStreets(); IPC.renderDeepTrack(); }
+    /* launch pill lives on the hero; the streets wall and the /track deep
+       link block live on the story page — render them where they sit */
+    if (r.name === 'home') IPC.renderLaunch();
+    if (r.name === 'home' || r.name === 'story') { IPC.renderStreets(); IPC.renderDeepTrack(); }
   }
   window.addEventListener('hashchange', applyRoute);
 
@@ -6493,6 +6502,17 @@ setTimeout(function () {
       if (pane === 'streets') loadAdminStreets();
       if (pane === 'growth') { loadFunnel(); loadCollectionStates(); IPC.api('/api/config').then(function (d) { var r = $('#usdRate'); if (r && d.usdPhpRate) r.value = d.usdPhpRate; }).catch(function () {}); }
     });
+  });
+  /* the base tab switch ran before these injected tabs existed — a delegated
+     switch makes every tab open its pane (idempotent with the base wiring) */
+  document.addEventListener('click', function (ev) {
+    var tab = ev.target && ev.target.closest ? ev.target.closest('.adm-tab') : null;
+    if (!tab || !tab.getAttribute) return;
+    var pane = tab.getAttribute('data-pane');
+    if (!pane || !$('#pane-' + pane)) return;
+    $$('.adm-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+    $$('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
+    $('#pane-' + pane).classList.add('active');
   });
   /* funnel also shows on the payment queue so the owner sees it daily */
   function funnelIntoQueue() {

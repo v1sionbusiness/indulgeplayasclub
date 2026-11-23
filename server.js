@@ -171,7 +171,30 @@ const PRODUCTS = [
   { id: "stripe-ls",    name: "STRIPE LONG SLEEVE", priceCentavos:  95000, sizes: ["S","M","L","XL"],   colors: ["BLACK / WHITE"] },
   { id: "club-tote",    name: "CLUB TOTE",          priceCentavos:  65000, sizes: ["OS"],               colors: ["HEAVY BLACK"] },
 ];
-const SHIPPING_CENTAVOS = 0; /* FREE nationwide — no minimum spend (see FAQ) */
+const SHIPPING_CENTAVOS = 0; /* Free at checkout — courier coverage depends on the
+   member's location (see T&C 04); where a courier can't reach, the club sorts
+   a Metro Manila meetup first. */
+
+/* Share-card data for the baked-in shelf. The server mirrors the client's
+   product pages so /p/<id> links unfurl with a real product card and Product
+   structured data on every platform. Kept separate from PRODUCTS so catalog
+   totals and inventory views stay lean. */
+const BAKED_META = {
+  "hoodie-001":   { img: "/assets/img/prod-og-logo-hoodie.jpg",
+    blurb: "Heavyweight black hoodie with the club arch logo across the back and the OG mark printed at the chest. Drop shoulders, kangaroo pocket, ribbed cuffs — built to keep its shape wash after wash. PRE-ORDER ONLY: produced in the pre-order window, ships when the run lands." },
+  "court-tee":    { img: "/assets/img/prod-court-tee.jpg",
+    blurb: "Crisp white boxy tee with a small circular club logo printed at the chest and a second hit at the back yoke. Pre-shrunk cotton, so the fit stays true wash after wash." },
+  "varsity-26":   { img: "/assets/img/prod-varsity-26.jpg",
+    blurb: "Wool-blend varsity with white contrast sleeves, chenille club patch, snap buttons and quilted satin lining. Made in numbered batches — once it's gone, it's gone." },
+  "utility-cargo":{ img: "/assets/img/prod-utility-cargo.jpg",
+    blurb: "Wide-leg black cargos with adjustable utility straps, double knee pockets and a relaxed drape. Reinforced seams and a slight stretch for daily wear — block to beach." },
+  "rib-beanie":   { img: "/assets/img/prod-rib-beanie.jpg",
+    blurb: "Ribbed knit beanie in jet black with a woven IPC label at the fold. The stretchy cuff holds its shape and stays locked in through any season." },
+  "stripe-ls":    { img: "/assets/img/prod-stripe-ls.jpg",
+    blurb: "Black long sleeve with thin white engineered stripes, ribbed collar and printed sleeve hits at the forearm. Layer it under a jacket or run it solo." },
+  "club-tote":    { img: "/assets/img/prod-club-tote.jpg",
+    blurb: "Heavy canvas tote with bold block print, reinforced base stitching and an inner pocket for keys and phone. Carries the drop, the towel and everything else." },
+};
 
 /* The slugs the site ships with — a piece can only ride one of these or a
    collection the team registered through the admin inventory. */
@@ -232,8 +255,61 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v21-20261123-growthimpl";
+const BUILD_STAMP = "ipc-v22-20261123-productmeta";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
+
+/* ---- product share cards: /p/<id> unfurls with real product meta ---- */
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function injectProductMeta(html, id, info) {
+  if (!html || !info || !info.name) return html;
+  const url = SITE_ORIGIN + "/p/" + encodeURIComponent(id);
+  const imgAbs = info.img && String(info.img).indexOf("data:") !== 0
+    ? (String(info.img).indexOf("http") === 0 ? info.img : SITE_ORIGIN + info.img)
+    : "";
+  const title = escHtml(info.name + " — INDULGE PLAYAS CLUB");
+  const desc = escHtml(String(info.blurb || info.name).slice(0, 300));
+  const out = html
+    .replace(/<link rel="canonical" href="[^"]*"\s*\/>/i,
+      '<link rel="canonical" href="' + url + '" />')
+    .replace(/<meta property="og:title" content="[^"]*"\s*\/>/g,
+      '<meta property="og:title" content="' + title + '" />')
+    .replace(/<meta property="og:description" content="[^"]*"\s*\/>/i,
+      '<meta property="og:description" content="' + desc + '" />')
+    .replace(/<meta property="og:type" content="[^"]*"\s*\/>/g,
+      '<meta property="og:type" content="product" />')
+    .replace(/<meta property="og:url" content="[^"]*"\s*\/>/i,
+      '<meta property="og:url" content="' + url + '" />');
+  const withImg = imgAbs
+    ? out.replace(/<meta property="og:image" content="[^"]*"\s*\/>/i,
+      '<meta property="og:image" content="' + escHtml(imgAbs) + '" />')
+    : out;
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: info.name,
+    description: String(info.blurb || info.name).slice(0, 500),
+    image: imgAbs ? [imgAbs] : undefined,
+    brand: { "@type": "Brand", name: "INDULGE PLAYAS CLUB" },
+    offers: {
+      "@type": "Offer",
+      url: url,
+      priceCurrency: "PHP",
+      price: ((Number(info.priceCentavos) || 0) / 100).toFixed(2),
+      availability: "https://schema.org/InStock",
+      itemCondition: "https://schema.org/NewCondition",
+    },
+  };
+  const tag = '<script type="application/ld+json">' + JSON.stringify(ld) + "</script>";
+  return withImg.replace(/<\/head>/i, tag + "</head>");
+}
+function resolveProductPath(req) {
+  const m = String((req && req.url) || "").split("?")[0]
+    .match(/^\/p\/([A-Za-z0-9_.\-]{1,80})\/?$/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 function serveIndex(req, res) {
   try {
@@ -380,35 +456,82 @@ function serveIndex(req, res) {
       }).observe(document.documentElement, { childList: true, subtree: true });
     })();
     </script>`;
-    html = html.replace(/<\/body>/i, navigationFix + "</body>");
+    /* Inject before the LAST </body>. The app's own code contains string
+       literals with </body> inside (the authenticity-card print window's
+       document.write), and a first-match replace would inject INSIDE that
+       string — its </script> tail then tears the main script apart and the
+       browser prints raw JavaScript as page text. The real document end is
+       always the last occurrence. */
+    const bodyIdx = html.lastIndexOf("</body>");
+    if (bodyIdx >= 0) html = html.slice(0, bodyIdx) + navigationFix + html.slice(bodyIdx);
+    else html += navigationFix;
 
     /* Serve the SPA with no-cache + ETag: every reload revalidates for free
        (304 when unchanged) and always picks up the newest build. The old
        `public, max-age=300` let devices keep running a stale app after a
        deploy — the source of "the site still shows the old login" reports. */
-    const etagRaw = crypto.createHash("sha1").update(html).digest("hex").slice(0, 24);
-    const etag = '"' + etagRaw + '"';
-    /* Proxies (Cloudflare in front of Render) may rewrite the tag to weak
-       form (W/"…") and the browser may echo a list — compare normalized. */
-    const inm = String((req && req.headers["if-none-match"]) || "");
-    const clientTags = inm.split(",").map(function (t) {
-      return t.trim().replace(/^W\//i, "").replace(/"/g, "");
-    });
-    if (clientTags.indexOf(etagRaw) >= 0 || clientTags.indexOf("*") >= 0) {
-      res.writeHead(304, {
-        ETag: etag,
+    /* 304/200 writer — the ETag covers the FINAL html, so injected product
+       cards get their own correct revalidation tag. */
+    const finish = function (finalHtml) {
+      const etagRaw = crypto.createHash("sha1").update(finalHtml).digest("hex").slice(0, 24);
+      const etag = '"' + etagRaw + '"';
+      /* Proxies (Cloudflare in front of Render) may rewrite the tag to weak
+         form (W/"…") and the browser may echo a list — compare normalized. */
+      const inm = String((req && req.headers["if-none-match"]) || "");
+      const clientTags = inm.split(",").map(function (t) {
+        return t.trim().replace(/^W\//i, "").replace(/"/g, "");
+      });
+      if (clientTags.indexOf(etagRaw) >= 0 || clientTags.indexOf("*") >= 0) {
+        res.writeHead(304, {
+          ETag: etag,
+          "Cache-Control": "no-cache",
+          ...SECURITY_HEADERS,
+        });
+        return res.end();
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache",
+        ETag: etag,
         ...SECURITY_HEADERS,
       });
-      return res.end();
+      return res.end(finalHtml);
+    };
+
+    /* /p/<id> → product share card. Baked-in pieces resolve sync; club-added
+       pieces fetch their card data from Atlas async. Any failure still serves
+       the full SPA — a product page never breaks over a meta tag. */
+    const pid = resolveProductPath(req);
+    if (!pid) { finish(html); return true; }
+
+    const baked = PRODUCTS.find(function (x) { return x && x.id === pid; });
+    if (baked) {
+      const meta = BAKED_META[pid] || {};
+      finish(injectProductMeta(html, pid, {
+        name: baked.name,
+        blurb: meta.blurb,
+        img: meta.img,
+        priceCentavos: baked.priceCentavos,
+      }));
+      return true;
     }
-    res.writeHead(200, {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-cache",
-      ETag: etag,
-      ...SECURITY_HEADERS,
-    });
-    res.end(html);
+
+    (async function () {
+      let info = null;
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d = await connect();
+        const doc = await d.collection("products")
+          .findOne({ id: pid, active: { $ne: false } });
+        if (doc) info = {
+          name: doc.name,
+          blurb: doc.desc || doc.alt || doc.name,
+          img: doc.img,
+          priceCentavos: doc.priceCentavos,
+        };
+      } catch { /* generic page is the safe fallback */ }
+      finish(info ? injectProductMeta(html, pid, info) : html);
+    })();
     return true;
   } catch {
     return false; // no index.html here → caller falls back to the health JSON
@@ -487,6 +610,11 @@ async function serveSitemap(req, res) {
       "  <url><loc>" + SITE_ORIGIN + "/collection/" + encodeURIComponent(c.slug) + "</loc><priority>0.7</priority></url>"
     ).join("\n");
   } catch { /* sitemap still serves the static routes */ }
+  /* the baked-in shelf always rides in the sitemap too */
+  const bakedUrls = PRODUCTS.map((p) =>
+    "  <url><loc>" + SITE_ORIGIN + "/p/" + encodeURIComponent(p.id) + "</loc><priority>0.8</priority></url>"
+  ).join("\n");
+  productUrls = bakedUrls + (productUrls ? "\n" + productUrls : "");
   const now = new Date().toISOString().slice(0, 10);
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
