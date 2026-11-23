@@ -140,6 +140,14 @@ async function ensureIndexes(d) {
     ["voucherRedemptions", { code: 1, userId: 1 }, { unique: true }],
     ["voucherRedemptions", { code: 1, phone: 1 }, { unique: true }],
     ["voucherRedemptions", { orderReference: 1 }, { unique: true }],
+    /* v25 — activity log, support tickets, product visibility */
+    ["activityLogs", { createdAt: -1 }, {}],
+    ["activityLogs", { action: 1, createdAt: -1 }, {}],
+    ["supportTickets", { id: 1 }, { unique: true }],
+    ["supportTickets", { userId: 1, updatedAt: -1 }, {}],
+    ["supportTickets", { status: 1, updatedAt: -1 }, {}],
+    ["productVisibility", { id: 1 }, { unique: true }],
+    ["analyticsEvents", { name: 1, createdAt: -1 }, {}],
   ];
   for (const [coll, key, opts] of specs) {
     try {
@@ -369,7 +377,7 @@ function nextReference(prefix) {
       { $inc: { seq: 1 } },
       { upsert: true, returnDocument: "after" }
     )
-  ).then((r) => `${prefix === "order" ? "IPC" : prefix === "track" ? "IPCT" : "IPCP"}-${String(r.seq).padStart(5, "0")}`);
+  ).then((r) => `${prefix === "order" ? "IPC" : prefix === "track" ? "IPCT" : prefix === "ticket" ? "IPCS" : "IPCP"}-${String(r.seq).padStart(5, "0")}`);
 }
 
 /* ---------------------------------------------------------------- */

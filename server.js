@@ -209,6 +209,73 @@ const PROOF_TYPES = { "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".
 const PRODUCT_IMG_MAX_CHARS = 1600000; /* ~1.1MB binary after base64 — the client compresses before upload */
 const TAG_WHITELIST = ["", "NEW DROP", "PRE-ORDER", "RESTOCK", "LIMITED", "CLUB ONLY"];
 
+/* ---------- PRODUCT VISIBILITY — shop / gallery / collection, one by one
+   A piece can ride one surface and not the others without touching the
+   database record, the order history or the inventory numbers. Missing
+   flags mean VISIBLE — the club never hides a piece by accident, and a
+   hidden piece is always one flip away from coming back. ------------- */
+const PRODUCT_SURFACES = ["shop", "gallery", "collection"];
+function defaultVisibility() {
+  return { shopVisible: true, galleryVisible: true, collectionVisible: true };
+}
+function normalizeVisibility(raw) {
+  const out = defaultVisibility();
+  PRODUCT_SURFACES.forEach((s) => {
+    const key = s + "Visible";
+    if (raw && raw[key] !== undefined) out[key] = !!raw[key];
+  });
+  return out;
+}
+function isFullyHidden(v) {
+  return !!v && !v.shopVisible && !v.galleryVisible && !v.collectionVisible;
+}
+async function visibilityMap(d) {
+  const rows = await d.collection("productVisibility").find({}).limit(1000).toArray();
+  const map = {};
+  rows.forEach((r) => { map[r.id] = normalizeVisibility(r); });
+  return map;
+}
+/* ---------- ADMIN ACTIVITY LOG — append-only. Every important admin
+   action lands here: who did it, what changed, when. There is no edit
+   or delete endpoint anywhere — the regular admin interface cannot
+   rewrite the record, and neither can the API. ---------------------- */
+async function logActivity(d, actorEmail, action, targetType, targetId, targetLabel, details) {
+  try {
+    await d.collection("activityLogs").insertOne({
+      actorEmail: String(actorEmail || "system").toLowerCase().slice(0, 120),
+      action: String(action || "").slice(0, 40),
+      targetType: String(targetType || "").slice(0, 30),
+      targetId: String(targetId || "").slice(0, 120),
+      targetLabel: String(targetLabel || "").slice(0, 200),
+      details: String(details || "").slice(0, 500),
+      createdAt: new Date(),
+    });
+  } catch { /* the log never blocks the action it records */ }
+}
+
+/* ---------- SUPPORT TICKETS — the club's own help desk -------------- */
+const SUPPORT_CATEGORIES = ["order_issue", "product_question", "sizing_fit", "payment", "shipping", "membership", "other"];
+const SUPPORT_STATUSES = ["open", "in_progress", "resolved", "closed"];
+function cleanSupportText(raw, max) {
+  return String(raw == null ? "" : raw).replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, max);
+}
+function supportTicketView(t) {
+  return {
+    id: t.id,
+    ref: t.ref,
+    email: t.email,
+    orderReference: t.orderReference || null,
+    subject: t.subject,
+    category: t.category,
+    message: t.message,
+    status: t.status,
+    replies: (t.replies || []).map((r) => ({ by: r.by, author: r.author, body: r.body, at: r.at })),
+    customerUnread: !!t.customerUnread,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
+
 /* The client-facing shape of a saved piece — mirrors the baked-in catalog
    fields (priceC, img, collection…) so the shop renders both kinds alike. */
 function productView(doc, soldUnits) {
@@ -255,7 +322,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v24-20261123-contactviztech";
+const BUILD_STAMP = "ipc-v25-20261123-cartopsadmin";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -1203,9 +1270,22 @@ async function route(req, res) {
         ]).toArray();
         const soldMap = {};
         soldRows.forEach((s) => { soldMap[s._id] = s.units; });
+        /* surface visibility rides with the catalog — the client filters the
+           shop, the home gallery showcase and the collection pages with it.
+           The map also covers baked-in pieces the client already carries. */
+        const visMap = await visibilityMap(d).catch(() => ({}));
         return send(res, 200, {
           ok: true,
-          products: docs.map((doc) => productView(doc, soldMap[doc.id] || 0)),
+          products: docs.map((doc) => {
+            const view = productView(doc, soldMap[doc.id] || 0);
+            const v = visMap[doc.id] || defaultVisibility();
+            view.shopVisible = v.shopVisible;
+            view.galleryVisible = v.galleryVisible;
+            view.collectionVisible = v.collectionVisible;
+            view.hidden = isFullyHidden(v);
+            return view;
+          }),
+          visibility: visMap,
           collections: cols.map((c) => ({
             slug: c.slug,
             title: c.title,
@@ -1228,6 +1308,10 @@ async function route(req, res) {
     if (p === "/api/config") return handleConfigGet(req, res);
     if (p === "/api/admin/reviews") return handleAdminReviews(req, res);
     if (p === "/api/admin/funnel") return handleAdminFunnel(req, res);
+    if (p === "/api/admin/activity") return handleAdminActivity(req, res);
+    if (p === "/api/admin/analytics") return handleAdminAnalytics(req, res);
+    if (p === "/api/admin/support") return handleAdminSupport(req, res);
+    if (p === "/api/support/mine") return handleSupportMine(req, res);
 
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
@@ -1256,26 +1340,34 @@ async function route(req, res) {
         if (p === "/api/admin/products") {
           const docs = await d.collection("products")
             .find({}).sort({ createdAt: -1 }).limit(200).toArray();
+          const visMap = await visibilityMap(d).catch(() => ({}));
           return send(res, 200, {
             ok: true,
-            products: docs.map((doc) => ({
-              id: doc.id,
-              name: doc.name,
-              priceCentavos: doc.priceCentavos,
-              tag: doc.tag || "",
-              collection: doc.collection || "",
-              sizes: doc.sizes || [],
-              colors: doc.colors || [],
-              desc: doc.desc || "",
-              fabric: doc.fabric || "",
-              fit: doc.fit || "",
-              alt: doc.alt || "",
-              modelInfo: doc.modelInfo || "",
-              batchSize: doc.batchSize || 0,
-              home: !!doc.home,
-              active: doc.active !== false,
-              createdAt: doc.createdAt,
-            })),
+            products: docs.map((doc) => {
+              const v = visMap[doc.id] || defaultVisibility();
+              return {
+                id: doc.id,
+                name: doc.name,
+                priceCentavos: doc.priceCentavos,
+                tag: doc.tag || "",
+                collection: doc.collection || "",
+                sizes: doc.sizes || [],
+                colors: doc.colors || [],
+                desc: doc.desc || "",
+                fabric: doc.fabric || "",
+                fit: doc.fit || "",
+                alt: doc.alt || "",
+                modelInfo: doc.modelInfo || "",
+                batchSize: doc.batchSize || 0,
+                home: !!doc.home,
+                active: doc.active !== false,
+                shopVisible: v.shopVisible,
+                galleryVisible: v.galleryVisible,
+                collectionVisible: v.collectionVisible,
+                hidden: isFullyHidden(v),
+                createdAt: doc.createdAt,
+              };
+            }),
           });
         }
         if (p === "/api/admin/inventory") {
@@ -1288,6 +1380,7 @@ async function route(req, res) {
           sold.forEach((s) => { soldMap[s._id] = s; });
           const customDocs = await d.collection("products")
             .find({}).sort({ createdAt: -1 }).limit(500).toArray();
+          const visMap = await visibilityMap(d).catch(() => ({}));
           const customRows = customDocs.map((doc) => ({
             id: doc.id,
             name: doc.name,
@@ -1298,18 +1391,28 @@ async function route(req, res) {
             custom: true,
             active: doc.active !== false,
           }));
-          const inventory = PRODUCTS.concat(customRows).map((p) => ({
-            id: p.id,
-            name: p.name,
-            priceCentavos: p.priceCentavos,
-            tag: p.tag || "",
-            sizes: p.sizes,
-            colors: p.colors,
-            unitsSold: (soldMap[p.id] && soldMap[p.id].units) || 0,
-            revenueCentavos: (soldMap[p.id] && soldMap[p.id].revenue) || 0,
-            custom: !!p.custom,
-            active: p.active !== false,
-          }));
+          const inventory = PRODUCTS.concat(customRows).map((p) => {
+            const v = visMap[p.id] || defaultVisibility();
+            const active = p.active !== false;
+            return {
+              id: p.id,
+              name: p.name,
+              priceCentavos: p.priceCentavos,
+              tag: p.tag || "",
+              sizes: p.sizes,
+              colors: p.colors,
+              unitsSold: (soldMap[p.id] && soldMap[p.id].units) || 0,
+              revenueCentavos: (soldMap[p.id] && soldMap[p.id].revenue) || 0,
+              custom: !!p.custom,
+              active,
+              shopVisible: v.shopVisible,
+              galleryVisible: v.galleryVisible,
+              collectionVisible: v.collectionVisible,
+              hidden: isFullyHidden(v),
+              /* publication status in plain words for the inventory table */
+              publicationStatus: !active ? "pulled" : (isFullyHidden(v) ? "hidden" : "live"),
+            };
+          });
           return send(res, 200, { ok: true, inventory });
         }
         if (p === "/api/admin/overview") {
@@ -1502,6 +1605,13 @@ async function route(req, res) {
   /* --- club inventory: the team adds their own pieces straight to the shop --- */
   if (p === "/api/admin/products/remove") return handleAdminProductRemove(req, res);
   if (p === "/api/admin/products") return handleAdminProductSave(req, res);
+  if (p === "/api/admin/products/visibility") return handleAdminProductVisibility(req, res);
+  if (p === "/api/admin/products/restore") return handleAdminProductRestore(req, res);
+  if (p === "/api/admin/support/reply") return handleAdminSupportReply(req, res);
+  if (p === "/api/admin/support/status") return handleAdminSupportStatus(req, res);
+  if (p === "/api/support") return handleSupportCreate(req, res, ip);
+  if (p === "/api/support/reply") return handleSupportReply(req, res);
+  if (p === "/api/support/read") return handleSupportRead(req, res);
 
   /* --- growth platform: reviews, streets, funnel, config, launch states --- */
   if (p === "/api/reviews") return handleReviewCreate(req, res);
@@ -1956,6 +2066,8 @@ async function handleAdminRole(req, res) {
       return send(res, 200, { ok: true, user: publicUser(target), message: "ALREADY " + (role === "admin" ? "AN ADMIN" : "A MEMBER") + "." });
     }
     await d.collection("users").updateOne({ _id: target._id }, { $set: { role, updatedAt: new Date() } });
+    await logActivity(d, found.user.email, "member_role", "member", email, email,
+      "ROLE " + target.role.toUpperCase() + " → " + role.toUpperCase());
     const fresh = await d.collection("users").findOne({ _id: target._id });
     return send(res, 200, {
       ok: true,
@@ -2011,6 +2123,10 @@ async function handleAdminVoucherCreate(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     await d.collection("vouchers").insertOne(doc);
+    await logActivity(d, found.user.email, "voucher_create", "voucher", code,
+      "VOUCHER " + code,
+      (type === "percent" ? value + "% OFF" : "₱" + (value / 100).toFixed(2) + " OFF") +
+        " · MAX USES " + maxUses + (expiresAt ? " · EXPIRES " + expiresAt.toISOString().slice(0, 10) : ""));
     return send(res, 201, { ok: true, voucher: doc });
   } catch (err) {
     if (err && err.code === 11000) return fail(res, 409, "voucher_exists", "THAT VOUCHER CODE ALREADY EXISTS.");
@@ -2032,6 +2148,8 @@ async function handleAdminVoucherToggle(req, res) {
     const d = await connect();
     const result = await d.collection("vouchers").updateOne({ code }, { $set: { active: body.active, updatedAt: new Date() } });
     if (!result.matchedCount) return fail(res, 404, "not_found", "VOUCHER NOT FOUND.");
+    await logActivity(d, found.user.email, "voucher_toggle", "voucher", code,
+      "VOUCHER " + code, body.active ? "VOUCHER SWITCHED ON" : "VOUCHER SWITCHED OFF");
     return send(res, 200, { ok: true, code, active: body.active });
   } catch (err) {
     return fail(res, 422, "invalid", err.message || "COULD NOT UPDATE VOUCHER.");
@@ -2077,6 +2195,7 @@ async function handleCreateOrder(req, res) {
             id: doc.id, name: doc.name, priceCentavos: doc.priceCentavos,
             sizes: doc.sizes || ["OS"], colors: doc.colors || [],
             collection: doc.collection || "",
+            batchSize: doc.batchSize || 0,
           };
         }
       } catch { /* falls through to the unknown-product error */ }
@@ -2104,10 +2223,47 @@ async function handleCreateOrder(req, res) {
       qty,
       priceCentavos: product.priceCentavos,
       collection: product.collection || "",
+      batch: Math.round(Number(product.batchSize) || 0),
     });
   }
 
   const subtotalCentavos = lines.reduce((s, l) => s + l.priceCentavos * l.qty, 0);
+
+  /* CART ACCURACY — the last word on availability and stock happens here,
+     at the moment of checkout, against live data: a piece the club fully
+     hidden cannot be bought, and a batched piece cannot be oversold.
+     Baked-in pieces without a batch are open stock. */
+  try {
+    if (!dbForCatalog) {
+      const { connect } = require("./ipc-pay/mongo");
+      dbForCatalog = await connect();
+    }
+    const [vis, soldRows] = await Promise.all([
+      visibilityMap(dbForCatalog).catch(() => ({})),
+      dbForCatalog.collection("orders").aggregate([
+        { $match: { status: "paid" } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", units: { $sum: "$items.qty" } } },
+      ]).toArray(),
+    ]);
+    const soldMap = {};
+    soldRows.forEach((s) => { soldMap[s._id] = s.units; });
+    const perProduct = {};
+    lines.forEach((l) => { perProduct[l.productId] = (perProduct[l.productId] || 0) + l.qty; });
+    for (const l of lines) {
+      if (isFullyHidden(vis[l.productId])) {
+        return fail(res, 422, "unavailable", l.name.toUpperCase() + " IS NO LONGER AVAILABLE — REMOVE IT FROM YOUR BAG.");
+      }
+      if (l.batch > 0) {
+        const remaining = Math.max(0, l.batch - (soldMap[l.productId] || 0));
+        if (perProduct[l.productId] > remaining) {
+          return fail(res, 422, "out_of_stock", remaining > 0
+            ? "ONLY " + remaining + " OF " + l.name.toUpperCase() + " LEFT — ADJUST THE QUANTITY IN YOUR BAG."
+            : l.name.toUpperCase() + " IS SOLD OUT — NOTHING LEFT THIS BATCH.");
+        }
+      }
+    }
+  } catch { /* stock context is best-effort — the authoritative price and product checks above still ran */ }
 
   const c = body.customer ?? {};
   const name = String(c.name ?? "").trim().slice(0, 120);
@@ -2216,7 +2372,10 @@ async function handleCreateOrder(req, res) {
       province,
       postalCode,
       notes,
-      items: lines,
+      items: lines.map((l) => ({
+        productId: l.productId, name: l.name, size: l.size, color: l.color,
+        qty: l.qty, priceCentavos: l.priceCentavos, collection: l.collection,
+      })),
       subtotalCentavos,
       discountCentavos,
       voucherCode: voucherResult ? voucherResult.code : null,
@@ -2474,6 +2633,10 @@ async function handleDecision(req, res) {
       { reference: pay.orderReference },
       { $set: { status: newStatus, updatedAt: now } }
     );
+    await logActivity(d, found.user.email, "order_status", "order", pay.orderReference,
+      "ORDER " + pay.orderReference,
+      action === "approve" ? "PAYMENT " + paymentId + " VERIFIED — ORDER MARKED PAID (₱" + ((pay.amountCentavos || 0) / 100).toFixed(2) + ")"
+        : "PAYMENT " + paymentId + " REJECTED — ORDER MARKED " + newStatus.toUpperCase());
     if (action === "approve") {
       await ensureTracking(d, pay.orderReference, "IPC TEAM");
       await creditReferralIfAny(d, pay.orderReference);
@@ -2612,6 +2775,9 @@ async function handleAdminTracking(req, res) {
     }
     const fresh = await d.collection("orders").findOne({ reference });
     console.log("[ipc-pay] tracking " + reference + " (" + fresh.tracking.number + ") → " + status + " by " + found.user.email);
+    await logActivity(d, found.user.email, "order_tracking", "order", reference,
+      "ORDER " + reference,
+      "TRACKING → " + status.toUpperCase() + (body.note ? " — " + String(body.note).slice(0, 120) : ""));
     return send(res, 200, {
       ok: true,
       tracking: fresh.tracking,
@@ -2717,6 +2883,13 @@ async function handleAdminProductSave(req, res) {
       }
       doc = await d.collection("products").findOne({ id: editingId });
       console.log("[ipc-pay] product updated " + editingId + " (" + name + ") by " + found.user.email);
+      const editDeltas = [];
+      if (existing.priceCentavos !== priceC) editDeltas.push("PRICE " + existing.priceCentavos + "→" + priceC + " CENTAVOS");
+      if ((existing.batchSize || 0) !== batchSize) editDeltas.push("BATCH " + (existing.batchSize || 0) + "→" + batchSize);
+      if (existing.active !== false && body.active === false) editDeltas.push("ACTIVE → OFF");
+      if (existing.active === false && body.active !== false) editDeltas.push("ACTIVE → ON");
+      await logActivity(d, found.user.email, "product_edit", "product", editingId, name.toUpperCase(),
+        editDeltas.length ? editDeltas.join(" · ") : "DETAILS UPDATED");
       return send(res, 200, { ok: true, product: productView(doc), message: "PIECE UPDATED — THE SHOP CARRIES IT NOW." });
     }
 
@@ -2734,6 +2907,8 @@ async function handleAdminProductSave(req, res) {
     };
     await d.collection("products").insertOne(doc);
     console.log("[ipc-pay] product added " + id + " (" + name + ") by " + found.user.email);
+    await logActivity(d, found.user.email, "product_create", "product", id, name.toUpperCase(),
+      "₱" + (priceC / 100).toFixed(2) + " · COLLECTION " + collection.toUpperCase() + (batchSize ? " · BATCH " + batchSize : ""));
     return send(res, 200, { ok: true, product: productView(doc), message: "PIECE ADDED — IT'S LIVE ON THE SHOP AND ITS COLLECTION." });
   } catch (err) {
     return mongoError(res, err, "product save failed");
@@ -2759,6 +2934,8 @@ async function handleAdminProductRemove(req, res) {
     );
     if (update.matchedCount !== 1) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
     console.log("[ipc-pay] product pulled " + id + " by " + found.user.email);
+    await logActivity(d, found.user.email, "product_remove", "product", id,
+      id.toUpperCase(), "PIECE PULLED FROM THE SHOP — RECORD AND ORDER HISTORY PRESERVED");
     return send(res, 200, { ok: true, message: "PIECE PULLED FROM THE SHOP — PAST ORDERS STAY ON RECORD." });
   } catch (err) {
     return mongoError(res, err, "product remove failed");
@@ -2807,6 +2984,8 @@ async function handleMemberRemove(req, res) {
     );
     await d.collection("sessions").deleteMany({ userId: target._id });
     console.log("[ipc-pay] EMERGENCY member removed:", email, "by", found.user.email);
+    await logActivity(d, found.user.email, "member_remove", "member", email, email,
+      "EMERGENCY REMOVAL — SESSIONS KILLED" + (reason ? " · REASON: " + reason.slice(0, 120) : ""));
     return send(res, 200, {
       ok: true,
       message: "MEMBER REMOVED — SESSIONS KILLED AND RE-JOINING BLOCKED. ORDERS AND PAYMENTS STAY ON RECORD.",
@@ -2840,6 +3019,7 @@ async function handleMemberRestore(req, res) {
       { $set: { status: "active" }, $unset: { removedAt: "", removedBy: "", removalReason: "" } }
     );
     console.log("[ipc-pay] member restored:", email, "by", found.user.email);
+    await logActivity(d, found.user.email, "member_restore", "member", email, email, "REMOVED ACCOUNT RESTORED TO ACTIVE");
     return send(res, 200, {
       ok: true,
       message: "MEMBER RESTORED — " + email.toUpperCase() + " CAN LOG IN AND ORDER AGAIN.",
@@ -2885,6 +3065,8 @@ async function handleAdminMemberPassword(req, res) {
     /* every sign-in of the member dies — the next login uses the new word */
     await d.collection("sessions").deleteMany({ userId: target._id });
     console.log("[ipc-pay] admin password reset:", email, "by", found.user.email);
+    await logActivity(d, found.user.email, "member_password_reset", "member", email, email,
+      "ADMIN SET A NEW PASSWORD — ALL SESSIONS SIGNED OUT");
     return send(res, 200, {
       ok: true,
       message: "PASSWORD SET — EVERY SIGN-IN OF " + email.toUpperCase() + " WAS SIGNED OUT. HAND THE NEW ONE OVER AND HAVE THEM CHANGE IT FROM THE ACCOUNT PAGE.",
@@ -3637,6 +3819,8 @@ async function handleConfigSet(req, res) {
       { $set: { usdPhpRate: rate, updatedAt: new Date(), updatedBy: found.user.email } },
       { upsert: true }
     );
+    await logActivity(d, found.user.email, "settings_config", "settings", "usd_php_rate", "USD APPROXIMATION",
+      "RATE SET TO " + rate + " PHP PER USD");
     return send(res, 200, { ok: true, usdPhpRate: rate, message: "USD APPROXIMATION UPDATED ACROSS THE SHOP." });
   } catch (err) {
     return mongoError(res, err, "config failed");
@@ -3681,6 +3865,8 @@ async function handleCollectionState(req, res) {
       }, $setOnInsert: { createdAt: new Date() } },
       { upsert: true }
     );
+    await logActivity(d, found.user.email, "collection_state", "collection", slug, slug.toUpperCase(),
+      "LAUNCH " + launchState.toUpperCase() + " · GATE " + tierGate.toUpperCase());
     return send(res, 200, { ok: true, message: "COLLECTION STATE SAVED — THE HERO AND SHOP PICK IT UP ON THEIR NEXT LOAD." });
   } catch (err) {
     return mongoError(res, err, "collection state failed");
@@ -3835,6 +4021,488 @@ async function handleOrdersLink(req, res) {
     return send(res, 200, { ok: true, message: "ORDER ATTACHED TO YOUR ACCOUNT — IT NOW SHOWS UNDER YOUR HISTORY AND TRACKER." });
   } catch (err) {
     return mongoError(res, err, "order link failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* ADMIN ACTIVITY LOG — read-only. Who did what, when. There is no   */
+/* write, edit or delete route for this collection anywhere in the   */
+/* API: the record writes itself and nobody can clean it.            */
+/* --------------------------------------------------------------- */
+
+async function handleAdminActivity(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY — THIS RECORD IS FOR THE CLUB ADMINS.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("activityLogs")
+      .find({}).sort({ createdAt: -1 }).limit(200).toArray();
+    return send(res, 200, {
+      ok: true,
+      readOnly: true,
+      activity: rows.map((r) => ({
+        id: String(r._id),
+        actorEmail: r.actorEmail,
+        action: r.action,
+        targetType: r.targetType,
+        targetId: r.targetId,
+        targetLabel: r.targetLabel,
+        details: r.details || "",
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (err) {
+    return mongoError(res, err, "activity log failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* ADMIN ANALYTICS — real aggregates only. Every number here comes   */
+/* straight from the orders / payments / analyticsEvents collections */
+/* inside the requested date range (Manila days). When the club has  */
+/* no data for a window, the dashboard shows zero — never a sample.  */
+/* --------------------------------------------------------------- */
+
+function manilaDayStart(dateStr) {
+  /* a YYYY-MM-DD typed in Manila means 00:00 PHT that day = 16:00 UTC the day before */
+  const t = new Date(dateStr + "T00:00:00+08:00");
+  return isNaN(t.getTime()) ? null : t;
+}
+function manilaDayKey(dt) {
+  return new Date(dt.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+}
+
+async function handleAdminAnalytics(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    /* date range: ?days=7|30|90|365 (default 30) or ?from=YYYY-MM-DD&to=YYYY-MM-DD, Manila time */
+    const q = new URL(req.url, "http://x").searchParams;
+    const now = new Date();
+    let from = null;
+    let to = null;
+    if (q.get("from") && q.get("to")) {
+      from = manilaDayStart(q.get("from"));
+      to = manilaDayStart(q.get("to"));
+      if (to) to = new Date(to.getTime() + 86400000 - 1); /* inclusive end day */
+      if (!from || !to || from > to) return fail(res, 422, "invalid", "THAT DATE RANGE DIDN'T PARSE — CHECK FROM AND TO.");
+      if (to > now) to = now;
+    } else {
+      const days = [7, 30, 90, 365].includes(Number(q.get("days"))) ? Number(q.get("days")) : 30;
+      from = new Date(now.getTime() - days * 86400000);
+      to = now;
+    }
+    const rangeMatch = { createdAt: { $gte: from, $lte: to } };
+    const paidAtMatch = { status: "paid", $expr: { $and: [
+      { $gte: [{ $ifNull: ["$verifiedAt", "$createdAt"] }, from] },
+      { $lte: [{ $ifNull: ["$verifiedAt", "$createdAt"] }, to] },
+    ] } };
+
+    const [salesAgg, ordersPlaced, paidOrders, dailyRows, bestRows, viewRows, funnelRows, emailsInRange, earlierEmails, bagEvents, checkoutEvents] = await Promise.all([
+      d.collection("payments").aggregate([
+        { $match: paidAtMatch },
+        { $group: { _id: null, total: { $sum: "$amountCentavos" }, n: { $sum: 1 } } },
+      ]).toArray(),
+      d.collection("orders").countDocuments(rangeMatch),
+      d.collection("payments").countDocuments(paidAtMatch),
+      d.collection("payments").aggregate([
+        { $match: paidAtMatch },
+        { $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$verifiedAt", "$createdAt"] }, timezone: "Asia/Manila" } },
+          revenue: { $sum: "$amountCentavos" }, orders: { $sum: 1 },
+        } },
+        { $sort: { _id: 1 } },
+      ]).toArray(),
+      d.collection("orders").aggregate([
+        { $match: { status: "paid", ...rangeMatch } },
+        { $unwind: "$items" },
+        { $group: {
+          _id: "$items.productId",
+          name: { $first: "$items.name" },
+          units: { $sum: "$items.qty" },
+          revenue: { $sum: { $multiply: ["$items.priceCentavos", "$items.qty"] } },
+        } },
+        { $sort: { units: -1 } },
+        { $limit: 8 },
+      ]).toArray(),
+      d.collection("analyticsEvents").aggregate([
+        { $match: { name: "view_product", ...rangeMatch } },
+        { $group: { _id: "$product", views: { $sum: 1 } } },
+        { $sort: { views: -1 } },
+        { $limit: 8 },
+      ]).toArray(),
+      d.collection("analyticsEvents").aggregate([
+        { $match: { createdAt: { $gte: from, $lte: to }, name: { $in: ["view_product", "add_to_bag", "checkout_start", "paid"] } } },
+        { $group: { _id: "$name", n: { $sum: 1 }, visitors: { $addToSet: "$visitor" } } },
+      ]).toArray(),
+      d.collection("orders").aggregate([
+        { $match: rangeMatch },
+        { $group: { _id: "$email", orders: { $sum: 1 }, first: { $min: "$createdAt" } } },
+      ]).toArray(),
+      d.collection("orders").aggregate([
+        { $match: { createdAt: { $lt: from } } },
+        { $group: { _id: "$email" } },
+      ]).toArray(),
+      d.collection("analyticsEvents").aggregate([
+        { $match: { createdAt: { $gte: from, $lte: to }, name: "add_to_bag" } },
+        { $group: { _id: "$visitor", at: { $max: "$createdAt" } } },
+      ]).toArray(),
+      d.collection("analyticsEvents").aggregate([
+        { $match: { createdAt: { $gte: from, $lte: to }, name: "checkout_start" } },
+        { $group: { _id: "$visitor", at: { $max: "$createdAt" } } },
+      ]).toArray(),
+    ]);
+
+    const funnel = {};
+    funnelRows.forEach((r) => { funnel[r._id] = { count: r.n, visitors: r.visitors.length }; });
+    ["view_product", "add_to_bag", "checkout_start", "paid"].forEach((k) => {
+      if (!funnel[k]) funnel[k] = { count: 0, visitors: 0 };
+    });
+
+    /* new vs returning: a customer whose FIRST-EVER order sits inside the
+       window is new; anyone who already ordered before the window is back */
+    const earlier = new Set(earlierEmails.map((r) => r._id).filter(Boolean));
+    let newCount = 0;
+    let returningCount = 0;
+    emailsInRange.forEach((r) => {
+      if (!r._id) return;
+      if (earlier.has(r._id)) returningCount++;
+      else if (r.first && r.first >= from && r.first <= to) newCount++;
+    });
+
+    /* abandoned carts — only what the first-party funnel can honestly see:
+       visitors whose checkout_start never turned into a verified payment,
+       and baggers who never reached checkout. Anonymous, no profiles. */
+    const paidVisitorSet = new Set(
+      (await d.collection("analyticsEvents").find(
+        { name: "paid", createdAt: { $gte: from } }, { projection: { visitor: 1 } }
+      ).toArray()).map((r) => r.visitor)
+    );
+    const checkoutAbandoned = checkoutEvents.filter((r) => !paidVisitorSet.has(r._id)).length;
+    const checkoutVisitorSet = new Set(checkoutEvents.map((r) => r._id));
+    const bagAbandoned = bagEvents.filter((r) => !checkoutVisitorSet.has(r._id)).length;
+
+    const salesCentavos = (salesAgg[0] && salesAgg[0].total) || 0;
+    const paidCount = paidOrders;
+    const dailyMap = {};
+    dailyRows.forEach((r) => { dailyMap[r._id] = { revenueCentavos: r.revenue, orders: r.orders }; });
+    /* fill the calendar so the chart never lies with gaps */
+    const daily = [];
+    const dayCount = Math.min(120, Math.max(1, Math.ceil((to - from) / 86400000)));
+    for (let i = dayCount - 1; i >= 0; i--) {
+      const key = manilaDayKey(new Date(to.getTime() - i * 86400000));
+      daily.push({ day: key, revenueCentavos: (dailyMap[key] && dailyMap[key].revenueCentavos) || 0, orders: (dailyMap[key] && dailyMap[key].orders) || 0 });
+    }
+
+    return send(res, 200, {
+      ok: true,
+      range: { from: from.toISOString(), to: to.toISOString(), days: Math.round((to - from) / 86400000) },
+      totals: {
+        salesCentavos,
+        paidOrders: paidCount,
+        ordersPlaced,
+        aovCentavos: paidCount > 0 ? Math.round(salesCentavos / paidCount) : 0,
+      },
+      conversion: {
+        checkoutToPaidPct: funnel.checkout_start.count > 0 ? Math.round(100 * funnel.paid.count / funnel.checkout_start.count) : null,
+        bagToCheckoutPct: funnel.add_to_bag.count > 0 ? Math.round(100 * funnel.checkout_start.count / funnel.add_to_bag.count) : null,
+      },
+      funnel,
+      daily,
+      bestSellers: bestRows.map((r) => ({ productId: r._id, name: (r.name || r._id || "").toUpperCase(), units: r.units, revenueCentavos: r.revenue })),
+      popular: viewRows.map((r) => ({ productId: r._id || "(home)", views: r.views })),
+      customers: { newCount, returningCount },
+      abandoned: {
+        checkoutAbandoned,
+        bagAbandoned,
+        note: "FIRST-PARTY FUNNEL ONLY — VISITORS WHO STARTED CHECKOUT WITHOUT A VERIFIED PAYMENT, AND BAGS THAT NEVER REACHED CHECKOUT. NO COOKIES, NO PROFILES.",
+      },
+    });
+  } catch (err) {
+    return mongoError(res, err, "analytics failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* PRODUCT VISIBILITY + RESTORE — pull a piece off one surface or    */
+/* every surface without touching the record, the orders or the     */
+/* inventory history. Restoring flips it back. Both log themselves. */
+/* --------------------------------------------------------------- */
+
+async function handleAdminProductVisibility(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = String(body.id ?? "").trim();
+  if (!id) return fail(res, 422, "invalid", "MISSING PIECE ID.");
+  const vis = normalizeVisibility(body);
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const baked = PRODUCTS.some((x) => x.id === id);
+    const custom = baked ? null : await d.collection("products").findOne({ id });
+    if (!baked && !custom) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
+    const now = new Date();
+    await d.collection("productVisibility").updateOne(
+      { id },
+      { $set: { ...vis, updatedAt: now, updatedBy: found.user.email }, $setOnInsert: { id, createdAt: now } },
+      { upsert: true }
+    );
+    const label = baked ? id.toUpperCase() : (custom.name || id).toUpperCase();
+    const surfaces = ["shop", "gallery", "collection"].map((s) =>
+      s.toUpperCase() + " " + (vis[s + "Visible"] ? "ON" : "OFF")).join(" · ");
+    await logActivity(d, found.user.email, "product_visibility", "product", id, label,
+      isFullyHidden(vis) ? "HIDDEN EVERYWHERE — " + surfaces : surfaces);
+    return send(res, 200, {
+      ok: true,
+      visibility: vis,
+      hidden: isFullyHidden(vis),
+      message: isFullyHidden(vis)
+        ? "PIECE HIDDEN FROM EVERY SURFACE — THE RECORD AND ITS HISTORY STAY PUT."
+        : "VISIBILITY SAVED — THE PUBLIC SITE PICKS IT UP ON THE NEXT LOAD.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "visibility save failed");
+  }
+}
+
+async function handleAdminProductRestore(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = String(body.id ?? "").trim();
+  if (!id) return fail(res, 422, "invalid", "MISSING PIECE ID.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const custom = await d.collection("products").findOne({ id });
+    if (!custom) return fail(res, 404, "not_found", "RESTORE WORKS ON CLUB-ADDED PIECES — BAKED PIECES NEVER LEAVE THE CATALOG.");
+    if (custom.active !== false) return fail(res, 422, "not_pulled", "THAT PIECE IS ALREADY LIVE.");
+    await d.collection("products").updateOne(
+      { id }, { $set: { active: true, updatedAt: new Date() } }
+    );
+    await logActivity(d, found.user.email, "product_restore", "product", id,
+      (custom.name || id).toUpperCase(), "PULLED PIECE RESTORED — BACK ON THE SHOP");
+    return send(res, 200, { ok: true, message: "PIECE RESTORED — IT'S BACK ON THE SHOP AND ITS COLLECTION." });
+  } catch (err) {
+    return mongoError(res, err, "product restore failed");
+  }
+}
+
+/* --------------------------------------------------------------- */
+/* SUPPORT TICKETS — customers raise issues against their account    */
+/* (optionally against one of their own orders), the club answers    */
+/* with a status. Conversations stay private: a member can only ever */
+/* read their own tickets; admin routes check the role every time.   */
+/* --------------------------------------------------------------- */
+
+async function handleSupportCreate(req, res, ip) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO OPEN A TICKET — THE CLUB ANSWERS INSIDE YOUR ACCOUNT.");
+  if (rateLimited(ip, 12, 10 * 60 * 1000, "support")) {
+    return fail(res, 429, "rate_limited", "A FEW TOO MANY TICKETS IN A ROW — GIVE IT TEN MINUTES.");
+  }
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const subject = cleanSupportText(body.subject, 120);
+  const category = SUPPORT_CATEGORIES.includes(body.category) ? body.category : "other";
+  const message = cleanSupportText(body.message, 4000);
+  const orderReference = cleanSupportText(body.orderReference, 40).toUpperCase();
+  if (subject.length < 4) return fail(res, 422, "invalid", "GIVE THE TICKET A SUBJECT — AT LEAST 4 CHARACTERS.");
+  if (message.length < 10) return fail(res, 422, "invalid", "TELL THE CLUB WHAT HAPPENED — AT LEAST 10 CHARACTERS.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    if (orderReference) {
+      const order = await d.collection("orders").findOne({ reference: orderReference });
+      if (!order) return fail(res, 422, "invalid", "NO ORDER WITH THAT REFERENCE — LEAVE IT BLANK OR CHECK THE NUMBER.");
+      const mine = (order.userId && String(order.userId) === String(found.user._id)) ||
+        String(order.email || "").toLowerCase() === found.user.email;
+      if (!mine) return fail(res, 403, "forbidden", "THAT ORDER ISN'T YOURS — PICK ONE FROM YOUR OWN HISTORY.");
+    }
+    const now = new Date();
+    const id = "tkt-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    let ref = await nextReference("ticket").catch(() => null);
+    const doc = {
+      id,
+      ...(ref ? { ref } : {}),
+      userId: found.user._id,
+      email: found.user.email,
+      orderReference: orderReference || null,
+      subject,
+      category,
+      message,
+      status: "open",
+      replies: [],
+      customerUnread: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await d.collection("supportTickets").insertOne(doc);
+    console.log("[ipc-pay] support ticket " + id + " opened by " + found.user.email);
+    return send(res, 201, { ok: true, ticket: supportTicketView(doc), message: "TICKET OPENED — THE CLUB ANSWERS HERE IN YOUR ACCOUNT." });
+  } catch (err) {
+    return mongoError(res, err, "support ticket failed");
+  }
+}
+
+async function handleSupportMine(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO SEE YOUR TICKETS.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("supportTickets")
+      .find({ userId: found.user._id }).sort({ updatedAt: -1 }).limit(100).toArray();
+    const unread = rows.filter((r) => r.customerUnread).length;
+    return send(res, 200, { ok: true, tickets: rows.map(supportTicketView), unread });
+  } catch (err) {
+    return mongoError(res, err, "support history failed");
+  }
+}
+
+async function handleSupportReply(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = cleanSupportText(body.id, 60);
+  const text = cleanSupportText(body.body, 2000);
+  if (!id || text.length < 2) return fail(res, 422, "invalid", "WRITE SOMETHING FOR THE CLUB TO READ.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const ticket = await d.collection("supportTickets").findOne({ id });
+    if (!ticket || String(ticket.userId) !== String(found.user._id)) {
+      return fail(res, 404, "not_found", "NO TICKET OF YOURS WITH THAT ID.");
+    }
+    const now = new Date();
+    /* a member answering a resolved/closed ticket reopens it honestly */
+    const reopen = ticket.status === "resolved" || ticket.status === "closed";
+    await d.collection("supportTickets").updateOne(
+      { id },
+      { $set: {
+        status: reopen ? "open" : ticket.status,
+        updatedAt: now,
+      }, $push: { replies: { by: "customer", author: found.user.email, body: text, at: now } } }
+    );
+    return send(res, 200, { ok: true, message: "REPLY SENT — THE CLUB SEES IT IN THE SUPPORT QUEUE." });
+  } catch (err) {
+    return mongoError(res, err, "support reply failed");
+  }
+}
+
+async function handleSupportRead(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  const id = cleanSupportText((body || {}).id, 60);
+  if (!id) return send(res, 200, { ok: true });
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    await d.collection("supportTickets").updateOne(
+      { id, userId: found.user._id },
+      { $set: { customerUnread: false, customerReadAt: new Date() } }
+    );
+    return send(res, 200, { ok: true });
+  } catch {
+    return send(res, 200, { ok: true });
+  }
+}
+
+async function handleAdminSupport(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const rows = await d.collection("supportTickets")
+      .find({}).sort({ updatedAt: -1 }).limit(200).toArray();
+    const counts = { open: 0, in_progress: 0, resolved: 0, closed: 0 };
+    rows.forEach((r) => { if (counts[r.status] !== undefined) counts[r.status]++; });
+    return send(res, 200, { ok: true, tickets: rows.map(supportTicketView), counts });
+  } catch (err) {
+    return mongoError(res, err, "admin support failed");
+  }
+}
+
+async function handleAdminSupportReply(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = cleanSupportText(body.id, 60);
+  const text = cleanSupportText(body.body, 4000);
+  const status = SUPPORT_STATUSES.includes(body.status) ? body.status : null;
+  if (!id || text.length < 2) return fail(res, 422, "invalid", "WRITE THE CLUB'S ANSWER FIRST.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const ticket = await d.collection("supportTickets").findOne({ id });
+    if (!ticket) return fail(res, 404, "not_found", "NO TICKET WITH THAT ID.");
+    const now = new Date();
+    const nextStatus = status || (ticket.status === "open" ? "in_progress" : ticket.status);
+    await d.collection("supportTickets").updateOne(
+      { id },
+      { $set: {
+        status: nextStatus,
+        customerUnread: true,
+        updatedAt: now,
+      }, $push: { replies: { by: "admin", author: found.user.email, body: text, at: now } } }
+    );
+    await logActivity(d, found.user.email, "support_reply", "support", id,
+      "TICKET " + (ticket.ref || id.toUpperCase()),
+      "REPLIED · STATUS → " + nextStatus.toUpperCase().replace("_", " "));
+    return send(res, 200, { ok: true, status: nextStatus, message: "ANSWER SENT — THE MEMBER SEES IT IN THEIR ACCOUNT." });
+  } catch (err) {
+    return mongoError(res, err, "admin support reply failed");
+  }
+}
+
+async function handleAdminSupportStatus(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = cleanSupportText(body.id, 60);
+  if (!SUPPORT_STATUSES.includes(body.status)) {
+    return fail(res, 422, "invalid", "STATUS MUST BE open, in_progress, resolved OR closed.");
+  }
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const ticket = await d.collection("supportTickets").findOne({ id });
+    if (!ticket) return fail(res, 404, "not_found", "NO TICKET WITH THAT ID.");
+    await d.collection("supportTickets").updateOne(
+      { id },
+      { $set: { status: body.status, customerUnread: true, updatedAt: new Date() } }
+    );
+    await logActivity(d, found.user.email, "support_status", "support", id,
+      "TICKET " + (ticket.ref || id.toUpperCase()),
+      "STATUS " + ticket.status.toUpperCase().replace("_", " ") + " → " + body.status.toUpperCase().replace("_", " "));
+    return send(res, 200, { ok: true, status: body.status, message: "STATUS SAVED — THE MEMBER IS NOTIFIED IN THEIR ACCOUNT." });
+  } catch (err) {
+    return mongoError(res, err, "admin support status failed");
   }
 }
 

@@ -1839,9 +1839,10 @@ img.tc-true{filter:none !important}
       <div class="bag-lines" id="bagLines"></div>
       <div class="bag-summary">
         <p class="sum-row"><span>SUBTOTAL</span><b id="bagSubtotal">₱0</b></p>
+        <p class="sum-row" id="bagDiscountRow" style="display:none"><span>VOUCHER</span><b id="bagVoucherNote"></b></p>
         <p class="sum-row"><span>SHIPPING</span><b>FREE — BASED ON LOCATION</b></p>
         <p class="sum-row total"><span>TOTAL</span><b id="bagTotal">₱0</b></p>
-        <p class="ship-note">PAID WITH IPC PAY (QR) — EVERY PAYMENT VERIFIED BY HAND BEFORE ANYTHING SHIPS</p>
+        <p class="ship-note">PAID WITH IPC PAY (QR) — EVERY PAYMENT VERIFIED BY HAND BEFORE ANYTHING SHIPS. VOUCHER DISCOUNTS LOCK IN AT CHECKOUT.</p>
         <div class="bag-actions">
           <a href="#/shop" class="btn-o" data-route="shop">KEEP SHOPPING</a>
           <button type="button" class="btn-w" id="toCheckout">CHECKOUT — IPC PAY
@@ -2703,7 +2704,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v24-20261123-contactviztech';
+  var IPC_BUILD = 'ipc-v25-20261123-cartopsadmin';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2822,13 +2823,33 @@ img.tc-true{filter:none !important}
   IPC.refreshCatalog = function () {
     return IPC.api('/api/products').then(function (d) {
       var added = 0;
+      var seen = {};
       (d.products || []).forEach(function (p) {
         if (!p || !p.id || !p.name) return;
+        seen[p.id] = true;
         var found = -1;
         for (var i = 0; i < IPC.PRODUCTS.length; i++) if (IPC.PRODUCTS[i].id === p.id) { found = i; break; }
         if (found >= 0) IPC.PRODUCTS[found] = p;
         else { IPC.PRODUCTS.push(p); added++; }
       });
+      /* a piece the club pulled while this tab sat open stops being sold —
+         drop stale club-added rows so the bag can flag them honestly */
+      IPC.PRODUCTS = IPC.PRODUCTS.filter(function (p) {
+        if (p.custom && !seen[p.id]) return false;
+        return true;
+      });
+      /* surface visibility (shop / home gallery / collection) rides on every
+         product from the server plus a per-id map that also covers the
+         baked-in shelf — missing flags mean visible */
+      var vis = d.visibility || {};
+      IPC.PRODUCTS.forEach(function (p) {
+        var v = vis[p.id] || {};
+        p.shopVisible = v.shopVisible !== false;
+        p.galleryVisible = v.galleryVisible !== false;
+        p.collectionVisible = v.collectionVisible !== false;
+        p.hidden = !p.shopVisible && !p.galleryVisible && !p.collectionVisible;
+      });
+      IPC.catalogFresh = true;
       (d.collections || []).forEach(function (c) {
         if (!c || !c.slug) return;
         var known = false;
@@ -2846,6 +2867,9 @@ img.tc-true{filter:none !important}
       if (IPC.renderLaunch && document.getElementById('v-home') && document.getElementById('v-home').classList.contains('active')) {
         try { IPC.renderLaunch(); } catch (e) {}
       }
+      /* the bag re-checks itself against the fresh catalog — stock changes
+         and pulled pieces get flagged before checkout, not after */
+      try { IPC.validateBag(); } catch (e) {}
       return added;
     }).catch(function () { return 0; });
   };
@@ -2926,9 +2950,17 @@ img.tc-true{filter:none !important}
       qty = Math.max(1, Math.min(99, qty || 1));
       var p = IPC.byId(productId);
       if (!p) return false;
+      if (IPC.catalogFresh && p.hidden) { IPC.toast('THAT PIECE IS NOT AVAILABLE RIGHT NOW'); return false; }
+      var cap = 99;
+      if (IPC.catalogFresh && p.remaining != null && p.remaining !== undefined) cap = Math.max(0, p.remaining);
       var i = itemIdx(productId, size, color);
-      if (i >= 0) bagItems[i].qty = Math.min(99, bagItems[i].qty + qty);
-      else bagItems.push({ productId: productId, name: p.name, priceC: p.priceC, size: size, color: color, qty: qty });
+      var have = i >= 0 ? bagItems[i].qty : 0;
+      if (cap === 0) { IPC.toast('SOLD OUT — NOTHING LEFT THIS BATCH'); return false; }
+      var target = Math.min(99, cap, have + qty);
+      if (target <= have) { IPC.toast('ONLY ' + cap + ' OF ' + p.name + ' LEFT — YOUR BAG HOLDS THE REST'); return false; }
+      if (target > have + qty) IPC.toast('STOCK CHANGED — QUANTITY SET TO ' + target);
+      if (i >= 0) bagItems[i].qty = target;
+      else bagItems.push({ productId: productId, name: p.name, priceC: p.priceC, size: size, color: color, qty: target });
       bagSave(); bagEmit();
       return true;
     },
@@ -2990,6 +3022,40 @@ img.tc-true{filter:none !important}
     } catch (e) { IPC.clearPendingBag(); return false; }
   };
   bagLoad();
+
+  /* ---------------- BAG ACCURACY — availability + stock ----------------
+     The bag talks to live catalog data every time it can: a piece the club
+     pulled gets flagged NO LONGER AVAILABLE, a batched piece with fewer
+     units left gets its quantity clamped with an honest notice. Nothing is
+     deleted on its own — the customer always makes the final call. */
+  IPC.validateBag = function () {
+    if (!IPC.catalogFresh) return;
+    var notices = [];
+    var changed = false;
+    bagItems.forEach(function (it) {
+      var p = IPC.byId(it.productId);
+      it.issue = '';
+      if (!p) { it.issue = 'unavailable'; changed = true; return; }
+      if (p.hidden) { it.issue = 'unavailable'; changed = true; return; }
+      if (p.remaining != null && p.remaining !== undefined) {
+        if (p.remaining <= 0) { it.issue = 'soldout'; return; }
+        if (it.qty > p.remaining) {
+          it.qty = p.remaining;
+          it.issue = 'stock';
+          changed = true;
+          notices.push('STOCK CHANGED — ONLY ' + p.remaining + ' OF ' + it.name + ' LEFT');
+        }
+        return;
+      }
+      if (p.sizes && p.sizes.length && p.sizes.indexOf(it.size) < 0) { it.issue = 'unavailable'; return; }
+      if (p.colors && p.colors.length && p.colors.indexOf(it.color) < 0) { it.issue = 'unavailable'; }
+    });
+    if (changed) { bagSave(); bagEmit(); }
+    notices.forEach(function (n) { IPC.toast(n); });
+  };
+  IPC.bagBlocked = function () {
+    return bagItems.some(function (it) { return it.issue === 'unavailable' || it.issue === 'soldout'; });
+  };
 
   /* ---------------- IPC ACCOUNTS (the club's own backend) ---------------- */
   var AUTH_KEY = 'ipc-auth-v1';
@@ -3162,12 +3228,16 @@ img.tc-true{filter:none !important}
 
   IPC.cardHTML = cardHTML; /* shared with the IPC Pay screen's complete-the-fit block */
 
-  /* ---- home: featured drop (OG logo hoodie promo as the feature + side rows) ---- */
+  /* ---- home: featured drop (OG logo hoodie promo as the feature + side rows) ----
+     This is the site's gallery/showcase surface — a piece the club switches
+     off for the gallery steps out of it without leaving the shop. */
   IPC.renderFeat = function () {
     var host = $('#featGrid');
     if (!host) return;
-    var main = IPC.byId('hoodie-001');
-    var sides = ['court-tee', 'varsity-26', 'club-tote'].map(IPC.byId).filter(Boolean);
+    var shown = function (p) { return p && !p.hidden && p.galleryVisible !== false; };
+    var main = shown(IPC.byId('hoodie-001')) ? IPC.byId('hoodie-001') : null;
+    var sides = ['court-tee', 'varsity-26', 'club-tote', 'stripe-ls', 'rib-beanie'].map(IPC.byId).filter(shown).slice(0, 3);
+    if (!main && sides.length) { main = sides.shift(); }
     var html = '';
     if (main) {
       html += '<article class="pcard feat-hero">' +
@@ -3217,6 +3287,11 @@ img.tc-true{filter:none !important}
     }
     var q = shopQuery.trim().toLowerCase();
     var list = IPC.PRODUCTS.filter(function (p) {
+      if (p.hidden) return false;
+      /* per-surface visibility: the ALL shelf answers to the shop switch,
+         a collection page answers to the collection switch */
+      if (shopFilter === 'all' || shopFilter === 'summer') { if (p.shopVisible === false) return false; }
+      else if (p.collectionVisible === false) return false;
       if (shopFilter !== 'all' && p.collection !== shopFilter) return false;
       if (q && (p.name + ' ' + p.colors.join(' ') + ' ' + (IPC.colTitle(p.collection) || '')).toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -3293,7 +3368,7 @@ img.tc-true{filter:none !important}
     prodState.size = null;
     prodState.qty = 1;
     var img = $('#prodImg'), name = $('#prodName'), price = $('#prodPrice');
-    if (!p || !img) {
+    if (!p || p.hidden || !img) {
       if (name) { name.textContent = 'PIECE NOT FOUND'; }
       return;
     }
@@ -3549,6 +3624,7 @@ img.tc-true{filter:none !important}
   IPC.renderBag = function () {
     var lines = $('#bagLines');
     if (!lines) return;
+    try { IPC.validateBag(); } catch (e) {}
     var items = IPC.bag.items;
     var empty = items.length === 0;
     $('#bagFilled').style.display = empty ? 'none' : 'block';
@@ -3557,6 +3633,10 @@ img.tc-true{filter:none !important}
     if (!empty) {
       lines.innerHTML = items.map(function (it) {
         var p = IPC.byId(it.productId);
+        var warn = '';
+        if (it.issue === 'unavailable') warn = '<p class="bl-warn">NO LONGER AVAILABLE — REMOVE IT TO CHECK OUT</p>';
+        else if (it.issue === 'soldout') warn = '<p class="bl-warn">SOLD OUT — NOTHING LEFT THIS BATCH</p>';
+        else if (it.issue === 'stock') warn = '<p class="bl-warn">STOCK CHANGED — ONLY ' + (p ? p.remaining : it.qty) + ' LEFT</p>';
         return '<div class="bag-line">' +
           '<a href="#/product/' + IPC.esc(it.productId) + '"><img class="bl-media" src="' + (p ? p.img : '') + '" alt="' + (p ? IPC.esc(p.alt) : '') + '" loading="lazy" /></a>' +
           '<div>' +
@@ -3565,8 +3645,8 @@ img.tc-true{filter:none !important}
             '<div class="bl-qty" style="margin-top:12px">' +
               '<button type="button" class="qty-btn" data-dec="' + IPC.esc(it.productId) + '|' + IPC.esc(it.size) + '|' + IPC.esc(it.color) + '" aria-label="Decrease">&minus;</button>' +
               '<span class="qty-n">' + it.qty + '</span>' +
-              '<button type="button" class="qty-btn" data-inc="' + IPC.esc(it.productId) + '|' + IPC.esc(it.size) + '|' + IPC.esc(it.color) + '" aria-label="Increase">+</button>' +
-            '</div>' +
+              '<button type="button" class="qty-btn" data-inc="' + IPC.esc(it.productId) + '|' + IPC.esc(it.size) + '|' + IPC.esc(it.color) + '" aria-label="Increase"' + (it.issue === 'unavailable' || it.issue === 'soldout' ? ' disabled' : '') + '>+</button>' +
+            '</div>' + warn +
           '</div>' +
           '<button type="button" class="bl-remove" data-rm="' + IPC.esc(it.productId) + '|' + IPC.esc(it.size) + '|' + IPC.esc(it.color) + '">REMOVE</button>' +
           '<p class="bl-price">' + IPC.fmtP(it.priceC * it.qty) + '</p>' +
@@ -3574,7 +3654,19 @@ img.tc-true{filter:none !important}
       }).join('');
       $('#bagSubtotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
       $('#bagTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
-      $('#toCheckout').disabled = false;
+      /* the voucher a member validated at checkout shows here too — the
+         actual discount amount is computed fresh when the order is placed */
+      var voucherCode = null;
+      try { voucherCode = JSON.parse(localStorage.getItem('ipc-voucher-code-v1') || 'null'); } catch (e) {}
+      var dRow = $('#bagDiscountRow');
+      if (dRow) {
+        dRow.style.display = voucherCode && voucherCode.code ? 'flex' : 'none';
+        if (voucherCode && voucherCode.code) $('#bagVoucherNote').textContent = voucherCode.code + ' — LOCKS IN AT CHECKOUT';
+      }
+      var blocked = IPC.bagBlocked();
+      var co = $('#toCheckout');
+      co.disabled = blocked;
+      co.title = blocked ? 'REMOVE UNAVAILABLE PIECES FIRST' : '';
     }
   };
   document.addEventListener('click', function (ev) {
@@ -3593,6 +3685,8 @@ img.tc-true{filter:none !important}
   });
   $('#toCheckout').addEventListener('click', function () {
     if (IPC.bag.items.length === 0) { IPC.toast('YOUR BAG IS EMPTY — ADD A PIECE FIRST'); return; }
+    try { IPC.validateBag(); } catch (e) {}
+    if (IPC.bagBlocked()) { IPC.toast('REMOVE UNAVAILABLE PIECES BEFORE CHECKING OUT'); IPC.renderBag(); return; }
     location.hash = '#/checkout';
   });
 
@@ -3636,6 +3730,7 @@ img.tc-true{filter:none !important}
     $('#coSummary').style.display = (logged || guest) ? 'block' : 'none';
     $('#coEmailField').style.display = guest ? 'block' : 'none';
     if (!logged && !guest) return;
+    try { IPC.validateBag(); } catch (e) {}
     var items = IPC.bag.items;
     if (items.length === 0) {
       $('#coLines').innerHTML = '<p class="orders-empty">YOUR BAG IS EMPTY — NOTHING TO CHECK OUT</p>';
@@ -3644,9 +3739,13 @@ img.tc-true{filter:none !important}
       $('#coSubmit').disabled = true;
       return;
     }
-    $('#coSubmit').disabled = false;
-    $('#coLines').innerHTML = items.map(function (it) {
-      return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + '</span><span>' + IPC.fmtP(it.priceC * it.qty) + '</span></p>';
+    var blocked = IPC.bagBlocked();
+    $('#coSubmit').disabled = blocked;
+    $('#coLines').innerHTML = (blocked
+      ? '<p class="bl-warn" style="margin:0 0 10px">UNAVAILABLE PIECES IN THE BAG — GO BACK AND REMOVE THEM BEFORE PLACING THE ORDER.</p>' : '') +
+      items.map(function (it) {
+        var flag = (it.issue === 'unavailable' || it.issue === 'soldout') ? ' — UNAVAILABLE' : '';
+        return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + flag + '</span><span>' + IPC.fmtP(it.priceC * it.qty) + '</span></p>';
     }).join('');
     $('#coSubtotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
     $('#coTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
@@ -5046,11 +5145,13 @@ setTimeout(function () {
 
   function clearVoucher(message) {
     appliedVoucher = null;
+    try { localStorage.removeItem('ipc-voucher-code-v1'); } catch (e) {}
     var row = $('#ipcDiscountRow');
     if (row) row.style.display = 'none';
     if ($('#coTotal') && IPC.bag) $('#coTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
     var msg = $('#ipcVoucherMsg');
     if (msg) { msg.textContent = message || 'FIRST-ORDER OFFERS ARE LINKED TO YOUR ACCOUNT AND MOBILE NUMBER.'; msg.className = 'ipc-voucher-msg'; }
+    try { if (IPC.renderBag) IPC.renderBag(); } catch (e) {}
   }
 
   var originalApi = IPC.api;
@@ -5087,6 +5188,7 @@ setTimeout(function () {
     IPC.api('/api/vouchers/validate', { method: 'POST', body: { code: code, phone: phone, items: items } })
       .then(function (d) {
         appliedVoucher = { code: d.code, discountCentavos: d.discountCentavos, userId: IPC.auth && IPC.auth.user && IPC.auth.user.id };
+        try { localStorage.setItem('ipc-voucher-code-v1', JSON.stringify({ code: d.code })); } catch (e) {}
         $('#ipcDiscountRow').style.display = 'flex';
         $('#ipcDiscountValue').textContent = '−' + IPC.fmtP(d.discountCentavos);
         $('#coTotal').textContent = IPC.fmtP(d.totalCentavos);
@@ -5989,20 +6091,36 @@ setTimeout(function () {
     wireProdForm();
     var customCount = 0, offCount = 0;
     items.forEach(function (p) { if (p.custom) customCount++; if (p.active === false) offCount++; });
+    var statusChip = function (p) {
+      if (p.publicationStatus === 'pulled') return '<span class="prod-flag off">PULLED</span>';
+      if (p.publicationStatus === 'hidden') return '<span class="prod-flag vis-hidden">HIDDEN</span>';
+      return '<span class="prod-flag core">LIVE</span>';
+    };
+    var visCell = function (p) {
+      var chip = function (surf, on) {
+        return '<label class="vis-chip' + (on ? ' on' : '') + '"><input type="checkbox" data-vis="' + esc(p.id) + '|' + surf + '"' + (on ? ' checked' : '') + ' /> ' + surf.toUpperCase() + '</label>';
+      };
+      return chip('shop', p.shopVisible !== false) + chip('gallery', p.galleryVisible !== false) + chip('collection', p.collectionVisible !== false);
+    };
     var rows = items.map(function (p) {
-      var flags = (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') +
-        (p.active === false ? '<span class="prod-flag off">PULLED</span>' : '');
+      var flags = (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') + statusChip(p);
       return '<tr class="ipc-prod-row' + (p.active === false ? ' ipc-prod-inactive' : '') + '">' +
         '<td><b>' + esc(p.name) + '</b>' + flags + '</td><td>' + IPC.fmtP(p.priceCentavos) + '</td><td>' + esc(p.tag || '—') + '</td>' +
         '<td>' + esc((p.sizes || []).join(' · ')) + '</td><td>' + (p.unitsSold || 0) + '</td><td><b>' + IPC.fmtP(p.revenueCentavos) + '</b></td>' +
-        '<td>' + (p.custom ? '<button type="button" class="btn-o btn-sm" data-prod-remove="' + esc(p.id) + '"' + (p.active === false ? ' disabled' : '') + '>' + (p.active === false ? 'PULLED' : 'PULL') + '</button>' : '<small>—</small>') + '</td></tr>';
+        '<td>' + visCell(p) + '</td>' +
+        '<td>' + (p.custom
+          ? (p.active === false
+            ? '<button type="button" class="btn-w btn-sm" data-prod-restore="' + esc(p.id) + '">RESTORE</button>'
+            : '<button type="button" class="btn-o btn-sm" data-prod-remove="' + esc(p.id) + '">PULL</button>')
+          : '<small>—</small>') + '</td></tr>';
     }).join('');
     host.innerHTML =
       '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">' +
       '<button type="button" class="btn-w btn-sm" id="ipcProdAdd">+ ADD A PIECE</button>' +
-      '<p class="count-chip" style="margin:0">' + customCount + ' CLUB-ADDED' + (offCount ? ' · ' + offCount + ' PULLED' : '') + ' — PULLED PIECES STAY OFF THE SHOP, PAST ORDERS KEEP THEIR RECORD</p></div>' +
+      '<p class="count-chip" style="margin:0">' + customCount + ' CLUB-ADDED' + (offCount ? ' · ' + offCount + ' PULLED' : '') +
+      ' — VISIBILITY SWITCHES CONTROL WHERE A PIECE SHOWS; PULLING OR HIDING NEVER DELETES THE PIECE, ITS ORDERS OR ITS HISTORY</p></div>' +
       '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-      '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th><th>SHELF</th></tr></thead><tbody>' +
+      '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th><th>SHOWS ON</th><th>SHELF</th></tr></thead><tbody>' +
       rows + '</tbody></table></div>';
   }
   function loadInventory() {
@@ -6034,7 +6152,8 @@ setTimeout(function () {
       if (pane === 'contacts') loadInquiries();
     });
   });
-  /* add-a-piece + pull-from-shelf — delegated, survives every inventory re-render */
+  /* add-a-piece + pull-from-shelf + restore + visibility switches —
+     delegated, survives every inventory re-render */
   document.addEventListener('click', function (ev) {
     var add = ev.target.closest ? ev.target.closest('#ipcProdAdd') : null;
     if (add) { openProdForm(); return; }
@@ -6043,7 +6162,7 @@ setTimeout(function () {
       var pid = pull.getAttribute('data-prod-remove');
       var row = pull.closest('tr');
       var pname = row ? (row.querySelector('b') || {}).textContent || '' : '';
-      if (!window.confirm('PULL "' + pname.trim().toUpperCase() + '" OFF THE SHOP?\n\nPAST ORDERS KEEP THEIR RECORD — THE PIECE JUST STOPS SHOWING.')) return;
+      if (!window.confirm('PULL "' + pname.trim().toUpperCase() + '" OFF THE SHOP?\n\nPAST ORDERS KEEP THEIR RECORD — THE PIECE JUST STOPS SHOWING. RESTORE BRINGS IT BACK.')) return;
       pull.disabled = true;
       IPC.api('/api/admin/products/remove', { method: 'POST', body: { id: pid } })
         .then(function (d) {
@@ -6055,7 +6174,52 @@ setTimeout(function () {
           pull.disabled = false;
           IPC.toast(String(((err && err.message) || 'PULL FAILED') + '').toUpperCase());
         });
+      return;
     }
+    var restore = ev.target.closest ? ev.target.closest('[data-prod-restore]') : null;
+    if (restore && !restore.disabled) {
+      restore.disabled = true;
+      IPC.api('/api/admin/products/restore', { method: 'POST', body: { id: restore.getAttribute('data-prod-restore') } })
+        .then(function (d) {
+          IPC.toast(d.message || 'PIECE RESTORED');
+          loadInventory();
+          return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
+        })
+        .catch(function (err) {
+          restore.disabled = false;
+          IPC.toast(String(((err && err.message) || 'RESTORE FAILED') + '').toUpperCase());
+        });
+    }
+  });
+  /* visibility switches — one POST saves the whole surface set for the piece */
+  document.addEventListener('change', function (ev) {
+    if (!ev.target || !ev.target.hasAttribute || !ev.target.hasAttribute('data-vis')) return;
+    var parts = ev.target.getAttribute('data-vis').split('|');
+    var pid = parts[0], surf = parts[1];
+    var row = ev.target.closest('tr');
+    if (!row) return;
+    /* send the full flag set as the row now shows it */
+    var body = { id: pid };
+    ['shop', 'gallery', 'collection'].forEach(function (s) {
+      var key = s + 'Visible';
+      if (s === surf) body[key] = ev.target.checked;
+      else {
+        var other = row.querySelector('[data-vis="' + pid + '|' + s + '"]');
+        body[key] = other ? other.checked : true;
+      }
+    });
+    ev.target.disabled = true;
+    IPC.api('/api/admin/products/visibility', { method: 'POST', body: body })
+      .then(function (d) {
+        IPC.toast(d.message || 'VISIBILITY SAVED');
+        loadInventory();
+        return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
+      })
+      .catch(function (err) {
+        ev.target.disabled = false;
+        ev.target.checked = !ev.target.checked;
+        IPC.toast(String(((err && err.message) || 'VISIBILITY FAILED') + '').toUpperCase());
+      });
   });
   /* boot — pull the club's saved pieces onto the shelf as soon as the page is up.
      Silent on failure: the baked catalog keeps the shop open without the server. */
@@ -6467,6 +6631,424 @@ setTimeout(function () {
   }
   } catch (err) {
     if (window.console) console.error('IPC growth admin init:', err);
+  }
+})();
+</script>
+
+<script id="ipc-ops-block-12">
+/* BLOCK 12 — OPERATIONS (v25). The analytics dashboard, the support desk and
+   the activity log ride the same admin panes; members get a support section
+   inside their account. Every number comes from the club's own database —
+   no sample data anywhere. Nothing here touches IPC Pay. */
+(function () {
+  try {
+  var IPC = window.IPC = window.IPC || {};
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var esc = IPC.esc || function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var fmtP = IPC.fmtP || function (c) { return '₱' + ((Number(c) || 0) / 100).toFixed(2); };
+
+  var css = document.createElement('style');
+  css.textContent =
+    '.bl-warn{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:#b3261e;text-transform:uppercase;margin-top:8px}' +
+    '.prod-flag.vis-hidden{background:#b3261e;color:#fff}' +
+    '.vis-chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;border:1px solid var(--line-2);padding:4px 7px;margin:2px 3px 2px 0;text-transform:uppercase;color:var(--faint);cursor:pointer;user-select:none}' +
+    '.vis-chip.on{background:var(--black);color:var(--white);border-color:var(--black)}' +
+    '.vis-chip input{margin:0;accent-color:#111}' +
+    '.ana-range{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}' +
+    '.ana-range button{font-family:var(--mono);font-size:10px;letter-spacing:.16em;border:1px solid var(--line-2);background:var(--panel);color:var(--muted);padding:9px 14px;text-transform:uppercase;cursor:pointer;transition:all .2s}' +
+    '.ana-range button.active{background:var(--white);color:var(--black);font-weight:700}' +
+    '.ana-bars{display:flex;align-items:flex-end;gap:3px;height:120px;border-bottom:1px solid var(--line-2);padding:10px 4px 0;overflow-x:auto}' +
+    '.ana-bar{flex:1 0 8px;min-width:8px;background:var(--black);opacity:.85;position:relative}' +
+    '.ana-bar:hover{opacity:1}.ana-bar:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--black);color:var(--white);font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;padding:4px 7px;white-space:nowrap;z-index:5}' +
+    '.ana-bar-x{display:flex;gap:3px;padding:4px 4px 0;overflow:hidden;font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;color:var(--faint)}' +
+    '.ana-bar-x span{flex:1 0 8px;min-width:8px;text-align:center}' +
+    '.sup-chip{display:inline-block;font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;padding:4px 9px;border:1px solid var(--line-2);text-transform:uppercase}' +
+    '.sup-chip.open{background:#111;color:#fff}.sup-chip.in_progress{background:#7a5c00;color:#fff}.sup-chip.resolved{background:#0b6b3a;color:#fff}.sup-chip.closed{background:#666;color:#fff}' +
+    '.sup-chip.unread{background:#b3261e;color:#fff}' +
+    '.sup-ticket{border:1px solid var(--line);background:var(--panel);padding:16px;margin-bottom:12px}' +
+    '.sup-reply{border-left:3px solid var(--line-2);padding:8px 12px;margin:10px 0;font-size:13px;color:var(--muted)}' +
+    '.sup-reply.admin{border-left-color:var(--black);color:var(--text)}' +
+    '.sup-meta{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}' +
+    '#v-admin .ana-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:18px 0}' +
+    '#v-admin .ana-cell{background:var(--panel);padding:16px}' +
+    '#v-admin .ana-cell .fk{font-family:var(--mono);font-size:8.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}' +
+    '#v-admin .ana-cell .fv{font-family:var(--mono);font-size:22px;color:var(--text);margin-top:6px}' +
+    '#v-admin .ana-cell .fc{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;color:var(--muted);margin-top:4px}' +
+    '@media(max-width:760px){#v-admin .ana-grid{grid-template-columns:repeat(2,1fr)}}';
+  document.head.appendChild(css);
+
+  /* ---------- inject the three new panes ---------- */
+  var adminTabs = $('.adm-tabs');
+  var lastPane = $('#pane-growth') || $('#pane-contacts') || $('#pane-inventory');
+  if (adminTabs && lastPane && !$('#pane-analytics')) {
+    [['analytics', 'ANALYTICS'], ['support', 'SUPPORT'], ['activity', 'ACTIVITY']].forEach(function (pair) {
+      var tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'adm-tab';
+      tab.setAttribute('data-pane', pair[0]);
+      tab.textContent = pair[1];
+      adminTabs.appendChild(tab);
+      var pane = document.createElement('div');
+      pane.className = 'adm-pane';
+      pane.id = 'pane-' + pair[0];
+      lastPane.insertAdjacentElement('afterend', pane);
+      lastPane = pane;
+    });
+
+    $('#pane-analytics').innerHTML =
+      '<p class="count-chip">THE NUMBERS THE CLUB ACTUALLY HAS — PULLED LIVE FROM ORDERS, PAYMENTS AND FIRST-PARTY EVENTS. NO SAMPLES, NO ESTIMATES.</p>' +
+      '<div class="ana-range" id="anaRange">' +
+        '<button type="button" data-days="7">7 DAYS</button>' +
+        '<button type="button" data-days="30" class="active">30 DAYS</button>' +
+        '<button type="button" data-days="90">90 DAYS</button>' +
+        '<button type="button" data-days="365">A YEAR</button>' +
+        '<input type="date" id="anaFrom" aria-label="From" style="font-family:var(--mono);font-size:11px;border:1px solid var(--line-2);background:var(--panel);color:var(--text);padding:8px" />' +
+        '<input type="date" id="anaTo" aria-label="To" style="font-family:var(--mono);font-size:11px;border:1px solid var(--line-2);background:var(--panel);color:var(--text);padding:8px" />' +
+        '<button type="button" id="anaCustom">CUSTOM</button>' +
+      '</div>' +
+      '<div id="admAnalytics"><p class="adm-empty">LOADING ANALYTICS…</p></div>';
+
+    $('#pane-support').innerHTML =
+      '<p class="count-chip">THE SUPPORT DESK — MEMBERS RAISE TICKETS FROM THEIR ACCOUNT, THE CLUB ANSWERS HERE. STATUSES: OPEN → IN PROGRESS → RESOLVED → CLOSED.</p>' +
+      '<div class="ana-range" id="supFilter">' +
+        '<button type="button" data-st="all" class="active">ALL</button>' +
+        '<button type="button" data-st="open">OPEN</button>' +
+        '<button type="button" data-st="in_progress">IN PROGRESS</button>' +
+        '<button type="button" data-st="resolved">RESOLVED</button>' +
+        '<button type="button" data-st="closed">CLOSED</button>' +
+      '</div>' +
+      '<div id="admSupport"><p class="adm-empty">LOADING TICKETS…</p></div>';
+
+    $('#pane-activity').innerHTML =
+      '<p class="count-chip">THE ACTIVITY RECORD — EVERY ADMIN ACTION, WHO DID IT, WHAT CHANGED, WHEN. APPEND-ONLY: NO EDIT, NO DELETE, NO EXCEPTIONS.</p>' +
+      '<div id="admActivity"><p class="adm-empty">LOADING THE RECORD…</p></div>';
+  }
+
+  var supFilterState = 'all';
+
+  /* ---------- ANALYTICS ---------- */
+  function barChart(daily) {
+    var max = 0;
+    daily.forEach(function (r) { if (r.revenueCentavos > max) max = r.revenueCentavos; });
+    if (!max) return '<p class="adm-empty">NO VERIFIED PAYMENTS IN THIS WINDOW YET — THE CHART DRAWS ITSELF THE MOMENT MONEY LANDS.</p>';
+    var bars = daily.map(function (r) {
+      var h = Math.max(2, Math.round(100 * r.revenueCentavos / max));
+      return '<div class="ana-bar" style="height:' + h + '%" data-tip="' + esc(r.day + ' · ' + fmtP(r.revenueCentavos) + ' · ' + r.orders + ' ORD') + '"></div>';
+    }).join('');
+    var step = Math.max(1, Math.floor(daily.length / 6));
+    var labels = daily.map(function (r, i) {
+      return i % step === 0 ? '<span>' + esc(r.day.slice(5)) + '</span>' : '<span></span>';
+    }).join('');
+    return '<div class="ana-bars">' + bars + '</div><div class="ana-bar-x">' + labels + '</div>' +
+      '<p class="sup-meta" style="margin-top:8px">DAILY VERIFIED REVENUE — PEAK ' + fmtP(max) + '</p>';
+  }
+  var loadAnalyticsCache = null;
+  function paintAnalytics(d) {
+    var host = $('#admAnalytics');
+    if (!host) return;
+    var t = d.totals || {};
+    var conv = d.conversion || {};
+    var cust = d.customers || {};
+    var ab = d.abandoned || {};
+    var total = (cust.newCount || 0) + (cust.returningCount || 0);
+    var cell = function (k, v, c) { return '<div class="ana-cell"><p class="fk">' + k + '</p><p class="fv">' + v + '</p>' + (c ? '<p class="fc">' + c + '</p>' : '') + '</div>'; };
+    var tiles =
+      cell('TOTAL SALES', fmtP(t.salesCentavos || 0), (t.paidOrders || 0) + ' VERIFIED PAYMENTS') +
+      cell('ORDERS PLACED', t.ordersPlaced || 0, (t.paidOrders || 0) + ' PAID') +
+      cell('AVERAGE ORDER', fmtP(t.aovCentavos || 0), 'PER VERIFIED PAYMENT') +
+      cell('CHECKOUT → PAID', conv.checkoutToPaidPct == null ? '—' : conv.checkoutToPaidPct + '%', 'BAG → CHECKOUT ' + (conv.bagToCheckoutPct == null ? '—' : conv.bagToCheckoutPct + '%')) +
+      cell('NEW CUSTOMERS', cust.newCount || 0, total ? Math.round(100 * (cust.newCount || 0) / total) + '% OF BUYERS' : 'NO BUYERS YET') +
+      cell('RETURNING', cust.returningCount || 0, total ? Math.round(100 * (cust.returningCount || 0) / total) + '% OF BUYERS' : 'NO BUYERS YET');
+    var f = d.funnel || {};
+    var best = (d.bestSellers || []).map(function (b, i) {
+      return '<tr><td><b>' + (i + 1) + '</b></td><td>' + esc(b.name || b.productId) + '</td><td>' + b.units + '</td><td><b>' + fmtP(b.revenueCentavos) + '</b></td></tr>';
+    }).join('');
+    var pop = (d.popular || []).map(function (p) {
+      return '<tr><td>' + esc(p.productId) + '</td><td><b>' + p.views + '</b> VIEWS</td></tr>';
+    }).join('');
+    host.innerHTML =
+      '<div class="ana-grid">' + tiles + '</div>' +
+      '<div class="club-card"><h4>SALES OVER TIME</h4>' + barChart(d.daily || []) + '</div>' +
+      '<div class="funnel-strip" style="margin:18px 0">' +
+        '<div class="funnel-cell"><p class="fk">PRODUCT VIEWS</p><p class="fv">' + (((f.view_product || {}).count) || 0) + '</p><p class="fc">' + (((f.view_product || {}).visitors) || 0) + ' VISITORS</p></div>' +
+        '<div class="funnel-cell"><p class="fk">ADDED TO BAG</p><p class="fv">' + (((f.add_to_bag || {}).count) || 0) + '</p><p class="fc">' + (((f.add_to_bag || {}).visitors) || 0) + ' VISITORS</p></div>' +
+        '<div class="funnel-cell"><p class="fk">CHECKOUT STARTED</p><p class="fv">' + (((f.checkout_start || {}).count) || 0) + '</p><p class="fc">' + (((f.checkout_start || {}).visitors) || 0) + ' VISITORS</p></div>' +
+        '<div class="funnel-cell"><p class="fk">PAID (VERIFIED)</p><p class="fv">' + (((f.paid || {}).count) || 0) + '</p><p class="fc">' + (((f.paid || {}).visitors) || 0) + ' VISITORS</p></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">' +
+        '<div class="club-card"><h4>BEST SELLERS — BY UNITS</h4>' +
+          (best ? '<div style="overflow-x:auto"><table class="adm-table"><thead><tr><th>#</th><th>PIECE</th><th>UNITS</th><th>REVENUE</th></tr></thead><tbody>' + best + '</tbody></table></div>'
+            : '<p class="adm-empty">NO VERIFIED ORDERS IN THIS WINDOW YET.</p>') + '</div>' +
+        '<div class="club-card"><h4>MOST VIEWED PIECES</h4>' +
+          (pop ? '<div style="overflow-x:auto"><table class="adm-table"><thead><tr><th>PIECE</th><th>VIEWS</th></tr></thead><tbody>' + pop + '</tbody></table></div>'
+            : '<p class="adm-empty">NO PRODUCT VIEWS TRACKED IN THIS WINDOW YET.</p>') + '</div>' +
+      '</div>' +
+      '<div class="club-card" style="margin-top:18px"><h4>ABANDONED CARTS — WHERE RELIABLY TRACKABLE</h4>' +
+        '<div class="ana-grid" style="margin:14px 0 0">' +
+          cell('CHECKOUTS NEVER PAID', ab.checkoutAbandoned || 0, 'STARTED CHECKOUT, NO VERIFIED PAYMENT') +
+          cell('BAGS NEVER CHECKED OUT', ab.bagAbandoned || 0, 'ADDED TO BAG, NEVER REACHED CHECKOUT') +
+        '</div>' +
+        '<p class="sup-meta" style="margin-top:10px">' + esc(ab.note || '') + '</p></div>';
+  }
+  function loadAnalytics(days) {
+    var host = $('#admAnalytics');
+    if (!host) return;
+    host.innerHTML = '<p class="adm-empty">LOADING ANALYTICS…</p>';
+    IPC.api('/api/admin/analytics' + (days ? '?days=' + days : ''))
+      .then(function (d) {
+        loadAnalyticsCache = d;
+        paintAnalytics(d);
+      })
+      .catch(function (err) {
+        host.innerHTML = '<p class="adm-empty">' + esc(((err.message || 'ANALYTICS FAILED') + '').toUpperCase()) + '</p>';
+      });
+  }
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('#anaRange button') : null;
+    if (!btn) return;
+    $$('#anaRange button').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    loadAnalytics(btn.getAttribute('data-days'));
+  });
+  var anaCustom = $('#anaCustom');
+  if (anaCustom) anaCustom.addEventListener('click', function () {
+    var from = $('#anaFrom') && $('#anaFrom').value;
+    var to = $('#anaTo') && $('#anaTo').value;
+    if (!from || !to) { IPC.toast('PICK BOTH DATES FIRST'); return; }
+    $$('#anaRange button').forEach(function (b) { b.classList.remove('active'); });
+    anaCustom.classList.add('active');
+    loadAnalyticsRange(from, to);
+  });
+  function loadAnalyticsRange(from, to) {
+    var host = $('#admAnalytics');
+    if (!host) return;
+    host.innerHTML = '<p class="adm-empty">LOADING ANALYTICS…</p>';
+    IPC.api('/api/admin/analytics?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to))
+      .then(function (d) {
+        loadAnalyticsCache = d;
+        paintAnalytics(d);
+      })
+      .catch(function (err) {
+        host.innerHTML = '<p class="adm-empty">' + esc(((err.message || 'ANALYTICS FAILED') + '').toUpperCase()) + '</p>';
+      });
+  }
+
+  /* ---------- SUPPORT DESK ---------- */
+  function supChip(status) {
+    return '<span class="sup-chip ' + esc(status) + '">' + esc(String(status).replace('_', ' ').toUpperCase()) + '</span>';
+  }
+  function loadAdminSupport() {
+    var host = $('#admSupport');
+    if (!host) return;
+    host.innerHTML = '<p class="adm-empty">LOADING TICKETS…</p>';
+    IPC.api('/api/admin/support').then(function (d) {
+      var list = (d.tickets || []).filter(function (t) { return supFilterState === 'all' || t.status === supFilterState; });
+      var counts = d.counts || {};
+      var head = Object.keys(counts).length
+        ? '<p class="count-chip">' + (counts.open || 0) + ' OPEN · ' + (counts.in_progress || 0) + ' IN PROGRESS · ' + (counts.resolved || 0) + ' RESOLVED · ' + (counts.closed || 0) + ' CLOSED</p>' : '';
+      if (!list.length) { host.innerHTML = head + '<p class="adm-empty">NO TICKETS IN THIS VIEW YET — MEMBERS OPEN THEM FROM THEIR ACCOUNT PAGE.</p>'; return; }
+      host.innerHTML = head + list.map(function (t) {
+        var replies = (t.replies || []).map(function (r) {
+          return '<div class="sup-reply ' + esc(r.by) + '"><span class="sup-meta">' + esc(r.by === 'admin' ? 'CLUB' : 'MEMBER') + ' · ' + esc(new Date(r.at).toLocaleString('en-PH')) + '</span><br />' + esc(r.body) + '</div>';
+        }).join('');
+        return '<div class="sup-ticket" data-tid="' + esc(t.id) + '">' +
+          '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">' +
+            '<div><b>' + esc(t.subject) + '</b> ' + supChip(t.status) + (t.customerUnread ? ' <span class="sup-chip unread">MEMBER UPDATED</span>' : '') + '</div>' +
+            '<span class="sup-meta">' + esc(t.ref || t.id) + ' · ' + esc(new Date(t.createdAt).toLocaleDateString('en-PH')) + '</span></div>' +
+          '<p class="sup-meta" style="margin-top:6px">' + esc(t.email) +
+            (t.orderReference ? ' · ORDER ' + esc(t.orderReference) : '') + ' · ' + esc(String(t.category).replace('_', ' ').toUpperCase()) + '</p>' +
+          '<p style="margin:10px 0;color:var(--text)">' + esc(t.message) + '</p>' +
+          replies +
+          '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-top:10px">' +
+            '<textarea class="inp" data-sup-reply="' + esc(t.id) + '" maxlength="4000" rows="2" placeholder="WRITE THE CLUB&#39;S ANSWER…"></textarea>' +
+            '<select class="inp" data-sup-status="' + esc(t.id) + '" style="min-width:150px">' +
+              ['open', 'in_progress', 'resolved', 'closed'].map(function (s) {
+                return '<option value="' + s + '"' + (s === t.status ? ' selected' : '') + '>' + s.replace('_', ' ').toUpperCase() + '</option>';
+              }).join('') + '</select>' +
+            '<button type="button" class="btn-w btn-sm" data-sup-send="' + esc(t.id) + '">SEND</button>' +
+          '</div></div>';
+      }).join('');
+    }).catch(function (err) {
+      host.innerHTML = '<p class="adm-empty">' + esc(((err.message || 'SUPPORT FAILED') + '').toUpperCase()) + '</p>';
+    });
+  }
+  document.addEventListener('click', function (ev) {
+    var fbtn = ev.target.closest ? ev.target.closest('#supFilter button') : null;
+    if (fbtn) {
+      supFilterState = fbtn.getAttribute('data-st');
+      $$('#supFilter button').forEach(function (b) { b.classList.toggle('active', b === fbtn); });
+      loadAdminSupport();
+      return;
+    }
+    var send = ev.target.closest ? ev.target.closest('[data-sup-send]') : null;
+    if (!send) return;
+    var tid = send.getAttribute('data-sup-send');
+    var wrap = document.querySelector('[data-sup-reply="' + tid + '"]');
+    var sel = document.querySelector('[data-sup-status="' + tid + '"]');
+    var text = wrap ? wrap.value.trim() : '';
+    if (text.length < 2) { IPC.toast('WRITE THE ANSWER FIRST'); return; }
+    send.disabled = true;
+    IPC.api('/api/admin/support/reply', { method: 'POST', body: { id: tid, body: text, status: sel ? sel.value : undefined } })
+      .then(function (d) { IPC.toast(d.message || 'ANSWER SENT'); loadAdminSupport(); })
+      .catch(function (err) { send.disabled = false; IPC.toast(String(((err && err.message) || 'SEND FAILED') + '').toUpperCase()); });
+  });
+
+  /* ---------- ACTIVITY LOG ---------- */
+  var ACTION_LABELS = {
+    order_status: 'ORDER STATUS', order_tracking: 'TRACKING', product_create: 'PIECE ADDED',
+    product_edit: 'PIECE EDITED', product_remove: 'PIECE PULLED', product_restore: 'PIECE RESTORED',
+    product_visibility: 'VISIBILITY', voucher_create: 'VOUCHER CREATED', voucher_toggle: 'VOUCHER SWITCH',
+    member_remove: 'MEMBER REMOVED', member_restore: 'MEMBER RESTORED', member_password_reset: 'PASSWORD RESET',
+    member_role: 'ROLE CHANGE', collection_state: 'DROP STATE', settings_config: 'SETTINGS',
+    support_reply: 'SUPPORT REPLY', support_status: 'SUPPORT STATUS',
+  };
+  function loadActivity() {
+    var host = $('#admActivity');
+    if (!host) return;
+    host.innerHTML = '<p class="adm-empty">LOADING THE RECORD…</p>';
+    IPC.api('/api/admin/activity').then(function (d) {
+      var rows = d.activity || [];
+      if (!rows.length) { host.innerHTML = '<p class="adm-empty">THE RECORD IS EMPTY — IT WRITES ITSELF FROM YOUR FIRST ADMIN ACTION ON.</p>'; return; }
+      host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+        '<th>WHEN</th><th>ADMIN</th><th>ACTION</th><th>ON</th><th>DETAILS</th></tr></thead><tbody>' +
+        rows.map(function (r) {
+          return '<tr><td style="white-space:nowrap">' + esc(new Date(r.createdAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) + '</td>' +
+            '<td><b>' + esc(r.actorEmail) + '</b></td>' +
+            '<td>' + esc(ACTION_LABELS[r.action] || String(r.action).replace('_', ' ').toUpperCase()) + '</td>' +
+            '<td><b>' + esc(r.targetLabel || r.targetId) + '</b>' + (r.targetType ? '<br /><small class="sup-meta">' + esc(r.targetType.toUpperCase()) + '</small>' : '') + '</td>' +
+            '<td>' + esc(r.details || '—') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<p class="count-chip">' + rows.length + ' ENTRIES SHOWN (LATEST 200) — THE RECORD KEEPS GOING, NOTHING GETS DELETED.</p>';
+    }).catch(function (err) {
+      host.innerHTML = '<p class="adm-empty">' + esc(((err.message || 'ACTIVITY FAILED') + '').toUpperCase()) + '</p>';
+    });
+  }
+
+  /* ---------- pane activation — load on first look, refresh on re-entry ---------- */
+  document.addEventListener('click', function (ev) {
+    var tab = ev.target && ev.target.closest ? ev.target.closest('.adm-tab') : null;
+    if (!tab) return;
+    var pane = tab.getAttribute('data-pane');
+    if (pane === 'analytics') loadAnalyticsCache ? paintAnalytics(loadAnalyticsCache) : loadAnalytics(30);
+    if (pane === 'support') loadAdminSupport();
+    if (pane === 'activity') loadActivity();
+  });
+
+  /* ---------- MEMBER SIDE — the support section in the account ---------- */
+  var CATS = [
+    ['order_issue', 'ORDER ISSUE'], ['product_question', 'PRODUCT QUESTION'], ['sizing_fit', 'SIZING & FIT'],
+    ['payment', 'PAYMENT'], ['shipping', 'SHIPPING'], ['membership', 'MEMBERSHIP'], ['other', 'SOMETHING ELSE'],
+  ];
+  function ensureAccountSupportDom() {
+    var drop = $('#ordersDrop');
+    if (!drop || $('#supportSection')) return;
+    drop.insertAdjacentHTML('afterend',
+      '<div class="club-card" id="supportSection" style="margin-top:18px">' +
+      '<h4>SUPPORT — TALK TO THE CLUB<span id="supUnread"></span></h4>' +
+      '<p>ORDER PROBLEM, SIZING QUESTION, PAYMENT CONCERN — OPEN A TICKET AND THE CLUB ANSWERS RIGHT HERE IN YOUR ACCOUNT.</p>' +
+      '<div id="supList" style="margin-top:14px"></div>' +
+      '<form id="supForm" class="rev-form" style="max-width:560px;margin-top:18px" novalidate>' +
+      '<label>SUBJECT<input id="supSubject" maxlength="120" placeholder="E.G. WRONG SIZE ARRIVED" /></label>' +
+      '<label>WHAT IS IT ABOUT<select id="supCat">' + CATS.map(function (c) { return '<option value="' + c[0] + '">' + c[1] + '</option>'; }).join('') + '</select></label>' +
+      '<label>ABOUT WHICH ORDER (OPTIONAL)<select id="supOrder"><option value="">— NOT ABOUT ONE ORDER —</option></select></label>' +
+      '<label>TELL THE CLUB<textarea id="supMsg" maxlength="4000" rows="3" placeholder="WHAT HAPPENED, WHICH PIECE, WHAT YOU NEED."></textarea></label>' +
+      '<button type="submit" class="btn-w btn-sm">OPEN THE TICKET</button>' +
+      '<p class="form-msg" id="supMsgLine" role="status" aria-live="polite"></p>' +
+      '</form></div>');
+    var form = $('#supForm');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var msg = $('#supMsgLine');
+      var show = function (t, ok) { msg.textContent = t; msg.className = 'form-msg show ' + (ok ? 'ok' : 'err'); };
+      var subject = $('#supSubject').value.trim();
+      var message = $('#supMsg').value.trim();
+      if (subject.length < 4) { show('GIVE THE TICKET A SUBJECT — AT LEAST 4 CHARACTERS.', false); return; }
+      if (message.length < 10) { show('TELL THE CLUB WHAT HAPPENED — AT LEAST 10 CHARACTERS.', false); return; }
+      var btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      IPC.api('/api/support', { method: 'POST', body: {
+        subject: subject, category: $('#supCat').value, message: message,
+        orderReference: $('#supOrder').value || undefined,
+      } }).then(function (d) {
+        show(d.message || 'TICKET OPENED — THE CLUB ANSWERS HERE.', true);
+        $('#supSubject').value = ''; $('#supMsg').value = '';
+        loadAccountSupport();
+      }).catch(function (err) {
+        show(String((err && err.message) || 'TICKET FAILED — TRY AGAIN.').toUpperCase(), false);
+      }).finally(function () { btn.disabled = false; });
+    });
+  }
+  function loadAccountSupport() {
+    ensureAccountSupportDom();
+    var host = $('#supList');
+    if (!host) return;
+    IPC.api('/api/support/mine').then(function (d) {
+      var list = d.tickets || [];
+      var unread = d.unread || 0;
+      var badge = $('#supUnread');
+      if (badge) badge.innerHTML = unread ? ' <span class="sup-chip unread">' + unread + ' NEW REPLY' + (unread === 1 ? '' : 'IES') + '</span>' : '';
+      if (!list.length) { host.innerHTML = '<p class="sup-meta">NO TICKETS YET — THE CLUB KEEPS EVERY CONVERSATION HERE.</p>'; return; }
+      host.innerHTML = list.map(function (t) {
+        var replies = (t.replies || []).map(function (r) {
+          return '<div class="sup-reply ' + esc(r.by) + '"><span class="sup-meta">' + esc(r.by === 'admin' ? 'CLUB — ' : 'YOU — ') + esc(new Date(r.at).toLocaleString('en-PH')) + '</span><br />' + esc(r.body) + '</div>';
+        }).join('');
+        return '<div class="sup-ticket" data-sup-read="' + esc(t.id) + '">' +
+          '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">' +
+            '<div><b>' + esc(t.subject) + '</b> ' + supChip(t.status) + (t.customerUnread ? ' <span class="sup-chip unread">NEW REPLY</span>' : '') + '</div>' +
+            '<span class="sup-meta">' + esc(t.ref || t.id) + '</span></div>' +
+          '<p class="sup-meta" style="margin-top:6px">' + esc(String(t.category).replace('_', ' ').toUpperCase()) +
+            (t.orderReference ? ' · ORDER ' + esc(t.orderReference) : '') + ' · OPENED ' + esc(new Date(t.createdAt).toLocaleDateString('en-PH')) + '</p>' +
+          '<p style="margin:10px 0;color:var(--text)">' + esc(t.message) + '</p>' +
+          replies +
+          '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px">' +
+            '<input class="inp" data-sup-creply="' + esc(t.id) + '" maxlength="2000" placeholder="ADD MORE DETAIL — THE CLUB SEES IT INSTANTLY" />' +
+            '<button type="button" class="btn-o btn-sm" data-sup-csend="' + esc(t.id) + '">SEND</button>' +
+          '</div></div>';
+      }).join('');
+      /* seen means seen — the badge clears once the member reads the thread */
+      list.filter(function (t) { return t.customerUnread; }).forEach(function (t) {
+        IPC.api('/api/support/read', { method: 'POST', body: { id: t.id } }).catch(function () {});
+      });
+    }).catch(function () {
+      host.innerHTML = '<p class="sup-meta">SUPPORT UNAVAILABLE RIGHT NOW — TRY A REFRESH.</p>';
+    });
+  }
+  document.addEventListener('click', function (ev) {
+    var send = ev.target.closest ? ev.target.closest('[data-sup-csend]') : null;
+    if (!send) return;
+    var tid = send.getAttribute('data-sup-csend');
+    var input = document.querySelector('[data-sup-creply="' + tid + '"]');
+    var text = input ? input.value.trim() : '';
+    if (text.length < 2) { IPC.toast('WRITE SOMETHING FIRST'); return; }
+    send.disabled = true;
+    IPC.api('/api/support/reply', { method: 'POST', body: { id: tid, body: text } })
+      .then(function (d) { IPC.toast(d.message || 'REPLY SENT'); loadAccountSupport(); })
+      .catch(function (err) { send.disabled = false; IPC.toast(String(((err && err.message) || 'SEND FAILED') + '').toUpperCase()); });
+  });
+  /* orders feed the ticket's order picker */
+  IPC.api('/api/orders/mine').then(function (d) {
+    var sel = $('#supOrder');
+    if (!sel) return;
+    (d.orders || []).slice(0, 20).forEach(function (o) {
+      var opt = document.createElement('option');
+      opt.value = o.reference;
+      opt.textContent = o.reference + ' — ' + new Date(o.createdAt).toLocaleDateString('en-PH') + ' — ' + fmtP(o.totalCentavos);
+      sel.appendChild(opt);
+    });
+  }).catch(function () {});
+
+  /* renderAccount chains the support load — every logged-in account visit refreshes it */
+  if (typeof IPC.renderAccount === 'function') {
+    var _acct = IPC.renderAccount;
+    IPC.renderAccount = function () {
+      var r = _acct.apply(this, arguments);
+      if (IPC.auth && IPC.auth.user) { try { loadAccountSupport(); } catch (e) {} }
+      return r;
+    };
+  }
+  } catch (err) {
+    if (window.console) console.error('IPC ops init:', err);
   }
 })();
 </script>
