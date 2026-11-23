@@ -646,6 +646,9 @@ textarea.inp{min-height:110px;resize:vertical}
 .cf-field input:focus,.cf-field textarea:focus{border-color:var(--white)}
 .cf-field textarea{min-height:150px;resize:vertical;line-height:1.8}
 .cf-full{grid-column:1/-1}
+.cf-field select{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);border-radius:0;color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:.12em;padding:13px 15px;caret-color:var(--white);outline:none;transition:border-color .2s ease;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--faint) 50%),linear-gradient(135deg,var(--faint) 50%,transparent 50%);background-position:calc(100% - 20px) 55%,calc(100% - 14px) 55%;background-size:6px 6px;background-repeat:no-repeat}
+.cf-field select:focus{border-color:var(--white)}
+.cf-send:disabled{opacity:.55;cursor:progress}
 .cf-hp{position:absolute;left:-9999px;height:0;overflow:hidden}
 .cf-send{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--black);border:1px solid var(--white);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.18em;padding:16px 28px;text-transform:uppercase;transition:all .25s var(--ease)}
 .cf-send:hover{background:transparent;color:var(--white)}
@@ -1720,7 +1723,7 @@ img.tc-true{filter:none !important}
       <p>Every piece is released in numbered batches — first come, first serve, no reseller priority and no backdoor list. When a batch sells out it stays sold out until a restock is announced on the club's Facebook and Instagram pages.</p>
       <p>Pieces marked PRE-ORDER are produced after the pre-order window closes. The listed ship window for a pre-order piece is an estimate, not a promise of an exact date — you'll get the updated timeline from the club the moment it moves.</p>
       <ul>
-        <li>An order is only locked in once it has a reference number (IPC-XXXXX) on your account.</li>
+        <li>An order is only locked in once it has a reference number (IPC-XXXXXXXX — eight random characters, so nobody can guess another member's order) on your account.</li>
         <li>Orders unpaid after 48 hours can be released back to the batch.</li>
         <li>Prices are in Philippine pesos (PHP); shipping is priced by location and shown at checkout before you confirm.</li>
       </ul>
@@ -1781,7 +1784,8 @@ img.tc-true{filter:none !important}
 
     <div class="terms-block reveal-sm">
       <h3>08 — PRIVACY</h3>
-      <p>The club collects only what an order or a reply needs: your name, contact details and delivery address. Nothing is sold, shared or used for anything beyond running the shop. Want your data deleted? Message the club and it's gone.</p>
+      <p>The club collects only what an order, a ticket or a reply needs: your name, contact details and delivery address. Nothing is sold, shared or used for anything beyond running the shop. The full privacy policy — what we keep, how long, and how to ask for changes — lives one tap away. Want your data deleted? Message the club through the contact form; records the club needs to keep (orders, payments and their verification trail) stay, everything else goes.</p>
+      <p><a href="#/privacy" data-route="privacy" style="text-decoration:underline">READ THE FULL PRIVACY POLICY</a></p>
     </div>
 
     <div class="terms-block reveal-sm">
@@ -1823,7 +1827,7 @@ img.tc-true{filter:none !important}
     </div>
     <div class="terms-block reveal-sm">
       <h3>01 — INFORMATION WE COLLECT</h3>
-      <p>When you create an account, contact the club or place an order, we may collect your name, email address, mobile number, account credentials, delivery address, order details, message content, payment reference number and any payment screenshot you choose to submit.</p>
+      <p>When you create an account, contact the club, open a support ticket or place an order, we may collect your name, email address, mobile number, account credentials, delivery address, order details, message and ticket content, payment reference number and any payment screenshot you choose to submit.</p>
     </div>
     <div class="terms-block reveal-sm">
       <h3>02 — HOW WE USE IT</h3>
@@ -1831,17 +1835,17 @@ img.tc-true{filter:none !important}
         <li>Create and secure your account and prevent misuse of member offers.</li>
         <li>Confirm orders, calculate discounts, verify payment references and provide customer support.</li>
         <li>Prepare deliveries and share only the necessary delivery details with the courier or fulfillment provider.</li>
-        <li>Send order, payment and contact-form updates related to your transaction or inquiry.</li>
+        <li>Show order, payment and support-ticket updates inside your account — replies and status changes appear on your account page with a NEW REPLY badge. The club does not send marketing email or SMS; there is no mailing list.</li>
         <li>Protect the store against fraud, duplicate voucher claims and unauthorized activity.</li>
       </ul>
     </div>
     <div class="terms-block reveal-sm">
       <h3>03 — PAYMENT INFORMATION</h3>
-      <p>Online checkout currently uses the club's Maya QR payment flow. IPC stores the order amount, payment reference and submitted proof for manual verification and order records. Never send your wallet password, PIN, one-time password or full card credentials to IPC.</p>
+      <p>Online checkout currently uses IPC Pay — the club's own QR checkout. You scan the club's official QR, send the exact order total from your own e-wallet, and submit the reference number and screenshot on the payment screen. IPC stores the order amount, payment reference and submitted proof for manual verification and order records — every payment is checked by a human before anything ships. Never send your wallet password, PIN, one-time password or full card credentials to IPC.</p>
     </div>
     <div class="terms-block reveal-sm">
       <h3>04 — SERVICE PROVIDERS &amp; STORAGE</h3>
-      <p>IPC uses third-party services to host the website and backend, store account and order records, and deliver transactional emails. Information may be processed by those providers only as needed to operate these services. We do not make customer lists available for sale or unrelated advertising.</p>
+      <p>IPC uses third-party services to host the website and backend and to store account, order and payment-verification records. Information may be processed by those providers only as needed to operate these services. Notifications ride inside the site itself — your account page and your tickets — not through an email or SMS provider. We do not make customer lists available for sale or unrelated advertising.</p>
     </div>
     <div class="terms-block reveal-sm">
       <h3>05 — RETENTION &amp; SECURITY</h3>
@@ -2340,7 +2344,7 @@ img.tc-true{filter:none !important}
       <div class="adm-pane" id="pane-inventory">
         <p class="count-chip">WHAT THE CLUB CARRIES — ADD PIECES HERE AND THEY WALK ONTO THE SHOP AND COLLECTIONS ON THEIR OWN.</p>
         <form class="ipc-prod-form" id="ipcProdForm" style="display:none" novalidate>
-          <p class="k">ADD A PIECE — IT GOES LIVE THE MOMENT IT SAVES</p>
+          <p class="k" id="ipcProdFormK">ADD A PIECE — IT GOES LIVE THE MOMENT IT SAVES</p>
           <div class="ipc-prod-grid">
             <label>PIECE NAME *<input type="text" id="ipcProdName" maxlength="60" placeholder="E.G. CLUB CREWNECK" /></label>
             <label>PRICE IN PESOS *<input type="number" id="ipcProdPrice" min="1" max="100000" step="1" placeholder="E.G. 950" /></label>
@@ -2745,7 +2749,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v27-20261123-geocheckout';
+  var IPC_BUILD = 'ipc-v28-20261124-clubops';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2950,6 +2954,21 @@ img.tc-true{filter:none !important}
         if (p.custom && !seen[p.id]) return false;
         return true;
       });
+      /* baked pieces can carry club edits and archive state without a code
+         deploy — the bakedMeta map merges onto the baked-in shelf */
+      var bakedMeta = d.bakedMeta || {};
+      Object.keys(bakedMeta).forEach(function (pid) {
+        var target = null;
+        for (var j = 0; j < IPC.PRODUCTS.length; j++) if (IPC.PRODUCTS[j].id === pid) { target = IPC.PRODUCTS[j]; break; }
+        if (!target) return;
+        var m = bakedMeta[pid];
+        ['name', 'priceC', 'tag', 'sizes', 'colors', 'desc', 'fabric', 'fit', 'alt', 'batchSize', 'modelInfo', 'img'].forEach(function (k) {
+          if (m[k] !== undefined) target[k] = m[k];
+        });
+        if (m.featured !== undefined) target.featured = m.featured;
+        if (m.homeMain !== undefined) target.homeMain = m.homeMain;
+        if (m.archived !== undefined) target.archived = m.archived;
+      });
       /* surface visibility (shop / home gallery / collection) rides on every
          product from the server plus a per-id map that also covers the
          baked-in shelf — missing flags mean visible */
@@ -2963,6 +2982,15 @@ img.tc-true{filter:none !important}
            visibility row says */
         p.collectionVisible = (v.collectionVisible !== false) && (v.shopVisible !== false);
         p.hidden = !p.shopVisible && !p.galleryVisible && !p.collectionVisible;
+        /* archived is the club's "gone for good-ish": off every surface
+           until the club restores it, record and history never touched */
+        if (p.archived) {
+          p.shopVisible = false; p.galleryVisible = false; p.collectionVisible = false; p.hidden = true;
+        }
+        /* featured falls back to the baked-in home flags when the server
+           hasn't stored an override for the piece */
+        if (p.featured === undefined) p.featured = p.home === 'main' || p.home === true;
+        if (p.home === 'main' && p.featured) p.homeMain = true;
       });
       IPC.catalogFresh = true;
       (d.collections || []).forEach(function (c) {
@@ -2981,6 +3009,9 @@ img.tc-true{filter:none !important}
       /* drop-day states only matter on the hero */
       if (IPC.renderLaunch && document.getElementById('v-home') && document.getElementById('v-home').classList.contains('active')) {
         try { IPC.renderLaunch(); } catch (e) {}
+        /* the featured drop rides the fresh catalog too — an edit, an
+           archive or a featured flip repaints the home section in place */
+        try { if (IPC.renderFeat) IPC.renderFeat(); } catch (e) {}
       }
       /* the bag re-checks itself against the fresh catalog — stock changes
          and pulled pieces get flagged before checkout, not after */
@@ -3021,6 +3052,140 @@ img.tc-true{filter:none !important}
     clearTimeout(IPC.__toastT);
     IPC.__toastT = setTimeout(function () { t.classList.remove('show'); }, 2600);
   };
+
+  /* ---------------- THE CLUB'S OWN CONFIRM BOX ----------------
+     No browser-default popups anywhere in the admin: every decision
+     goes through this branded dialog. Esc, the backdrop and CANCEL
+     resolve false; the action button resolves true. ------------------ */
+  var cfEsc = function (v) {
+    if (IPC.esc) return IPC.esc(v == null ? '' : String(v));
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (x) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[x]);
+    });
+  };
+  IPC.confirm = function (opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var prevFocus = document.activeElement;
+      var overlay = document.createElement('div');
+      overlay.className = 'ipc-cf-overlay';
+      overlay.innerHTML =
+        '<div class="ipc-cf-card" role="alertdialog" aria-modal="true" aria-label="' + cfEsc(opts.title || 'CONFIRM') + '">' +
+        '<p class="ipc-cf-kicker">' + cfEsc(opts.kicker || 'INDULGE PLAYAS CLUB — ADMIN') + '</p>' +
+        '<h3 class="ipc-cf-title">' + cfEsc(opts.title || 'YOU SURE?') + '</h3>' +
+        (opts.body ? '<p class="ipc-cf-body">' + cfEsc(opts.body) + '</p>' : '') +
+        '<div class="ipc-cf-actions">' +
+        '<button type="button" class="ipc-cf-btn" data-cf="no">CANCEL</button>' +
+        '<button type="button" class="ipc-cf-btn ' + (opts.danger ? 'danger' : 'primary') + '" data-cf="yes">' + cfEsc(opts.confirmLabel || 'CONFIRM') + '</button>' +
+        '</div></div>';
+      var settled = false;
+      var done = function (yes) {
+        if (settled) return;
+        settled = true;
+        document.removeEventListener('keydown', onKey, true);
+        overlay.classList.remove('show');
+        setTimeout(function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 240);
+        if (prevFocus && prevFocus.focus) try { prevFocus.focus(); } catch (e) {}
+        resolve(yes);
+      };
+      var onKey = function (ev) {
+        if (ev.key === 'Escape') { ev.stopPropagation(); done(false); }
+        else if (ev.key === 'Tab') {
+          var btns = overlay.querySelectorAll('.ipc-cf-btn');
+          if (!btns.length) return;
+          var first = btns[0], last = btns[btns.length - 1];
+          if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+          else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+        }
+      };
+      overlay.addEventListener('click', function (ev) {
+        if (ev.target === overlay) { done(false); return; }
+        var b = ev.target.closest ? ev.target.closest('.ipc-cf-btn') : null;
+        if (b) done(b.getAttribute('data-cf') === 'yes');
+      });
+      document.addEventListener('keydown', onKey, true);
+      document.body.appendChild(overlay);
+      requestAnimationFrame(function () { overlay.classList.add('show'); });
+      var yes = overlay.querySelector('[data-cf="yes"]');
+      if (yes) yes.focus();
+    });
+  };
+
+  /* the prompt sibling — same look, one text field. Resolves the typed
+     value, or null on cancel/Esc. */
+  IPC.prompt = function (opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      IPC.confirm({
+        title: opts.title || 'TYPE IT IN',
+        body: opts.body || '',
+        confirmLabel: opts.confirmLabel || 'CONTINUE',
+        input: opts,
+        inputPlaceholder: opts.placeholder || '',
+        inputMax: opts.max || 72,
+      }).then(function (val) {
+        resolve(val === false ? null : val);
+      });
+    });
+  };
+  /* the shared engine behind both — opts.input switches on the field and
+     makes the promise resolve with the typed string instead of true */
+  (function () {
+    var engine = IPC.confirm;
+    IPC.confirm = function (opts) {
+      opts = opts || {};
+      if (!opts.input) return engine(opts);
+      return new Promise(function (resolve) {
+        var prevFocus = document.activeElement;
+        var overlay = document.createElement('div');
+        overlay.className = 'ipc-cf-overlay';
+        overlay.innerHTML =
+          '<div class="ipc-cf-card" role="alertdialog" aria-modal="true" aria-label="' + cfEsc(opts.title || 'TYPE IT IN') + '">' +
+          '<p class="ipc-cf-kicker">' + cfEsc(opts.kicker || 'INDULGE PLAYAS CLUB — ADMIN') + '</p>' +
+          '<h3 class="ipc-cf-title">' + cfEsc(opts.title || 'TYPE IT IN') + '</h3>' +
+          (opts.body ? '<p class="ipc-cf-body">' + cfEsc(opts.body) + '</p>' : '') +
+          '<input class="ipc-cf-input" type="text" maxlength="' + (opts.inputMax || 72) + '" placeholder="' + cfEsc(opts.inputPlaceholder || '') + '" autocomplete="off" spellcheck="false" />' +
+          '<div class="ipc-cf-actions">' +
+          '<button type="button" class="ipc-cf-btn" data-cf="no">CANCEL</button>' +
+          '<button type="button" class="ipc-cf-btn primary" data-cf="yes">' + cfEsc(opts.confirmLabel || 'CONTINUE') + '</button>' +
+          '</div></div>';
+        var settled = false;
+        var done = function (val) {
+          if (settled) return;
+          settled = true;
+          document.removeEventListener('keydown', onKey, true);
+          overlay.classList.remove('show');
+          setTimeout(function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 240);
+          if (prevFocus && prevFocus.focus) try { prevFocus.focus(); } catch (e) {}
+          resolve(val);
+        };
+        var onKey = function (ev) {
+          if (ev.key === 'Escape') { ev.stopPropagation(); done(null); }
+          else if (ev.key === 'Enter' && document.activeElement && document.activeElement.classList.contains('ipc-cf-input')) {
+            ev.preventDefault();
+            done(overlay.querySelector('.ipc-cf-input').value);
+          }
+          else if (ev.key === 'Tab') {
+            var btns = overlay.querySelectorAll('.ipc-cf-btn');
+            if (!btns.length) return;
+            var first = btns[0], last = btns[btns.length - 1];
+            if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+            else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+          }
+        };
+        overlay.addEventListener('click', function (ev) {
+          if (ev.target === overlay) { done(null); return; }
+          var b = ev.target.closest ? ev.target.closest('.ipc-cf-btn') : null;
+          if (b) done(b.getAttribute('data-cf') === 'yes' ? overlay.querySelector('.ipc-cf-input').value : null);
+        });
+        document.addEventListener('keydown', onKey, true);
+        document.body.appendChild(overlay);
+        requestAnimationFrame(function () { overlay.classList.add('show'); });
+        var inp = overlay.querySelector('.ipc-cf-input');
+        if (inp) inp.focus();
+      });
+    };
+  })();
 
   /* ---------------- THE BAG (localStorage) ---------------- */
   var CART_KEY = 'ipc-cart-v2';
@@ -3343,16 +3508,27 @@ img.tc-true{filter:none !important}
 
   IPC.cardHTML = cardHTML; /* shared with the IPC Pay screen's complete-the-fit block */
 
-  /* ---- home: featured drop (OG logo hoodie promo as the feature + side rows) ----
-     This is the site's gallery/showcase surface — a piece the club switches
-     off for the gallery steps out of it without leaving the shop. */
+  /* ---- home: featured drop — the club picks the rotation from the admin
+     inventory (FEATURED chip / edit form). Hidden or archived pieces leave
+     the drop automatically; when nothing is picked, the baked defaults
+     carry the section so the home never renders empty. ---- */
   IPC.renderFeat = function () {
     var host = $('#featGrid');
     if (!host) return;
-    var shown = function (p) { return p && !p.hidden && p.galleryVisible !== false; };
-    var main = shown(IPC.byId('hoodie-001')) ? IPC.byId('hoodie-001') : null;
-    var sides = ['court-tee', 'varsity-26', 'club-tote', 'stripe-ls', 'rib-beanie'].map(IPC.byId).filter(shown).slice(0, 3);
-    if (!main && sides.length) { main = sides.shift(); }
+    /* a piece on the home drop must still be buyable: live on the shop AND
+       the gallery — hidden anywhere means off the featured stage */
+    var shown = function (p) {
+      return p && !p.archived && p.shopVisible !== false && p.galleryVisible !== false;
+    };
+    var pool = IPC.PRODUCTS.filter(shown);
+    var feat = pool.filter(function (p) { return p.featured; });
+    var main = feat.filter(function (p) { return p.homeMain || p.home === 'main'; })[0] || feat[0] || null;
+    var sides = feat.filter(function (p) { return p !== main; }).slice(0, 3);
+    /* fallback: no featured picks at all → the OG hero + first three rows */
+    if (!main) {
+      main = pool.filter(function (p) { return p.id === 'hoodie-001'; })[0] || pool[0] || null;
+      if (main) sides = pool.filter(function (p) { return p !== main; }).slice(0, 3);
+    }
     var html = '';
     if (main) {
       html += '<article class="pcard feat-hero">' +
@@ -4090,7 +4266,17 @@ img.tc-true{filter:none !important}
     $('#poItems').innerHTML = (order.items || []).map(function (it) {
       return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + '</span><span>' + IPC.fmtP(it.priceCentavos * it.qty) + '</span></p>';
     }).join('') +
-      '<p class="co-line"><span>SHIPPING</span><span>FREE</span></p>' +
+      (function () {
+        /* shipping shows what the order actually charged — never a hardcoded
+           FREE. Legacy orders without a shipping line fall back to the
+           arithmetic the order itself carries. */
+        var ship = order.shippingCentavos;
+        if (ship == null && order.subtotalCentavos != null && order.totalCentavos != null) {
+          ship = order.totalCentavos - order.subtotalCentavos + (order.discountCentavos || 0);
+        }
+        var label = ship == null ? '—' : (ship > 0 ? IPC.fmtP(ship) : 'FREE');
+        return '<p class="co-line"><span>SHIPPING</span><span>' + label + '</span></p>';
+      })() +
       '<p class="co-line" style="border-bottom:none"><span>TOTAL</span><span>' + IPC.fmtP(order.totalCentavos != null ? order.totalCentavos : pay.amountCentavos) + '</span></p>';
 
     /* tracker */
@@ -4729,7 +4915,7 @@ img.tc-true{filter:none !important}
             '<p class="adm-line"><span>SUBTOTAL</span><span>' + IPC.fmtP(o.subtotalCentavos || 0) + '</span></p>' +
             (o.discountCentavos ? '<p class="adm-line"><span>VOUCHER ' + IPC.esc(o.voucherCode || '') + '</span><span>−' +
               IPC.fmtP(o.discountCentavos) + '</span></p>' : '') +
-            '<p class="adm-line"><span>SHIPPING</span><span>FREE — BASED ON LOCATION</span></p>' +
+            '<p class="adm-line"><span>SHIPPING</span><span>' + (o.shippingCentavos != null ? (o.shippingCentavos > 0 ? IPC.fmtP(o.shippingCentavos) : 'FREE') : '—') + '</span></p>' +
             '<p class="adm-line adm-line-total"><span>TOTAL</span><span>' + IPC.fmtP(o.totalCentavos || 0) + '</span></p>' +
             '</div>' +
             '<div><p class="ipc-voucher-k">CUSTOMER</p>' +
@@ -4866,19 +5052,26 @@ img.tc-true{filter:none !important}
     if (!btn) return;
     var action = btn.getAttribute('data-decide');
     var pay = btn.getAttribute('data-pay');
-    var word = action === 'approve' ? 'MARK THIS PAYMENT PAID' : 'REJECT THIS PAYMENT';
-    if (!window.confirm(word + ' (' + pay + ')? THIS IS RECORDED UNDER YOUR ADMIN ACCOUNT.')) return;
-    btn.disabled = true;
-    IPC.api('/api/admin/decision', { method: 'POST', body: { paymentId: pay, action: action } })
-      .then(function (d) {
-        IPC.toast(d.message || 'DECISION SAVED');
-        loadOverview();
-        loadAdminPayments();
-      })
-      .catch(function (err) {
-        btn.disabled = false;
-        IPC.toast((err.message || 'DECISION FAILED').toUpperCase());
-      });
+    var approving = action === 'approve';
+    IPC.confirm({
+      title: approving ? 'MARK THIS PAYMENT PAID' : 'REJECT THIS PAYMENT',
+      body: 'PAYMENT ' + pay + '\n\nTHIS DECISION IS RECORDED UNDER YOUR ADMIN ACCOUNT — WHO DECIDED, WHAT CHANGED, WHEN. IT CANNOT BE EDITED AFTERWARDS, ONLY OVERTURNED BY A NEW DECISION.',
+      confirmLabel: approving ? 'MARK PAID' : 'REJECT PAYMENT',
+      danger: !approving,
+    }).then(function (ok) {
+      if (!ok) return;
+      btn.disabled = true;
+      IPC.api('/api/admin/decision', { method: 'POST', body: { paymentId: pay, action: action } })
+        .then(function (d) {
+          IPC.toast(d.message || 'DECISION SAVED');
+          loadOverview();
+          loadAdminPayments();
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          IPC.toast((err.message || 'DECISION FAILED').toUpperCase());
+        });
+    });
   });
 
   /* ---------------- THE HASH ROUTER ---------------- */
@@ -5891,59 +6084,85 @@ setTimeout(function () {
     var rm = ev.target.closest ? ev.target.closest('[data-remove-member]') : null;
     if (rm) {
       var email = rm.getAttribute('data-remove-member');
-      var typed = window.prompt('EMERGENCY USE ONLY — REMOVING A MEMBER IS NOT RECOMMENDED.\n\nTYPE THE MEMBER EMAIL TO CONFIRM REMOVAL:\n' + email);
-      if (typed === null) return;
-      if (typed.trim().toLowerCase() !== email.toLowerCase()) { IPC.toast('EMAIL DID NOT MATCH — REMOVAL CANCELLED'); return; }
-      rm.disabled = true;
-      IPC.api('/api/admin/members/remove', { method: 'POST', body: { email: email, confirm: typed.trim() } })
-        .then(function (d) {
-          IPC.toast(d.message || 'MEMBER REMOVED');
-          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
-          var ut = document.querySelector('.adm-tab[data-pane="users"]');
-          if (ut && ut.classList.contains('active')) ut.click();
-        })
-        .catch(function (err) {
-          rm.disabled = false;
-          IPC.toast(apiMsg(err, 'REMOVAL FAILED'));
-        });
+      IPC.prompt({
+        title: 'EMERGENCY — REMOVE ' + email.toUpperCase() + '?',
+        body: 'REMOVING A MEMBER IS NOT RECOMMENDED. SESSIONS DIE AND RE-JOINING IS BLOCKED; THEIR ORDERS AND PAYMENTS STAY ON RECORD FOREVER.\n\nTYPE THE MEMBER EMAIL TO CONFIRM REMOVAL.',
+        confirmLabel: 'REMOVE MEMBER',
+        placeholder: email,
+        max: 120,
+      }).then(function (typed) {
+        if (typed === null) return;
+        if (typed.trim().toLowerCase() !== email.toLowerCase()) { IPC.toast('EMAIL DID NOT MATCH — REMOVAL CANCELLED'); return; }
+        rm.disabled = true;
+        IPC.api('/api/admin/members/remove', { method: 'POST', body: { email: email, confirm: typed.trim() } })
+          .then(function (d) {
+            IPC.toast(d.message || 'MEMBER REMOVED');
+            if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+            var ut = document.querySelector('.adm-tab[data-pane="users"]');
+            if (ut && ut.classList.contains('active')) ut.click();
+          })
+          .catch(function (err) {
+            rm.disabled = false;
+            IPC.toast(apiMsg(err, 'REMOVAL FAILED'));
+          });
+      });
     }
     var rs = ev.target.closest ? ev.target.closest('[data-restore-member]') : null;
     if (rs) {
       var rsemail = rs.getAttribute('data-restore-member');
-      if (!window.confirm('RESTORE ' + rsemail.toUpperCase() + ' BACK INTO THE CLUB? THEY WILL BE ABLE TO LOG IN AND ORDER AGAIN.')) return;
-      rs.disabled = true;
-      IPC.api('/api/admin/members/restore', { method: 'POST', body: { email: rsemail } })
-        .then(function (d) {
-          IPC.toast(d.message || 'MEMBER RESTORED');
-          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
-          var ut = document.querySelector('.adm-tab[data-pane="users"]');
-          if (ut && ut.classList.contains('active')) ut.click();
-        })
-        .catch(function (err) {
-          rs.disabled = false;
-          IPC.toast(apiMsg(err, 'RESTORE FAILED'));
-        });
+      IPC.confirm({
+        title: 'RESTORE ' + rsemail.toUpperCase() + ' INTO THE CLUB?',
+        body: 'THEY WILL BE ABLE TO LOG IN AND ORDER AGAIN RIGHT AWAY. THEIR OLD ORDERS AND PAYMENTS NEVER LEFT THE RECORD.',
+        confirmLabel: 'RESTORE MEMBER',
+      }).then(function (ok) {
+        if (!ok) return;
+        rs.disabled = true;
+        IPC.api('/api/admin/members/restore', { method: 'POST', body: { email: rsemail } })
+          .then(function (d) {
+            IPC.toast(d.message || 'MEMBER RESTORED');
+            if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+            var ut = document.querySelector('.adm-tab[data-pane="users"]');
+            if (ut && ut.classList.contains('active')) ut.click();
+          })
+          .catch(function (err) {
+            rs.disabled = false;
+            IPC.toast(apiMsg(err, 'RESTORE FAILED'));
+          });
+      });
     }
     var pw = ev.target.closest ? ev.target.closest('[data-pw-member]') : null;
     if (pw) {
       var pwEmail = pw.getAttribute('data-pw-member');
-      var typedPw = window.prompt('FORGOTTEN PASSWORD — SET A NEW SIGN-IN WORD FOR ' + pwEmail.toUpperCase() + '.\n\n8 TO 72 CHARACTERS. EVERY SIGN-IN OF THE MEMBER IS SIGNED OUT, AND THEY LOG IN WITH THE NEW WORD RIGHT AWAY.\n\nTIP: HAVE THEM CHANGE IT TO THEIR OWN FROM THEIR ACCOUNT PAGE AFTERWARDS.');
-      if (typedPw === null) return;
-      typedPw = typedPw.replace(/^\s+|\s+$/g, '');
-      if (typedPw.length < 8) { IPC.toast('TOO SHORT — THE PASSWORD NEEDS 8 CHARACTERS MINIMUM'); return; }
-      if (!window.confirm('SET THIS AS THE MEMBER\'S NEW PASSWORD?\n\n' + pwEmail.toUpperCase() + '\n\nTHEY SIGN IN WITH IT ON THEIR NEXT VISIT.')) return;
-      pw.disabled = true;
-      IPC.api('/api/admin/members/password', { method: 'POST', body: { email: pwEmail, newPassword: typedPw } })
-        .then(function (d) {
-          IPC.toast(d.message || 'PASSWORD SET');
-          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
-          var ut = document.querySelector('.adm-tab[data-pane="users"]');
-          if (ut && ut.classList.contains('active')) ut.click();
-        })
-        .catch(function (err) {
-          pw.disabled = false;
-          IPC.toast(apiMsg(err, 'PASSWORD RESET FAILED'));
+      IPC.prompt({
+        title: 'SET A NEW SIGN-IN WORD',
+        body: 'FOR ' + pwEmail.toUpperCase() + '\n\n8 TO 72 CHARACTERS. EVERY SIGN-IN OF THE MEMBER IS SIGNED OUT, AND THEY LOG IN WITH THE NEW WORD RIGHT AWAY.\n\nTIP: HAVE THEM CHANGE IT TO THEIR OWN FROM THEIR ACCOUNT PAGE AFTERWARDS.',
+        confirmLabel: 'NEXT',
+        placeholder: 'NEW PASSWORD — 8 TO 72 CHARACTERS',
+        max: 72,
+      }).then(function (typedPw) {
+        if (typedPw === null) return;
+        typedPw = typedPw.replace(/^\s+|\s+$/g, '');
+        if (typedPw.length < 8) { IPC.toast('TOO SHORT — THE PASSWORD NEEDS 8 CHARACTERS MINIMUM'); return; }
+        IPC.confirm({
+          title: 'SET THIS AS THE NEW PASSWORD?',
+          body: pwEmail.toUpperCase() + ' SIGNS IN WITH IT ON THEIR NEXT VISIT.',
+          confirmLabel: 'SET PASSWORD',
+        }).then(function (ok) {
+          if (!ok) return;
+          pw.disabled = true;
+          IPC.api('/api/admin/members/password', { method: 'POST', body: { email: pwEmail, newPassword: typedPw } })
+            .then(function (d) {
+              IPC.toast(d.message || 'PASSWORD SET');
+              if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+              var ut = document.querySelector('.adm-tab[data-pane="users"]');
+              if (ut && ut.classList.contains('active')) ut.click();
+            })
+            .catch(function (err) {
+              pw.disabled = false;
+              IPC.toast(apiMsg(err, 'PASSWORD RESET FAILED'));
+            });
         });
+      });
     }
   });
 
@@ -6142,6 +6361,8 @@ setTimeout(function () {
 
   /* the add-a-piece form — open, populate the collection picker, wire the photo */
   var prodImgData = '';
+  var prodEditId = '';   /* set while the form edits an existing piece */
+  var prodEditImg = '';  /* the piece's current photo — fallback when no new one is chosen */
   function compressProdImage(file) {
     return new Promise(function (resolve, reject) {
       if (!/^image\/(jpeg|jpg|png|webp)$/.test(file.type)) { reject(new Error('JPG OR PNG PHOTOS ONLY.')); return; }
@@ -6183,6 +6404,8 @@ setTimeout(function () {
   }
   function resetProdForm() {
     prodImgData = '';
+    prodEditId = '';
+    prodEditImg = '';
     ['#ipcProdName', '#ipcProdPrice', '#ipcProdTag', '#ipcProdSizes', '#ipcProdColors',
      '#ipcProdColTitle', '#ipcProdColSlug', '#ipcProdColBlurb', '#ipcProdDesc',
      '#ipcProdFabric', '#ipcProdFit', '#ipcProdAlt', '#ipcProdImgUrl'].forEach(function (s) {
@@ -6195,6 +6418,8 @@ setTimeout(function () {
     var pimg = $('#ipcProdPrevImg'); if (pimg) pimg.src = '';
     var nc = $('#ipcProdNewCol'); if (nc) nc.style.display = 'none';
     var msg = $('#ipcProdMsg'); if (msg) { msg.textContent = ''; msg.className = 'form-msg'; }
+    var k = $('#ipcProdFormK'); if (k) k.textContent = 'ADD A PIECE — IT GOES LIVE THE MOMENT IT SAVES';
+    var save = $('#ipcProdSave'); if (save) save.textContent = 'SAVE THE PIECE';
   }
   function openProdForm() {
     var form = $('#ipcProdForm');
@@ -6202,6 +6427,38 @@ setTimeout(function () {
     fillColSelect();
     form.style.display = 'block';
     if (form.scrollIntoView) try { form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+  }
+  /* edit mode: the same form, prefilled — works on club-added pieces AND
+     on the baked-in core (edits ride the productMeta layer server-side) */
+  function openProdFormForEdit(p) {
+    if (!p) return;
+    var form = $('#ipcProdForm');
+    if (!form) return;
+    resetProdForm();
+    openProdForm();
+    prodEditId = p.id;
+    prodEditImg = p.img || '';
+    var set = function (sel, v) { var el = $(sel); if (el) el.value = v == null ? '' : String(v); };
+    set('#ipcProdName', p.name);
+    var cent = p.priceCentavos != null ? p.priceCentavos : (p.priceC != null ? p.priceC : null);
+    set('#ipcProdPrice', cent != null ? Math.round(cent / 100) : '');
+    set('#ipcProdTag', p.tag || '');
+    set('#ipcProdSizes', (p.sizes || []).join(', '));
+    set('#ipcProdColors', (p.colors || []).join(', '));
+    set('#ipcProdDesc', p.desc || '');
+    set('#ipcProdFabric', p.fabric || '');
+    set('#ipcProdFit', p.fit || '');
+    set('#ipcProdAlt', p.alt || '');
+    set('#ipcProdBatch', p.batchSize || '');
+    set('#ipcProdModel', p.modelInfo || '');
+    var col = $('#ipcProdCol');
+    if (col && p.collection) { fillColSelect(); col.value = p.collection; }
+    var chk = $('#ipcProdHome'); if (chk) chk.checked = !!p.featured;
+    var prev = $('#ipcProdPrev'), pimg = $('#ipcProdPrevImg');
+    if (pimg && prodEditImg) pimg.src = prodEditImg;
+    if (prev && prodEditImg) prev.style.display = 'flex';
+    var k = $('#ipcProdFormK'); if (k) k.textContent = 'EDITING — ' + String(p.name || '').toUpperCase();
+    var save = $('#ipcProdSave'); if (save) save.textContent = 'SAVE THE CHANGES';
   }
   var prodFormWired = false;
   function wireProdForm() {
@@ -6252,7 +6509,7 @@ setTimeout(function () {
       var sizes = String(($('#ipcProdSizes') || {}).value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       var colors = String(($('#ipcProdColors') || {}).value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       var colVal = String(($('#ipcProdCol') || {}).value || '');
-      var imgVal = prodImgData || String(($('#ipcProdImgUrl') || {}).value || '').trim();
+      var imgVal = prodImgData || String(($('#ipcProdImgUrl') || {}).value || '').trim() || (prodEditId ? prodEditImg : '');
       if (name.length < 2) { show('GIVE THE PIECE A NAME.', false); return; }
       if (!Number.isFinite(priceP) || priceP <= 0) { show('DROP THE PRICE IN PESOS.', false); return; }
       if (!sizes.length) { show('LIST THE SIZES — COMMA SEPARATED, "OS" FOR ONE-SIZE.', false); return; }
@@ -6274,6 +6531,7 @@ setTimeout(function () {
         home: !!($('#ipcProdHome') || {}).checked,
         img: imgVal
       };
+      if (prodEditId) payload.id = prodEditId;
       if (colVal === '__new') {
         var title = String(($('#ipcProdColTitle') || {}).value || '').trim();
         if (title.length < 2) { show('NAME THE NEW COLLECTION.', false); return; }
@@ -6303,12 +6561,12 @@ setTimeout(function () {
       });
     });
   }
-  function renderInventory(items) {
+  function renderInventory(items, archived) {
     var host = $('#admInventory');
     if (!host) return;
     wireProdForm();
-    var customCount = 0, offCount = 0;
-    items.forEach(function (p) { if (p.custom) customCount++; if (p.active === false) offCount++; });
+    var customCount = 0, offCount = 0, featCount = 0;
+    items.forEach(function (p) { if (p.custom) customCount++; if (p.active === false) offCount++; if (p.featured) featCount++; });
     var statusChip = function (p) {
       if (p.publicationStatus === 'pulled') return '<span class="prod-flag off">PULLED</span>';
       if (p.publicationStatus === 'hidden') return '<span class="prod-flag vis-hidden">HIDDEN</span>';
@@ -6320,33 +6578,57 @@ setTimeout(function () {
       };
       return chip('store', 'SHOP + COLLECTION', p.shopVisible !== false) + chip('gallery', 'GALLERY', p.galleryVisible !== false);
     };
+    var featChip = function (p) {
+      return '<label class="vis-chip feat-chip' + (p.featured ? ' on' : '') + '"><input type="checkbox" data-feat="' + esc(p.id) + '"' + (p.featured ? ' checked' : '') + ' /> FEATURED</label>';
+    };
     var rows = items.map(function (p) {
-      var flags = (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') + statusChip(p);
+      var flags = (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') + statusChip(p) + (p.edited ? '<span class="prod-flag">EDITED</span>' : '');
       return '<tr class="ipc-prod-row' + (p.active === false ? ' ipc-prod-inactive' : '') + '">' +
         '<td><b>' + esc(p.name) + '</b>' + flags + '</td><td>' + IPC.fmtP(p.priceCentavos) + '</td><td>' + esc(p.tag || '—') + '</td>' +
         '<td>' + esc((p.sizes || []).join(' · ')) + '</td><td>' + (p.unitsSold || 0) + '</td><td><b>' + IPC.fmtP(p.revenueCentavos) + '</b></td>' +
         '<td>' + visCell(p) + '</td>' +
-        '<td>' + (p.custom
-          ? (p.active === false
-            ? '<button type="button" class="btn-w btn-sm" data-prod-restore="' + esc(p.id) + '">RESTORE</button>'
-            : '<button type="button" class="btn-o btn-sm" data-prod-remove="' + esc(p.id) + '">PULL</button>')
-          : '<small>—</small>') + '</td></tr>';
+        '<td>' + featChip(p) + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button type="button" class="btn-o btn-sm" data-prod-edit=\'' + esc(p.id) + '\'>EDIT</button> ' +
+          (p.custom
+            ? (p.active === false
+              ? '<button type="button" class="btn-w btn-sm" data-prod-restore="' + esc(p.id) + '">RESTORE</button> '
+              : '<button type="button" class="btn-o btn-sm" data-prod-remove="' + esc(p.id) + '">PULL</button> ')
+            : '') +
+          (p.custom
+            ? '<button type="button" class="btn-o btn-sm prod-del" data-prod-delete="' + esc(p.id) + '">DELETE</button>'
+            : '<button type="button" class="btn-o btn-sm prod-del" data-prod-delete="' + esc(p.id) + '">REMOVE</button>') +
+        '</td></tr>';
     }).join('');
+    var archivedBlock = '';
+    if (archived && archived.length) {
+      var arows = archived.map(function (p) {
+        return '<tr class="ipc-prod-row ipc-prod-inactive"><td><b>' + esc(p.name) + '</b>' +
+          (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') +
+          '<span class="prod-flag off">ARCHIVED</span></td><td>' + IPC.fmtP(p.priceCentavos) + '</td><td>' + (p.unitsSold || 0) + ' SOLD ALL-TIME</td>' +
+          '<td><button type="button" class="btn-w btn-sm" data-prod-restore="' + esc(p.id) + '">RESTORE</button></td></tr>';
+      }).join('');
+      archivedBlock =
+        '<p class="count-chip" style="margin:22px 0 10px">' + archived.length + ' ARCHIVED' + (archived.length === 1 ? ' PIECE' : ' PIECES') +
+        ' — OFF EVERY SURFACE AND OUT OF THE COUNTS ABOVE. RESTORE PUTS ONE BACK; NOTHING EVER DELETED ITS RECORD OR ITS ORDERS.</p>' +
+        '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
+        '<th>PIECE</th><th>PRICE</th><th>HISTORY</th><th>BACK</th></tr></thead><tbody>' + arows + '</tbody></table></div>';
+    }
     host.innerHTML =
       '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">' +
       '<button type="button" class="btn-w btn-sm" id="ipcProdAdd">+ ADD A PIECE</button>' +
-      '<p class="count-chip" style="margin:0">' + customCount + ' CLUB-ADDED' + (offCount ? ' · ' + offCount + ' PULLED' : '') +
-      ' — SHOP AND COLLECTION RIDE ON ONE SWITCH, GALLERY HAS ITS OWN; PULLING OR HIDING NEVER DELETES THE PIECE, ITS ORDERS OR ITS HISTORY</p></div>' +
+      '<p class="count-chip" style="margin:0">' + items.length + ' LIVE · ' + featCount + ' FEATURED · ' + customCount + ' CLUB-ADDED' + (offCount ? ' · ' + offCount + ' PULLED' : '') +
+      ' — EDIT ANY PIECE, FLIP FEATURED FOR THE HOME DROP, OR REMOVE ONE: CLUB-ADDED DELETES FOR GOOD, CORE PIECES ARCHIVE AND RESTORE FROM BELOW</p></div>' +
       '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
-      '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th><th>SHOWS ON</th><th>SHELF</th></tr></thead><tbody>' +
-      rows + '</tbody></table></div>';
+      '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th><th>SHOWS ON</th><th>FEATURED</th><th>ACTIONS</th></tr></thead><tbody>' +
+      rows + '</tbody></table></div>' + archivedBlock;
   }
   function loadInventory() {
     var host = $('#admInventory');
     if (!host) return;
     wireProdForm();
     host.innerHTML = '<p class="adm-empty">LOADING INVENTORY…</p>';
-    IPC.api('/api/admin/inventory').then(function (d) { renderInventory(d.inventory || []); })
+    IPC.api('/api/admin/inventory').then(function (d) { renderInventory(d.inventory || [], d.archived || []); })
       .catch(function (err) { host.innerHTML = '<p class="adm-empty">' + esc(((err.message || 'INVENTORY FAILED') + '').toUpperCase()) + '</p>'; });
   }
   function loadInquiries() {
@@ -6380,18 +6662,25 @@ setTimeout(function () {
       var pid = pull.getAttribute('data-prod-remove');
       var row = pull.closest('tr');
       var pname = row ? (row.querySelector('b') || {}).textContent || '' : '';
-      if (!window.confirm('PULL "' + pname.trim().toUpperCase() + '" OFF THE SHOP?\n\nPAST ORDERS KEEP THEIR RECORD — THE PIECE JUST STOPS SHOWING. RESTORE BRINGS IT BACK.')) return;
-      pull.disabled = true;
-      IPC.api('/api/admin/products/remove', { method: 'POST', body: { id: pid } })
-        .then(function (d) {
-          IPC.toast(d.message || 'PIECE PULLED FROM THE SHOP');
-          loadInventory();
-          return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
-        })
-        .catch(function (err) {
-          pull.disabled = false;
-          IPC.toast(String(((err && err.message) || 'PULL FAILED') + '').toUpperCase());
-        });
+      IPC.confirm({
+        title: 'PULL "' + pname.trim().toUpperCase() + '" OFF THE SHOP?',
+        body: 'PAST ORDERS KEEP THEIR RECORD — THE PIECE JUST STOPS SHOWING ON EVERY SURFACE. RESTORE BRINGS IT BACK.',
+        confirmLabel: 'PULL FROM THE SHOP',
+        danger: true,
+      }).then(function (ok) {
+        if (!ok) return;
+        pull.disabled = true;
+        IPC.api('/api/admin/products/remove', { method: 'POST', body: { id: pid } })
+          .then(function (d) {
+            IPC.toast(d.message || 'PIECE PULLED FROM THE SHOP');
+            loadInventory();
+            return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
+          })
+          .catch(function (err) {
+            pull.disabled = false;
+            IPC.toast(String(((err && err.message) || 'PULL FAILED') + '').toUpperCase());
+          });
+      });
       return;
     }
     var restore = ev.target.closest ? ev.target.closest('[data-prod-restore]') : null;
@@ -6407,7 +6696,63 @@ setTimeout(function () {
           restore.disabled = false;
           IPC.toast(String(((err && err.message) || 'RESTORE FAILED') + '').toUpperCase());
         });
+      return;
     }
+    var editBtn = ev.target.closest ? ev.target.closest('[data-prod-edit]') : null;
+    if (editBtn) {
+      var eid = editBtn.getAttribute('data-prod-edit');
+      var ep = null;
+      IPC.PRODUCTS.forEach(function (p) { if (p.id === eid) ep = p; });
+      if (ep) openProdFormForEdit(ep);
+      return;
+    }
+    var delBtn = ev.target.closest ? ev.target.closest('[data-prod-delete]') : null;
+    if (delBtn && !delBtn.disabled) {
+      var did = delBtn.getAttribute('data-prod-delete');
+      var drow = delBtn.closest('tr');
+      var dname = drow ? (drow.querySelector('b') || {}).textContent || '' : '';
+      var isCustom = drow && drow.innerHTML.indexOf('CLUB-ADDED') >= 0;
+      IPC.confirm({
+        title: isCustom ? 'DELETE "' + dname.trim().toUpperCase() + '" FOR GOOD?' : 'REMOVE "' + dname.trim().toUpperCase() + '" FROM THE CLUB?',
+        body: isCustom
+          ? 'THIS WIPES THE PIECE FROM THE CATALOG — THE INVENTORY TAB STOPS CARRYING IT AND THIS CANNOT BE UNDONE.\n\nPAST ORDERS KEEP THEIR LINE-ITEM RECORDS: NAMES, PRICES, SIZES, EVERYTHING THE HISTORY NEEDS.'
+          : 'CORE PIECES NEVER DELETE — THEY ARCHIVE: OFF THE SHOP, COLLECTION, FEATURED DROP AND THIS LIST UNTIL RESTORED.\n\nTHE PIECE\'S RECORD AND ITS ORDER HISTORY STAY EXACTLY WHERE THEY ARE.',
+        confirmLabel: isCustom ? 'DELETE FOR GOOD' : 'REMOVE — ARCHIVE',
+        danger: true,
+      }).then(function (ok) {
+        if (!ok) return;
+        delBtn.disabled = true;
+        IPC.api('/api/admin/products/delete', { method: 'POST', body: { id: did } })
+          .then(function (d) {
+            IPC.toast(d.message || 'PIECE REMOVED');
+            loadInventory();
+            return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
+          })
+          .catch(function (err) {
+            delBtn.disabled = false;
+            IPC.toast(String(((err && err.message) || 'REMOVE FAILED') + '').toUpperCase());
+          });
+      });
+      return;
+    }
+  });
+  /* featured flip — the club picks what the home drop showcases */
+  document.addEventListener('change', function (ev) {
+    if (!ev.target || !ev.target.hasAttribute || !ev.target.hasAttribute('data-feat')) return;
+    var pid = ev.target.getAttribute('data-feat');
+    var on = ev.target.checked;
+    ev.target.disabled = true;
+    IPC.api('/api/admin/products/featured', { method: 'POST', body: { id: pid, featured: on } })
+      .then(function (d) {
+        IPC.toast(d.message || (on ? 'PIECE JOINED THE FEATURED ROTATION' : 'PIECE LEFT THE FEATURED ROTATION'));
+        loadInventory();
+        return IPC.refreshCatalog().then(function () { if (IPC.catalogRefreshView) IPC.catalogRefreshView(); });
+      })
+      .catch(function (err) {
+        ev.target.disabled = false;
+        ev.target.checked = !on;
+        IPC.toast(String(((err && err.message) || 'FEATURED TOGGLE FAILED') + '').toUpperCase());
+      });
   });
   /* visibility switches — one POST saves the whole surface set for the piece */
   document.addEventListener('change', function (ev) {
@@ -6873,6 +7218,9 @@ setTimeout(function () {
     '.vis-chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;border:1px solid var(--line-2);padding:4px 7px;margin:2px 3px 2px 0;text-transform:uppercase;color:var(--faint);cursor:pointer;user-select:none}' +
     '.vis-chip.on{background:var(--black);color:var(--white);border-color:var(--black)}' +
     '.vis-chip input{margin:0;accent-color:#111}' +
+    '.feat-chip.on{background:var(--white);color:var(--black);border-color:var(--white);font-weight:700}' +
+    '.prod-del{color:#ff8a80;border-color:#5a201c}' +
+    '.prod-del:hover{color:#fff;background:#b3261e;border-color:#b3261e}' +
     '.ana-range{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}' +
     '.ana-range button{font-family:var(--mono);font-size:10px;letter-spacing:.16em;border:1px solid var(--line-2);background:var(--panel);color:var(--muted);padding:9px 14px;text-transform:uppercase;cursor:pointer;transition:all .2s}' +
     '.ana-range button.active{background:var(--white);color:var(--black);font-weight:700}' +
@@ -6888,6 +7236,24 @@ setTimeout(function () {
     '.sup-reply{border-left:3px solid var(--line-2);padding:8px 12px;margin:10px 0;font-size:13px;color:var(--muted)}' +
     '.sup-reply.admin{border-left-color:var(--black);color:var(--text)}' +
     '.sup-meta{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}' +
+    '.ipc-cf-overlay{position:fixed;inset:0;background:rgba(8,8,8,.66);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;transition:opacity .2s ease}' +
+    '.ipc-cf-overlay.show{opacity:1}' +
+    '.ipc-cf-card{background:var(--bg-2);border:1px solid var(--line-2);max-width:470px;width:100%;padding:30px 28px 26px;box-shadow:0 24px 70px rgba(0,0,0,.5);transform:translateY(12px);transition:transform .22s var(--ease)}' +
+    '.ipc-cf-overlay.show .ipc-cf-card{transform:none}' +
+    '.ipc-cf-kicker{font-family:var(--mono);font-size:9px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase;display:flex;align-items:center;gap:10px}' +
+    '.ipc-cf-kicker::before{content:"";width:22px;height:1px;background:var(--white);display:inline-block}' +
+    '.ipc-cf-title{font-family:var(--display);font-size:clamp(19px,4.6vw,24px);line-height:1.12;margin-top:14px;color:var(--text);text-transform:uppercase;letter-spacing:.01em}' +
+    '.ipc-cf-body{font-size:13.5px;line-height:1.8;color:var(--muted);margin-top:12px;white-space:pre-line}' +
+    '.ipc-cf-input{width:100%;box-sizing:border-box;margin-top:16px;background:var(--bg);border:1px solid var(--line-2);color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:.12em;padding:13px 15px;outline:none;transition:border-color .2s}' +
+    '.ipc-cf-input:focus{border-color:var(--white)}' +
+    '.ipc-cf-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;flex-wrap:wrap}' +
+    '.ipc-cf-btn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:13px 22px;border:1px solid var(--line-2);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s var(--ease)}' +
+    '.ipc-cf-btn:hover{color:var(--text);border-color:var(--text)}' +
+    '.ipc-cf-btn.primary{background:var(--white);color:var(--black);border-color:var(--white)}' +
+    '.ipc-cf-btn.primary:hover{background:transparent;color:var(--white)}' +
+    '.ipc-cf-btn.danger{background:#b3261e;color:#fff;border-color:#b3261e}' +
+    '.ipc-cf-btn.danger:hover{background:transparent;color:#ff8a80}' +
+    '@media(max-width:520px){.ipc-cf-actions{flex-direction:column-reverse}.ipc-cf-btn{width:100%;text-align:center}}' +
     '#v-admin .ana-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:18px 0}' +
     '#v-admin .ana-cell{background:var(--panel);padding:16px}' +
     '#v-admin .ana-cell .fk{font-family:var(--mono);font-size:8.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}' +
@@ -7166,14 +7532,20 @@ setTimeout(function () {
       '<p>ORDER PROBLEM, SIZING QUESTION, PAYMENT CONCERN — OPEN A TICKET AND THE CLUB ANSWERS RIGHT HERE IN YOUR ACCOUNT.</p>' +
       '<p class="sup-meta">CLOSED CONVERSATIONS FILE THEMSELVES OUT OF THIS LIST — THE CLUB KEEPS THE RECORD.</p>' +
       '<div id="supList" style="margin-top:14px"></div>' +
-      '<form id="supForm" class="rev-form" style="max-width:560px;margin-top:18px" novalidate>' +
-      '<label>SUBJECT<input id="supSubject" maxlength="120" placeholder="E.G. WRONG SIZE ARRIVED" /></label>' +
-      '<label>WHAT IS IT ABOUT<select id="supCat">' + CATS.map(function (c) { return '<option value="' + c[0] + '">' + c[1] + '</option>'; }).join('') + '</select></label>' +
-      '<label>ABOUT WHICH ORDER (OPTIONAL)<select id="supOrder"><option value="">— NOT ABOUT ONE ORDER —</option></select></label>' +
-      '<label>TELL THE CLUB<textarea id="supMsg" maxlength="4000" rows="3" placeholder="WHAT HAPPENED, WHICH PIECE, WHAT YOU NEED."></textarea></label>' +
-      '<button type="submit" class="btn-w btn-sm">OPEN THE TICKET</button>' +
-      '<p class="form-msg" id="supMsgLine" role="status" aria-live="polite"></p>' +
-      '</form></div>');
+      /* the ticket form mirrors the contact page's form — same grid, same
+         fields, same send button. One voice across the site. */
+      '<form id="supForm" style="max-width:640px;margin-top:22px" novalidate>' +
+      '<p class="cf-title">OPEN A TICKET</p>' +
+      '<p class="cf-sub">HAVE A QUESTION OR RAN INTO A PROBLEM? TELL THE CLUB WHAT HAPPENED AND OUR TEAM WILL ANSWER HERE.</p>' +
+      '<div class="cf-grid">' +
+      '<div class="cf-field cf-full"><label for="supSubject">SUBJECT *</label><input id="supSubject" maxlength="120" placeholder="E.G. WRONG SIZE ARRIVED" /></div>' +
+      '<div class="cf-field"><label for="supCat">WHAT IS IT ABOUT</label><select id="supCat">' + CATS.map(function (c) { return '<option value="' + c[0] + '">' + c[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="cf-field"><label for="supOrder">ABOUT WHICH ORDER (OPTIONAL)</label><select id="supOrder"><option value="">— NOT ABOUT ONE ORDER —</option></select></div>' +
+      '<div class="cf-field cf-full"><label for="supMsg">TELL THE CLUB *</label><textarea id="supMsg" maxlength="4000" rows="4" placeholder="WHAT HAPPENED, WHICH PIECE, WHAT YOU NEED — WE READ EVERYTHING."></textarea></div>' +
+      '<div class="cf-full"><button type="submit" class="cf-send" id="supSend"><span class="cf-send-label">OPEN THE TICKET</span>' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg></button>' +
+      '<p class="form-msg" id="supMsgLine" role="status" aria-live="polite"></p></div>' +
+      '</div></form></div>');
     var form = $('#supForm');
     form.addEventListener('submit', function (e) {
       e.preventDefault();

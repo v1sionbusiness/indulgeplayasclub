@@ -285,6 +285,48 @@ async function visibilityMap(d) {
   rows.forEach((r) => { map[r.id] = normalizeVisibility(r); });
   return map;
 }
+
+/* ---------- PRODUCT META — per-piece overrides that ride on top of the
+   baked-in catalog without touching its code: a corrected price, a new
+   photo, a featured-rotation flip, or an archive that pulls the piece off
+   every public surface while the record (and its order history) stays.
+   Club-added pieces keep their own documents; this layer is for the
+   seven core pieces the site ships with. ------------------------------ */
+const META_FIELDS = ["name", "priceCentavos", "tag", "sizes", "colors", "desc",
+  "fabric", "fit", "alt", "batchSize", "modelInfo", "img", "home", "featured", "archived"];
+const BAKED_DEFAULT_HOME = { "hoodie-001": "main", "court-tee": true, "varsity-26": true, "club-tote": true };
+async function productMetaMap(d) {
+  const rows = await d.collection("productMeta").find({}).limit(1000).toArray();
+  const map = {};
+  rows.forEach((r) => { map[r.id] = r; });
+  return map;
+}
+function applyBakedMeta(baked, meta) {
+  if (!baked) return baked;
+  if (!meta) return baked;
+  const out = { ...baked };
+  META_FIELDS.forEach((f) => {
+    if (meta[f] !== undefined) out[f] = meta[f];
+  });
+  return out;
+}
+/* featured is a three-state story: a meta row overrides, otherwise the
+   baked default carries it ('main' counts as featured — it's the hero) */
+function bakedIsFeatured(meta, id) {
+  if (meta && meta.featured !== undefined) return !!meta.featured;
+  const def = BAKED_DEFAULT_HOME[id];
+  return def === "main" || def === true;
+}
+/* the /p/<id> share-card builder needs the merged price without a db
+   handle everywhere — the server re-reads meta lazily and caches it */
+let bakedMetaCache = { at: 0, map: null };
+async function bakedMetaCached(d) {
+  const now = Date.now();
+  if (bakedMetaCache.map && now - bakedMetaCache.at < 15000) return bakedMetaCache.map;
+  const map = await productMetaMap(d).catch(() => ({}));
+  bakedMetaCache = { at: now, map };
+  return map;
+}
 /* ---------- ADMIN ACTIVITY LOG — append-only. Every important admin
    action lands here: who did it, what changed, when. There is no edit
    or delete endpoint anywhere — the regular admin interface cannot
@@ -372,7 +414,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v27-20261123-geocheckout";
+const BUILD_STAMP = "ipc-v28-20261124-clubops";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -623,29 +665,63 @@ function serveIndex(req, res) {
 
     const baked = PRODUCTS.find(function (x) { return x && x.id === pid; });
     if (baked) {
-      const meta = BAKED_META[pid] || {};
-      finish(injectProductMeta(html, pid, {
-        name: baked.name,
-        blurb: meta.blurb,
-        img: meta.img,
-        priceCentavos: baked.priceCentavos,
-      }));
+      /* meta overrides (corrected price/name/photo) ride onto the share
+         card too — the club edits a piece and the unfurl follows. Meta
+         lookup is strictly time-boxed: a slow or unreachable database
+         never blocks the card — the baked defaults ship instead. */
+      (async function () {
+        let priceCentavos = baked.priceCentavos;
+        let name = baked.name;
+        let img = (BAKED_META[pid] || {}).img;
+        let blurb = (BAKED_META[pid] || {}).blurb;
+        try {
+          const meta = await Promise.race([
+            (async function () {
+              const { connect } = require("./ipc-pay/mongo");
+              const d = await connect();
+              return (await bakedMetaCached(d))[pid] || null;
+            })(),
+            new Promise(function (res) { setTimeout(function () { res(null); }, 1200); }),
+          ]).catch(function () { return null; });
+          if (meta && !meta.archived) {
+            if (meta.priceCentavos !== undefined) priceCentavos = meta.priceCentavos;
+            if (meta.name !== undefined) name = meta.name;
+            if (meta.img !== undefined) img = meta.img;
+            if (meta.desc !== undefined) blurb = meta.desc;
+          }
+        } catch { /* baked defaults still make a complete card */ }
+        finish(injectProductMeta(html, pid, {
+          name,
+          blurb,
+          img,
+          priceCentavos,
+        }));
+      })();
       return true;
     }
 
     (async function () {
       let info = null;
       try {
-        const { connect } = require("./ipc-pay/mongo");
-        const d = await connect();
-        const doc = await d.collection("products")
-          .findOne({ id: pid, active: { $ne: false } });
-        if (doc) info = {
-          name: doc.name,
-          blurb: doc.desc || doc.alt || doc.name,
-          img: doc.img,
-          priceCentavos: doc.priceCentavos,
-        };
+        const infoLookup = (async function () {
+          const { connect } = require("./ipc-pay/mongo");
+          const d = await connect();
+          const doc = await d.collection("products")
+            .findOne({ id: pid, active: { $ne: false } });
+          if (doc) return {
+            name: doc.name,
+            blurb: doc.desc || doc.alt || doc.name,
+            img: doc.img,
+            priceCentavos: doc.priceCentavos,
+          };
+          return null;
+        })();
+        /* same time-box — an unreachable database serves the full SPA
+           with the generic card instead of hanging the request */
+        info = await Promise.race([
+          infoLookup,
+          new Promise(function (res) { setTimeout(function () { res(null); }, 1200); }),
+        ]);
       } catch { /* generic page is the safe fallback */ }
       finish(info ? injectProductMeta(html, pid, info) : html);
     })();
@@ -1326,6 +1402,28 @@ async function route(req, res) {
            shop, the home gallery showcase and the collection pages with it.
            The map also covers baked-in pieces the client already carries. */
         const visMap = await visibilityMap(d).catch(() => ({}));
+        const metaMap = await productMetaMap(d).catch(() => ({}));
+        /* baked pieces can be edited (price/photo/description) and archived
+           without a code deploy — the overrides ride to the client in a
+           side map that merges onto the baked-in shelf, and archived pieces
+           lose every surface until the club restores them */
+        const bakedMeta = {};
+        Object.keys(BAKED_META).forEach((pid) => {
+          const m = metaMap[pid];
+          if (!m) return;
+          const entry = {};
+          META_FIELDS.forEach((f) => {
+            if (m[f] === undefined) return;
+            /* the client shelf prices in priceC — match its field names */
+            entry[f === "priceCentavos" ? "priceC" : f] = m[f];
+          });
+          if (m.featured !== undefined || BAKED_DEFAULT_HOME[pid] !== undefined) {
+            entry.featured = bakedIsFeatured(m, pid);
+            entry.homeMain = (BAKED_DEFAULT_HOME[pid] === "main") && entry.featured;
+          }
+          if (m.archived !== undefined) entry.archived = !!m.archived;
+          if (Object.keys(entry).length) bakedMeta[pid] = entry;
+        });
         return send(res, 200, {
           ok: true,
           products: docs.map((doc) => {
@@ -1338,6 +1436,7 @@ async function route(req, res) {
             return view;
           }),
           visibility: visMap,
+          bakedMeta,
           collections: cols.map((c) => ({
             slug: c.slug,
             title: c.title,
@@ -1433,6 +1532,7 @@ async function route(req, res) {
           const customDocs = await d.collection("products")
             .find({}).sort({ createdAt: -1 }).limit(500).toArray();
           const visMap = await visibilityMap(d).catch(() => ({}));
+          const metaMap = await productMetaMap(d).catch(() => ({}));
           const customRows = customDocs.map((doc) => ({
             id: doc.id,
             name: doc.name,
@@ -1442,8 +1542,29 @@ async function route(req, res) {
             colors: doc.colors || [],
             custom: true,
             active: doc.active !== false,
+            featured: !!doc.home,
           }));
-          const inventory = PRODUCTS.concat(customRows).map((p) => {
+          const bakedRows = PRODUCTS.map((p) => {
+            const m = metaMap[p.id] || {};
+            const merged = applyBakedMeta(p, m);
+            return {
+              id: merged.id,
+              name: merged.name,
+              priceCentavos: merged.priceCentavos,
+              tag: merged.tag || "",
+              sizes: merged.sizes,
+              colors: merged.colors,
+              custom: false,
+              active: true,
+              featured: bakedIsFeatured(m, merged.id),
+              archived: m.archived === true,
+              edited: Object.keys(META_FIELDS).some((f) => m[f] !== undefined && f !== "archived"),
+            };
+          });
+          /* archived core pieces leave the main table (so the tab stops
+             stacking) but stay one toggle away — the club never loses track */
+          const withArchive = bakedRows.concat(customRows);
+          const inventory = withArchive.filter((p) => !p.archived).map((p) => {
             const v = visMap[p.id] || defaultVisibility();
             const active = p.active !== false;
             return {
@@ -1457,6 +1578,9 @@ async function route(req, res) {
               revenueCentavos: (soldMap[p.id] && soldMap[p.id].revenue) || 0,
               custom: !!p.custom,
               active,
+              featured: !!p.featured,
+              archived: !!p.archived,
+              edited: !!p.edited,
               shopVisible: v.shopVisible,
               galleryVisible: v.galleryVisible,
               collectionVisible: v.collectionVisible,
@@ -1465,7 +1589,30 @@ async function route(req, res) {
               publicationStatus: !active ? "pulled" : (isFullyHidden(v) ? "hidden" : "live"),
             };
           });
-          return send(res, 200, { ok: true, inventory });
+          const archivedRows = withArchive.filter((p) => p.archived).map((p) => {
+            const v = visMap[p.id] || defaultVisibility();
+            return {
+              id: p.id,
+              name: p.name,
+              priceCentavos: p.priceCentavos,
+              tag: p.tag || "",
+              sizes: p.sizes,
+              colors: p.colors,
+              unitsSold: (soldMap[p.id] && soldMap[p.id].units) || 0,
+              revenueCentavos: (soldMap[p.id] && soldMap[p.id].revenue) || 0,
+              custom: !!p.custom,
+              active: p.active !== false,
+              featured: !!p.featured,
+              archived: true,
+              edited: !!p.edited,
+              shopVisible: v.shopVisible,
+              galleryVisible: v.galleryVisible,
+              collectionVisible: v.collectionVisible,
+              hidden: isFullyHidden(v),
+              publicationStatus: "archived",
+            };
+          });
+          return send(res, 200, { ok: true, inventory, archived: archivedRows, archivedCount: archivedRows.length });
         }
         if (p === "/api/admin/overview") {
           const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions, trackAgg, paySettings, dailyRevenue] = await Promise.all([
@@ -1656,6 +1803,8 @@ async function route(req, res) {
 
   /* --- club inventory: the team adds their own pieces straight to the shop --- */
   if (p === "/api/admin/products/remove") return handleAdminProductRemove(req, res);
+  if (p === "/api/admin/products/delete") return handleAdminProductDelete(req, res);
+  if (p === "/api/admin/products/featured") return handleAdminProductFeatured(req, res);
   if (p === "/api/admin/products") return handleAdminProductSave(req, res);
   if (p === "/api/admin/products/visibility") return handleAdminProductVisibility(req, res);
   if (p === "/api/admin/products/restore") return handleAdminProductRestore(req, res);
@@ -2240,8 +2389,25 @@ async function handleCreateOrder(req, res) {
   }
   const lines = [];
   let dbForCatalog = null;
+  let dbMetaMap = null;
   for (const raw of rawItems) {
     let product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+    /* baked pieces can carry club edits (price/name/sizes) in productMeta —
+       the checkout always prices against the merged catalog */
+    if (product) {
+      try {
+        if (!dbForCatalog) {
+          const { connect } = require("./ipc-pay/mongo");
+          dbForCatalog = await connect();
+        }
+        if (!dbMetaMap) dbMetaMap = await productMetaMap(dbForCatalog);
+        const m = dbMetaMap[product.id];
+        if (m && m.archived === true) {
+          return fail(res, 422, "unavailable", (m.name || product.name).toUpperCase() + " IS NO LONGER CARRIED BY THE CLUB — REMOVE IT FROM YOUR BAG.");
+        }
+        product = applyBakedMeta(product, m);
+      } catch { /* baked defaults stay the price of record */ }
+    }
     /* club-added pieces live in Atlas — the baked-in catalog is not enough */
     if (!product) {
       try {
@@ -2299,8 +2465,9 @@ async function handleCreateOrder(req, res) {
       const { connect } = require("./ipc-pay/mongo");
       dbForCatalog = await connect();
     }
-    const [vis, soldRows] = await Promise.all([
+    const [vis, metaRows, soldRows] = await Promise.all([
       visibilityMap(dbForCatalog).catch(() => ({})),
+      productMetaMap(dbForCatalog).catch(() => ({})),
       dbForCatalog.collection("orders").aggregate([
         { $match: { status: "paid" } },
         { $unwind: "$items" },
@@ -2312,6 +2479,9 @@ async function handleCreateOrder(req, res) {
     const perProduct = {};
     lines.forEach((l) => { perProduct[l.productId] = (perProduct[l.productId] || 0) + l.qty; });
     for (const l of lines) {
+      if (metaRows[l.productId] && metaRows[l.productId].archived === true) {
+        return fail(res, 422, "unavailable", l.name.toUpperCase() + " IS NO LONGER CARRIED — REMOVE IT FROM YOUR BAG.");
+      }
       if (isFullyHidden(vis[l.productId])) {
         return fail(res, 422, "unavailable", l.name.toUpperCase() + " IS NO LONGER AVAILABLE — REMOVE IT FROM YOUR BAG.");
       }
@@ -2935,6 +3105,38 @@ async function handleAdminProductSave(req, res) {
 
     let doc;
     const editingId = String(body.id ?? "").trim();
+    /* editing a baked-in piece never rewrites its code — the change lands
+       in productMeta and rides on top of the baked catalog everywhere
+       (shop, product page, share cards, checkout pricing) */
+    if (editingId && PRODUCTS.some((x) => x.id === editingId)) {
+      const meta = await productMetaMap(d);
+      const m = meta[editingId] || {};
+      const metaDoc = {
+        id: editingId,
+        name, priceCentavos: priceC, tag, sizes, colors, desc, fabric, fit,
+        alt, batchSize, modelInfo, img, home,
+        /* the edit form's featured checkbox is the same switch the
+           inventory table's FEATURED chip writes — one state, one place */
+        featured: home,
+        updatedAt: now, updatedBy: found.user.email,
+      };
+      await d.collection("productMeta").updateOne(
+        { id: editingId },
+        { $set: metaDoc, $setOnInsert: { createdAt: now } },
+        { upsert: true }
+      );
+      bakedMetaCache = { at: 0, map: null }; /* share cards re-read meta */
+      const merged = applyBakedMeta(PRODUCTS.find((x) => x.id === editingId), metaDoc);
+      console.log("[ipc-pay] baked product edited " + editingId + " (" + name + ") by " + found.user.email);
+      const editDeltas = [];
+      const oldPrice = m.priceCentavos !== undefined ? m.priceCentavos : PRODUCTS.find((x) => x.id === editingId).priceCentavos;
+      if (oldPrice !== priceC) editDeltas.push("PRICE " + oldPrice + "→" + priceC + " CENTAVOS");
+      if ((m.batchSize || 0) !== batchSize) editDeltas.push("BATCH " + (m.batchSize || 0) + "→" + batchSize);
+      if (m.archived === true) editDeltas.push("ARCHIVE LIFTED BY EDIT");
+      await logActivity(d, found.user.email, "product_edit", "product", editingId, name.toUpperCase(),
+        editDeltas.length ? editDeltas.join(" · ") : "DETAILS UPDATED");
+      return send(res, 200, { ok: true, product: merged, message: "PIECE UPDATED — THE SHOP CARRIES IT NOW." });
+    }
     if (editingId) {
       const existing = await d.collection("products").findOne({ id: editingId });
       if (!existing) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
@@ -3009,6 +3211,89 @@ async function handleAdminProductRemove(req, res) {
     return send(res, 200, { ok: true, message: "PIECE PULLED FROM THE SHOP — PAST ORDERS STAY ON RECORD." });
   } catch (err) {
     return mongoError(res, err, "product remove failed");
+  }
+}
+
+/* DELETE FOR GOOD — club-added pieces leave the products collection
+   entirely (orders keep their line-item snapshots, so history never
+   breaks); baked-in pieces can't be un-baked, so "delete" archives them:
+   off every public surface AND out of the main inventory table, one
+   restore away. Both paths land in the activity log. ---------------- */
+async function handleAdminProductDelete(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = String(body.id ?? "").trim();
+  if (!id) return fail(res, 422, "invalid", "MISSING PIECE ID.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const baked = PRODUCTS.some((x) => x.id === id);
+    if (baked) {
+      await d.collection("productMeta").updateOne(
+        { id },
+        { $set: { id, archived: true, featured: false, updatedAt: new Date(), updatedBy: found.user.email }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true }
+      );
+      bakedMetaCache = { at: 0, map: null };
+      await logActivity(d, found.user.email, "product_archive", "product", id, id.toUpperCase(),
+        "CORE PIECE ARCHIVED — OFF EVERY SURFACE AND OUT OF THE MAIN INVENTORY LIST; RECORD + ORDER HISTORY KEPT");
+      return send(res, 200, { ok: true, archived: true, message: "PIECE ARCHIVED — GONE FROM EVERY SURFACE AND THE INVENTORY LIST. RESTORE BRINGS IT BACK." });
+    }
+    const custom = await d.collection("products").findOne({ id });
+    if (!custom) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
+    await d.collection("products").deleteOne({ id });
+    await d.collection("productVisibility").deleteOne({ id });
+    await d.collection("productMeta").deleteOne({ id });
+    await logActivity(d, found.user.email, "product_delete", "product", id,
+      (custom.name || id).toUpperCase(), "PIECE DELETED PERMANENTLY FROM THE CATALOG — PAST ORDERS KEEP THEIR LINE-ITEM RECORDS");
+    return send(res, 200, { ok: true, archived: false, message: "PIECE DELETED FOR GOOD — THE INVENTORY TAB STOPS CARRYING IT. PAST ORDERS KEEP THEIR RECORDS." });
+  } catch (err) {
+    return mongoError(res, err, "product delete failed");
+  }
+}
+
+/* FEATURED TOGGLE — the club picks what the home drop showcases. Baked
+   pieces store the flip in productMeta; club-added pieces flip their own
+   home flag. One switch, same effect either way. --------------------- */
+async function handleAdminProductFeatured(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const id = String(body.id ?? "").trim();
+  const featured = !!body.featured;
+  if (!id) return fail(res, 422, "invalid", "MISSING PIECE ID.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const baked = PRODUCTS.some((x) => x.id === id);
+    let label = id.toUpperCase();
+    if (baked) {
+      await d.collection("productMeta").updateOne(
+        { id },
+        { $set: { id, featured, updatedAt: new Date(), updatedBy: found.user.email }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true }
+      );
+      bakedMetaCache = { at: 0, map: null };
+    } else {
+      const custom = await d.collection("products").findOne({ id });
+      if (!custom) return fail(res, 404, "not_found", "THAT PIECE ISN'T IN THE SAVED CATALOG.");
+      label = (custom.name || id).toUpperCase();
+      await d.collection("products").updateOne({ id }, { $set: { home: featured, updatedAt: new Date() } });
+    }
+    await logActivity(d, found.user.email, "product_featured", "product", id, label,
+      featured ? "ADDED TO THE FEATURED ROTATION" : "TAKEN OUT OF THE FEATURED ROTATION");
+    return send(res, 200, { ok: true, featured, message: featured
+      ? "PIECE JOINED THE FEATURED ROTATION — THE HOME DROP PICKS IT UP."
+      : "PIECE LEFT THE FEATURED ROTATION." });
+  } catch (err) {
+    return mongoError(res, err, "featured toggle failed");
   }
 }
 
@@ -4357,6 +4642,22 @@ async function handleAdminProductRestore(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     const custom = await d.collection("products").findOne({ id });
+    /* archived core pieces restore here too — archive only hides, it
+       never deletes, so the club can bring a piece back any time */
+    if (!custom && PRODUCTS.some((x) => x.id === id)) {
+      const meta = await productMetaMap(d);
+      const m = meta[id] || {};
+      if (m.archived !== true) return fail(res, 422, "not_archived", "THAT PIECE ISN'T ARCHIVED — IT'S ALREADY LIVE.");
+      await d.collection("productMeta").updateOne(
+        { id },
+        { $set: { id, archived: false, updatedAt: new Date(), updatedBy: found.user.email }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true }
+      );
+      bakedMetaCache = { at: 0, map: null };
+      await logActivity(d, found.user.email, "product_restore", "product", id, id.toUpperCase(),
+        "ARCHIVED PIECE RESTORED — BACK ON ITS SURFACES AND THE INVENTORY LIST");
+      return send(res, 200, { ok: true, message: "PIECE RESTORED — IT'S BACK ON THE SHOP AND ITS COLLECTION." });
+    }
     if (!custom) return fail(res, 404, "not_found", "RESTORE WORKS ON CLUB-ADDED PIECES — BAKED PIECES NEVER LEAVE THE CATALOG.");
     if (custom.active !== false) return fail(res, 422, "not_pulled", "THAT PIECE IS ALREADY LIVE.");
     await d.collection("products").updateOne(
