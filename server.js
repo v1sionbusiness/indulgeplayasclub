@@ -182,15 +182,15 @@ const PRODUCTS = [
    and the province field. Metro Manila is checked first so "quezon
    city" wins over the bare "quezon" province key. */
 const SHIPPING_ZONES = [
+  /* one zone for the capital — everything else is priced by location.
+     The old band around the capital is gone: Rizal, Cavite, Laguna and
+     Bulacan are outside Metro Manila and pay the Rest of Luzon rate. */
   { key: "metro_manila", fee: 6000, label: "METRO MANILA",
     provinces: ["metro manila", "ncr", "national capital region", "manila"],
     cities: ["quezon city", "manila", "makati", "taguig", "pasig", "pasay", "mandaluyong", "san juan", "marikina", "caloocan", "malabon", "navotas", "valenzuela", "paranaque", "las pinas", "muntinlupa", "pateros"] },
-  { key: "greater_manila", fee: 10000, label: "GREATER MANILA",
-    provinces: ["rizal", "cavite", "laguna", "bulacan"],
-    cities: ["antipolo", "cainta", "bacoor", "imus", "dasmariinas", "general trias", "santa rosa", "calamba", "san pedro", "binan", "cabuyao"] },
   { key: "rest_luzon", fee: 13000, label: "REST OF LUZON",
-    provinces: ["batangas", "pampanga", "zambales", "bataan", "tarlac", "pangasinan", "nueva ecija", "aurora", "quezon", "marinduque", "mindoro oriental", "oriental mindoro", "mindoro occidental", "occidental mindoro", "palawan", "romblon", "albay", "camarines norte", "camarines sur", "catanduanes", "sorsogon", "masbate", "batanes", "cagayan", "isabela", "nueva vizcaya", "quirino", "ifugao", "mountain province", "benguet", "kalinga", "abra", "ilocos norte", "ilocos sur", "la union"],
-    cities: ["baguio", "angeles", "san fernando", "olongapo", "cabanatuan", "legazpi", "naga", "lucena", "batangas city", "lipa", "tarlac city", "vigan", "laoag", "tuguegarao", "dagupan"] },
+    provinces: ["rizal", "cavite", "laguna", "bulacan", "batangas", "pampanga", "zambales", "bataan", "tarlac", "pangasinan", "nueva ecija", "aurora", "quezon", "marinduque", "mindoro oriental", "oriental mindoro", "mindoro occidental", "occidental mindoro", "palawan", "romblon", "albay", "camarines norte", "camarines sur", "catanduanes", "sorsogon", "masbate", "batanes", "cagayan", "isabela", "nueva vizcaya", "quirino", "ifugao", "mountain province", "benguet", "kalinga", "abra", "ilocos norte", "ilocos sur", "la union"],
+    cities: ["antipolo", "cainta", "bacoor", "imus", "dasmariinas", "general trias", "santa rosa", "calamba", "san pedro", "binan", "cabuyao", "baguio", "angeles", "san fernando", "olongapo", "cabanatuan", "legazpi", "naga", "lucena", "batangas city", "lipa", "tarlac city", "vigan", "laoag", "tuguegarao", "dagupan"] },
   { key: "visayas", fee: 16000, label: "VISAYAS",
     provinces: ["cebu", "bohol", "negros occidental", "negros oriental", "siquijor", "samar", "eastern samar", "northern samar", "western samar", "leyte", "southern leyte", "biliran", "iloilo", "guimaras", "capiz", "aklan", "antique"],
     cities: ["cebu city", "mandaue", "lapu lapu", "iloilo city", "bacolod", "tacloban", "ormoc", "roxas", "calbayog", "dumaguete", "tagbilaran"] },
@@ -269,6 +269,11 @@ function normalizeVisibility(raw) {
     const key = s + "Visible";
     if (raw && raw[key] !== undefined) out[key] = !!raw[key];
   });
+  /* shop and collection ride together — one switch in the admin, one
+     state everywhere. A piece the club pulled from the shop never keeps
+     selling on a collection page (and the reverse holds too). Legacy
+     rows that only flipped one of the two snap to this rule on read. */
+  out.collectionVisible = out.shopVisible && out.collectionVisible;
   return out;
 }
 function isFullyHidden(v) {
@@ -367,7 +372,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v26-20261123-shiptrackpolish";
+const BUILD_STAMP = "ipc-v27-20261123-geocheckout";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -863,6 +868,7 @@ function orderView(o, payment) {
     email: o.email,
     phone: o.phone || "",
     addressLine: o.addressLine || "",
+    barangay: o.barangay || "",
     city: o.city || "",
     province: o.province || "",
     postalCode: o.postalCode || "",
@@ -911,6 +917,7 @@ function paymentView(p, order, includeProof) {
       email: order.email,
       phone: order.phone || "",
       addressLine: order.addressLine || "",
+      barangay: order.barangay || "",
       city: order.city || "",
       province: order.province || "",
       postalCode: order.postalCode || "",
@@ -2325,6 +2332,7 @@ async function handleCreateOrder(req, res) {
   const addressLine = String(c.addressLine ?? "").trim().slice(0, 240);
   const city = String(c.city ?? "").trim().slice(0, 80);
   const province = String(c.province ?? "").trim().slice(0, 80);
+  const barangay = String(c.barangay ?? "").trim().slice(0, 120);
   const postalCode = String(c.postalCode ?? "").trim().slice(0, 12);
   const notes = String(c.notes ?? "").trim().slice(0, 400);
   if (!name || !rawPhone || !addressLine || !city || !province) {
@@ -2427,6 +2435,7 @@ async function handleCreateOrder(req, res) {
       phone,
       phoneNormalized: phone,
       addressLine,
+      barangay,
       city,
       province,
       postalCode,

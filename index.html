@@ -357,6 +357,8 @@ section{position:relative}
 .field.full{grid-column:1/-1}
 .field label{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase}
 .inp{background:var(--panel);border:1px solid var(--line-2);padding:14px 16px;font-size:14px;color:var(--text);transition:border-color .2s;width:100%}
+select.inp{appearance:none;-webkit-appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23889098' stroke-width='1.6' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+select.inp:disabled{opacity:.55;cursor:not-allowed}
 .inp:focus{outline:none;border-color:var(--white)}
 .inp::placeholder{color:var(--faint)}
 textarea.inp{min-height:110px;resize:vertical}
@@ -1394,7 +1396,7 @@ img.tc-true{filter:none !important}
       <div class="about-body">
         <div class="about-copy reveal-sm">
           <p>INDULGE PLAYAS CLUB is a Manila-born clothing brand, running since 2023 — founded by a small circle of friends who wanted pieces they couldn't find in local stores: clean designs, heavyweight fabric, and fits that hold up from the morning commute to the late-night gig. The OG logo tee with its silver stitch marked the beginning, and that same club mark still leads every drop.</p>
-          <p>The brand grew out of the local scene — the music, the courts, the streets — and it still moves that way. Every drop gets announced on our Facebook page first, reserved by message, then released in numbered batches: meetup around the metro or shipped anywhere in the country — priced by location, one flat rate around Metro Manila and zone rates beyond. That model keeps the circle small and the quality up — pieces we actually wear, tested where we actually live.</p>
+          <p>The brand grew out of the local scene — the music, the courts, the streets — and it still moves that way. Every drop gets announced on our Facebook page first, reserved by message, then released in numbered batches: meetup around the metro or shipped anywhere in the country — priced by location, one flat rate in Metro Manila and zone rates beyond. That model keeps the circle small and the quality up — pieces we actually wear, tested where we actually live.</p>
           <p>Every piece we release carries the club motto — strictly for playas only. It sets the standard for who we build for: people who play hard, work harder, and look right doing both. The circle stays small on purpose, and every new member earns the spot.</p>
         </div>
         <div class="pillars">
@@ -1501,7 +1503,7 @@ img.tc-true{filter:none !important}
         <div class="cop-step reveal-x" style="--d:.3s">
           <span class="num">04</span>
           <h3>MEETUP OR SHIP NATIONWIDE</h3>
-          <p>Pick it up around Metro Manila, or sit back — it ships anywhere in the Philippines — flat rate around Metro Manila, zone rates beyond, shown at checkout before you confirm — packed and handed to a trusted local courier.</p>
+          <p>Pick it up around Metro Manila, or sit back — it ships anywhere in the Philippines — flat rate in Metro Manila, zone rates beyond, shown at checkout before you confirm — packed and handed to a trusted local courier.</p>
         </div>
       </div>
       <div class="cop-cards">
@@ -1515,7 +1517,7 @@ img.tc-true{filter:none !important}
           <p class="k">SHIPPING
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
           </p>
-          <p class="v">Free on every order wherever our couriers reach — no minimum spend. Metro Manila usually lands within a few days; up province takes a little longer. The exact timing depends on your location.</p>
+          <p class="v">Shipping is priced by location — one flat rate in Metro Manila, zone rates for the rest of the country. The exact rate shows in the bag and at checkout before you confirm. Metro Manila usually lands within a few days; provinces take a little longer.</p>
         </div>
         <div class="cop-card reveal-sm" style="--d:.24s">
           <p class="k">MEETUPS
@@ -1612,8 +1614,8 @@ img.tc-true{filter:none !important}
           <p class="a">Online orders pay through IPC Pay (QR) at checkout — scan, send, submit your proof of payment, and the club verifies every payment by hand before anything ships. Cards and e-wallet checkouts are coming soon — for now the QR is the only live method. Meetup orders can also be settled with GCash or cash — no hidden fees, ever.</p>
         </details>
         <details class="faq-item reveal-sm" style="--d:.15s">
-          <summary>Is shipping really free?<span class="plus" aria-hidden="true"></span></summary>
-          <p class="a">Shipping is priced by location: one flat rate around Metro Manila, zone rates for the rest of the country — the exact amount shows in the bag and at checkout before you confirm. Metro Manila usually takes a few days; provinces a little longer.</p>
+          <summary>How much is shipping?<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">Shipping is priced by location: one flat rate in Metro Manila, zone rates for the rest of the country — the exact amount shows in the bag and at checkout before you confirm. Metro Manila usually takes a few days; provinces a little longer.</p>
         </details>
         <details class="faq-item reveal-sm" style="--d:.2s">
           <summary>What if my size sells out?<span class="plus" aria-hidden="true"></span></summary>
@@ -1745,7 +1747,7 @@ img.tc-true{filter:none !important}
 
     <div class="terms-block reveal-sm">
       <h3>04 — SHIPPING</h3>
-      <p>Shipping is priced by location — one flat rate around Metro Manila, zone rates everywhere else — and the exact rate shows at checkout before anything goes out. Once payment is verified, the order is packed and handed to a trusted local courier.</p>
+      <p>Shipping is priced by location — one flat rate in Metro Manila, zone rates everywhere else — and the exact rate shows at checkout before anything goes out. Once payment is verified, the order is packed and handed to a trusted local courier.</p>
       <ul>
         <li>Metro Manila usually lands within a few days; provinces take a little longer — the exact timing depends on your location and the courier.</li>
         <li>If the courier doesn't reach your address, the club messages you first to sort a Metro Manila meetup or another drop-off — nothing ships blind and nothing is charged without a heads-up.</li>
@@ -1929,19 +1931,21 @@ img.tc-true{filter:none !important}
           <label for="coPhone">MOBILE NUMBER *</label>
           <input class="inp" id="coPhone" type="tel" maxlength="40" placeholder="09XX XXX XXXX" autocomplete="tel" required />
         </div>
+                <div class="field">
+          <label for="coProvince">PROVINCE *</label>
+          <select class="inp" id="coProvince" required disabled><option value="">LOADING REGIONS…</option></select>
+        </div>
         <div class="field">
           <label for="coCity">CITY / MUNICIPALITY *</label>
-          <input class="inp" id="coCity" type="text" maxlength="80" placeholder="QUEZON CITY" required list="ipcCityList" />
-          <datalist id="ipcCityList"><option value="QUEZON CITY"></option><option value="MANILA"></option><option value="MAKATI"></option><option value="TAGUIG"></option><option value="PASIG"></option><option value="PASAY"></option><option value="MANDALUYONG"></option><option value="SAN JUAN"></option><option value="MARIKINA"></option><option value="CALOOCAN"></option><option value="MALABON"></option><option value="NAVOTAS"></option><option value="VALENZUELA"></option><option value="PARAÑAQUE"></option><option value="LAS PIÑAS"></option><option value="MUNTINLUPA"></option><option value="CAINTA"></option><option value="ANTEPOLO"></option><option value="BACOOR"></option><option value="DASMARIÑAS"></option><option value="IMUS"></option><option value="GENERAL TRIAS"></option><option value="LAGAO"></option><option value="CEBU CITY"></option><option value="MANDAUE"></option><option value="LAPU-LAPU CITY"></option><option value="DAVAO CITY"></option><option value="ILOILO CITY"></option><option value="BACOLOD CITY"></option><option value="CAGAYAN DE ORO CITY"></option><option value="ZAMBOANGA CITY"></option><option value="BAGUIO CITY"></option><option value="ANGELES CITY"></option><option value="SAN FERNANDO CITY"></option><option value="GENERAL SANTOS CITY"></option><option value="NAGA CITY"></option><option value="LEGAZPI CITY"></option><option value="TARLAC CITY"></option><option value="OLONGAPO CITY"></option><option value="LUCENA CITY"></option><option value="BATANGAS CITY"></option><option value="LIPA CITY"></option><option value="SANTA ROSA"></option><option value="CABANATUAN CITY"></option><option value="MALOLOS CITY"></option><option value="TUGUEGARAO CITY"></option><option value="DAGUPAN CITY"></option><option value="VIGAN CITY"></option><option value="LAOAG CITY"></option><option value="BUTUAN CITY"></option><option value="DIPOLOG CITY"></option><option value="PAGADIAN CITY"></option><option value="KORONADAL"></option><option value="TAGUM CITY"></option><option value="MATI"></option><option value="SURIGAO CITY"></option><option value="ILIGAN CITY"></option></datalist>
+          <select class="inp" id="coCity" required disabled><option value="">PICK A PROVINCE FIRST</option></select>
+        </div>
+        <div class="field">
+          <label for="coBarangay">BARANGAY (OPTIONAL)</label>
+          <input class="inp" id="coBarangay" type="text" maxlength="120" placeholder="BARANGAY / DISTRICT" />
         </div>
         <div class="field full">
           <label for="coAddress">STREET ADDRESS *</label>
-          <input class="inp" id="coAddress" type="text" maxlength="240" placeholder="HOUSE / UNIT, STREET, BARANGAY" required />
-        </div>
-        <div class="field">
-          <label for="coProvince">PROVINCE *</label>
-          <input class="inp" id="coProvince" type="text" maxlength="80" placeholder="METRO MANILA" required list="ipcProvList" />
-          <datalist id="ipcProvList"><option value="METRO MANILA"></option><option value="CAVITE"></option><option value="LAGUNA"></option><option value="RIZAL"></option><option value="BULACAN"></option><option value="PAMPANGA"></option><option value="BATANGAS"></option><option value="QUEZON"></option><option value="CEBU"></option><option value="DAVAO DEL SUR"></option><option value="ILOILO"></option><option value="NEGROS OCCIDENTAL"></option><option value="PANGASINAN"></option><option value="LA UNION"></option><option value="ILOCOS NORTE"></option><option value="ILOCOS SUR"></option><option value="CAGAYAN"></option><option value="ISABELA"></option><option value="NUEVA ECIJA"></option><option value="TARLAC"></option><option value="ZAMBALES"></option><option value="BATAAN"></option><option value="AURORA"></option><option value="CAMARINES SUR"></option><option value="ALBAY"></option><option value="SAMAR"></option><option value="LEYTE"></option><option value="BOHOL"></option><option value="NEGROS ORIENTAL"></option><option value="SIQUIJOR"></option><option value="ZAMBOANGA DEL SUR"></option><option value="MISAMIS ORIENTAL"></option><option value="BUKIDNON"></option><option value="SOUTH COTABATO"></option><option value="DAVAO DEL NORTE"></option><option value="AGUSAN DEL NORTE"></option><option value="SURIGAO DEL NORTE"></option><option value="PALAWAN"></option><option value="MARINDUQUE"></option><option value="CATANDUANES"></option><option value="MASBATE"></option><option value="ANTIQUE"></option><option value="CAPIZ"></option><option value="AKLAN"></option></datalist>
+          <input class="inp" id="coAddress" type="text" maxlength="240" placeholder="HOUSE / UNIT, STREET" required />
         </div>
         <div class="field">
           <label for="coPostal">POSTAL CODE</label>
@@ -1964,7 +1968,7 @@ img.tc-true{filter:none !important}
         <p class="sum-row"><span>SUBTOTAL</span><b id="coSubtotal">₱0</b></p>
         <p class="sum-row"><span>SHIPPING</span><b id="coShipping">—</b></p>
         <p class="sum-row total"><span>TOTAL</span><b id="coTotal">₱0</b></p>
-        <p class="co-ship-note" id="coShipNote">RATE APPEARS ONCE CITY + PROVINCE ARE IN — FROM ₱60.00</p>
+        <p class="co-ship-note" id="coShipNote">RATE SHOWS ONCE PROVINCE + CITY ARE IN — FROM ₱60.00 IN METRO MANILA</p>
       </div>
       <p class="pay-note">THE TOTAL IS LOCKED IN WRITING THE MOMENT THE ORDER IS PLACED. PAYMENT HAPPENS ON THE NEXT SCREEN VIA IPC PAY — QR ONLY FOR NOW, CARDS AND E-WALLETS ARE COMING SOON.</p>
       <p class="pay-note">TOTAL IN YOUR CURRENCY: <span id="coUsd">—</span> (APPROXIMATION — IPC BILLS IN PESOS).</p>
@@ -2741,7 +2745,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v26-20261123-shiptrackpolish';
+  var IPC_BUILD = 'ipc-v27-20261123-geocheckout';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2801,8 +2805,7 @@ img.tc-true{filter:none !important}
   IPC.SHIPPING_MIN_FEE = 6000;
   IPC.shippingZones = [
     { fee: 6000, zone: 'METRO MANILA', keys: ['metro manila', 'ncr', 'national capital region', 'manila', 'quezon city', 'makati', 'taguig', 'pasig', 'pasay', 'mandaluyong', 'san juan', 'marikina', 'caloocan', 'malabon', 'navotas', 'valenzuela', 'paranaque', 'las pinas', 'muntinlupa', 'pateros'] },
-    { fee: 10000, zone: 'GREATER MANILA', keys: ['rizal', 'cavite', 'laguna', 'bulacan', 'antipolo', 'cainta', 'bacoor', 'imus', 'dasmariinas', 'general trias', 'santa rosa', 'calamba', 'san pedro', 'binan', 'cabuyao'] },
-    { fee: 13000, zone: 'REST OF LUZON', keys: ['batangas', 'pampanga', 'zambales', 'bataan', 'tarlac', 'pangasinan', 'nueva ecija', 'aurora', 'quezon', 'marinduque', 'mindoro oriental', 'oriental mindoro', 'mindoro occidental', 'occidental mindoro', 'palawan', 'romblon', 'albay', 'camarines norte', 'camarines sur', 'catanduanes', 'sorsogon', 'masbate', 'batanes', 'cagayan', 'isabela', 'nueva vizcaya', 'quirino', 'ifugao', 'mountain province', 'benguet', 'kalinga', 'abra', 'ilocos norte', 'ilocos sur', 'la union', 'baguio', 'angeles', 'san fernando', 'olongapo', 'cabanatuan', 'legazpi', 'naga', 'lucena', 'batangas city', 'lipa', 'tarlac city', 'vigan', 'laoag', 'tuguegarao', 'dagupan'] },
+    { fee: 13000, zone: 'REST OF LUZON', keys: ['rizal', 'cavite', 'laguna', 'bulacan', 'antipolo', 'cainta', 'bacoor', 'imus', 'dasmariinas', 'general trias', 'santa rosa', 'calamba', 'san pedro', 'binan', 'cabuyao', 'batangas', 'pampanga', 'zambales', 'bataan', 'tarlac', 'pangasinan', 'nueva ecija', 'aurora', 'quezon', 'marinduque', 'mindoro oriental', 'oriental mindoro', 'mindoro occidental', 'occidental mindoro', 'palawan', 'romblon', 'albay', 'camarines norte', 'camarines sur', 'catanduanes', 'sorsogon', 'masbate', 'batanes', 'cagayan', 'isabela', 'nueva vizcaya', 'quirino', 'ifugao', 'mountain province', 'benguet', 'kalinga', 'abra', 'ilocos norte', 'ilocos sur', 'la union', 'baguio', 'angeles', 'san fernando', 'olongapo', 'cabanatuan', 'legazpi', 'naga', 'lucena', 'batangas city', 'lipa', 'tarlac city', 'vigan', 'laoag', 'tuguegarao', 'dagupan'] },
     { fee: 16000, zone: 'VISAYAS', keys: ['cebu', 'bohol', 'negros occidental', 'negros oriental', 'siquijor', 'samar', 'eastern samar', 'northern samar', 'western samar', 'leyte', 'southern leyte', 'biliran', 'iloilo', 'guimaras', 'capiz', 'aklan', 'antique', 'cebu city', 'mandaue', 'lapu lapu', 'iloilo city', 'bacolod', 'tacloban', 'ormoc', 'roxas', 'calbayog', 'dumaguete', 'tagbilaran'] },
     { fee: 18000, zone: 'MINDANAO', keys: ['zamboanga del norte', 'zamboanga del sur', 'zamboanga sibugay', 'zamboanga city', 'misamis oriental', 'misamis occidental', 'lanao del norte', 'lanao del sur', 'bukidnon', 'camiguin', 'cotabato', 'north cotabato', 'south cotabato', 'sultan kudarat', 'sarangani', 'maguindanao', 'davao del sur', 'davao del norte', 'davao oriental', 'davao de oro', 'davao occidental', 'agusan del norte', 'agusan del sur', 'surigao del norte', 'surigao del sur', 'dinagat islands', 'basilan', 'sulu', 'tawi tawi', 'davao city', 'cagayan de oro', 'general santos', 'butuan', 'iligan', 'tagum', 'mati', 'koronadal', 'dipolog', 'pagadian', 'surigao city'] },
   ];
@@ -2844,7 +2847,7 @@ img.tc-true{filter:none !important}
     var note = $('#coShipNote');
     if (note) note.textContent = ready
       ? zone + ' RATE — THE ORDER BILLS EXACTLY THIS AT PLACEMENT'
-      : 'RATE APPEARS ONCE CITY + PROVINCE ARE IN — FROM ' + IPC.fmtP(IPC.SHIPPING_MIN_FEE);
+      : 'RATE SHOWS ONCE PROVINCE + CITY ARE IN — FROM ' + IPC.fmtP(IPC.SHIPPING_MIN_FEE) + ' IN METRO MANILA';
     var coTotal = $('#coTotal');
     if (coTotal) coTotal.textContent = IPC.fmtP(Math.max(0, IPC.bag.subtotalC - discount + fee));
   };
@@ -2955,7 +2958,10 @@ img.tc-true{filter:none !important}
         var v = vis[p.id] || {};
         p.shopVisible = v.shopVisible !== false;
         p.galleryVisible = v.galleryVisible !== false;
-        p.collectionVisible = v.collectionVisible !== false;
+        /* shop and collection ride together — pulled from the shop means
+           pulled from the collection page too, no matter what an old
+           visibility row says */
+        p.collectionVisible = (v.collectionVisible !== false) && (v.shopVisible !== false);
         p.hidden = !p.shopVisible && !p.galleryVisible && !p.collectionVisible;
       });
       IPC.catalogFresh = true;
@@ -3802,7 +3808,7 @@ img.tc-true{filter:none !important}
   });
 
   /* ---------------- CHECKOUT ---------------- */
-  var coFields = ['coName', 'coPhone', 'coAddress', 'coCity', 'coProvince', 'coPostal', 'coNotes'];
+  var coFields = ['coName', 'coPhone', 'coAddress', 'coBarangay', 'coCity', 'coProvince', 'coPostal', 'coNotes'];
   function coRecall() {
     /* remember delivery details on this device — convenience only */
     try {
@@ -3826,6 +3832,100 @@ img.tc-true{filter:none !important}
     var el = $('#' + id);
     if (el) el.addEventListener('input', function () { coRemember(); IPC.coPaintTotals(); });
   });
+
+  /* ---- PSGC address dropdowns — province -> city/municipality -> barangay
+     Real lists from the PSA PSGC publication (assets/js/ipc-geo.js). The
+     file is pulled the first time the checkout view opens, cached by the
+     browser after that; if it never lands the selects fall back to typed
+     inputs and checkout still works. The rate keys off the same names the
+     server prices from — pick from the list, no more guessing. ---- */
+  IPC.GEO = null;
+  IPC.geoPromise = null;
+  IPC.loadGeo = function () {
+    if (IPC.GEO) return Promise.resolve(IPC.GEO);
+    if (IPC.geoPromise) return IPC.geoPromise;
+    IPC.geoPromise = new Promise(function (resolve) {
+      var done = false;
+      var finish = function (g) { if (!done) { done = true; IPC.GEO = g || null; resolve(IPC.GEO); } };
+      var s = document.createElement('script');
+      s.src = '/assets/js/ipc-geo.js';
+      s.async = true;
+      s.onload = function () { finish(window.IPC_GEO); };
+      s.onerror = function () { finish(null); };
+      document.head.appendChild(s);
+      setTimeout(function () { finish(window.IPC_GEO || null); }, 9000);
+    });
+    return IPC.geoPromise;
+  };
+  /* swap a text field for a same-id select (and back) so the form logic
+     never knows the difference */
+  IPC.geoSwap = function (id, toSelect, attrs) {
+    var el = $('#' + id);
+    if (!el) return null;
+    if (toSelect === (el.tagName === 'SELECT')) return el;
+    var nu = document.createElement(toSelect ? 'select' : 'input');
+    nu.id = id; nu.className = el.className;
+    if (toSelect) { nu.required = true; nu.disabled = true; }
+    else { nu.type = 'text'; nu.maxLength = (attrs && attrs.max) || 80; nu.placeholder = (attrs && attrs.ph) || ''; }
+    el.parentNode.replaceChild(nu, el);
+    return nu;
+  };
+  IPC.geoFill = function (sel, names, ph) {
+    if (!sel) return;
+    var html = '<option value="">' + ph + '</option>';
+    for (var i = 0; i < (names || []).length; i++) html += '<option value="' + IPC.esc(names[i]) + '">' + IPC.esc(names[i]) + '</option>';
+    sel.innerHTML = html;
+  };
+  function geoSaved(id) {
+    try { var d = JSON.parse(localStorage.getItem('ipc-delivery-v1') || '{}'); return (d[id] || '').toUpperCase(); } catch (e) { return ''; }
+  }
+  function geoTouch(el) {
+    if (!el || el.dataset.geowired) return;
+    el.dataset.geowired = '1';
+    el.addEventListener('change', function () { coRemember(); IPC.coPaintTotals(); });
+  }
+  function geoPaint(freshCity) {
+    if (!IPC.GEO || !IPC.GEO.provinces) return;
+    var prov = IPC.geoSwap('coProvince', true);
+    var city = IPC.geoSwap('coCity', true);
+    var savedProv = (prov.value || geoSaved('coProvince')).toUpperCase();
+    IPC.geoFill(prov, Object.keys(IPC.GEO.provinces).sort(), 'SELECT PROVINCE');
+    if (savedProv && IPC.GEO.provinces[savedProv]) prov.value = savedProv;
+    prov.disabled = false;
+    var cities = prov.value ? (IPC.GEO.provinces[prov.value] || []) : [];
+    city.disabled = !prov.value;
+    /* capture the picked city BEFORE the rebuild — geoFill resets the
+       select, and the freshly picked value must survive the repaint */
+    var prevCity = freshCity ? '' : ((city.value || '') || geoSaved('coCity')).toUpperCase();
+    IPC.geoFill(city, cities, prov.value ? 'SELECT CITY / MUNICIPALITY' : 'PICK A PROVINCE FIRST');
+    if (prevCity && cities.indexOf(prevCity) >= 0) city.value = prevCity;
+    /* barangay rides the chosen city — a dropdown where we carry the
+       list, typed input where we don't */
+    var bnames = city.value ? String(IPC.GEO.barangays[city.value] || '').split('|').filter(Boolean) : [];
+    var prevB = freshCity ? '' : (($('#coBarangay') && $('#coBarangay').value) || geoSaved('coBarangay') || '');
+    var asSelect = bnames.length > 0;
+    var bgy = IPC.geoSwap('coBarangay', asSelect, { max: 120, ph: asSelect ? 'SELECT BARANGAY (OPTIONAL)' : 'BARANGAY / DISTRICT (OPTIONAL)' });
+    if (bgy) bgy.disabled = false;
+    if (asSelect) {
+      IPC.geoFill(bgy, bnames, 'SELECT BARANGAY (OPTIONAL)');
+      var hit = prevB && bnames.filter(function (nm) { return nm === prevB.toUpperCase(); })[0];
+      if (hit) bgy.value = hit;
+    } else if (prevB && bgy) { bgy.value = prevB; }
+    /* province change repaints the city list, city change repaints the
+       barangay list — all in place, no reload */
+    if (prov.dataset.geoprovwired !== '1') {
+      prov.dataset.geoprovwired = '1';
+      prov.addEventListener('change', function () {
+        city.value = ''; geoPaint(true); coRemember(); IPC.coPaintTotals();
+      });
+    }
+    if (city.dataset.geocitywired !== '1') {
+      city.dataset.geocitywired = '1';
+      city.addEventListener('change', function () { geoPaint(); coRemember(); IPC.coPaintTotals(); });
+    }
+    geoTouch(bgy);
+  }
+  IPC.geoPaint = geoPaint;
   /* guest checkout flag — set when a logged-out visitor picks CONTINUE AS GUEST */
   IPC.checkoutGuest = false;
   var coGuestBtn = $('#coGuestBtn');
@@ -3845,6 +3945,7 @@ img.tc-true{filter:none !important}
     $('#coForm').style.display = (logged || guest) ? 'grid' : 'none';
     $('#coSummary').style.display = (logged || guest) ? 'block' : 'none';
     $('#coEmailField').style.display = guest ? 'block' : 'none';
+    IPC.loadGeo().then(function () { IPC.geoPaint(); });
     if (!logged && !guest) return;
     try { IPC.validateBag(); } catch (e) {}
     var items = IPC.bag.items;
@@ -3922,7 +4023,7 @@ img.tc-true{filter:none !important}
           return { productId: it.productId, size: it.size, color: it.color, qty: it.qty };
         }),
         guest: guest || undefined,
-        customer: { name: name, phone: phone, addressLine: address, city: city, province: province, postalCode: $('#coPostal').value.trim(), notes: $('#coNotes').value.trim(), email: guest ? guestEmail : undefined }
+        customer: { name: name, phone: phone, addressLine: address, barangay: ($('#coBarangay') && $('#coBarangay').value.trim()) || undefined, city: city, province: province, postalCode: $('#coPostal').value.trim(), notes: $('#coNotes').value.trim(), email: guest ? guestEmail : undefined }
       }
     }).then(function (d) {
       coRemember();
@@ -4077,7 +4178,9 @@ img.tc-true{filter:none !important}
       var pid = first ? first.productId : null;
       var me = pid ? IPC.byId(pid) : null;
       if (me && me.collection) {
-        var mates = IPC.PRODUCTS.filter(function (x) { return x.id !== me.id && x.collection === me.collection; }).slice(0, 3);
+        /* related pieces answer the same visibility law as the shelves —
+           a pulled piece never resurfaces here */
+        var mates = IPC.PRODUCTS.filter(function (x) { return x && x.id !== me.id && x.collection === me.collection && !x.hidden && x.shopVisible !== false; }).slice(0, 3);
         if (mates.length) {
           fitHtml = '<div class="club-card"><h4>COMPLETE THE FIT</h4>' +
             '<p>PIECES FROM THE SAME RUN — ' + IPC.esc((IPC.colTitle(me.collection) || me.collection).toUpperCase()) + '.</p>' +
@@ -4462,7 +4565,7 @@ img.tc-true{filter:none !important}
          older orders collapse to a single summary line */
       list.innerHTML = orders.map(function (o, idx) {
         var pieces = (o.items || []).reduce(function (n, it) { return n + it.qty; }, 0);
-        var cityLine = [o.city, o.province].filter(Boolean).join(', ');
+        var cityLine = [o.barangay, o.city, o.province].filter(Boolean).join(', ');
         var itemsHTML = (o.items || []).map(function (it) {
           return '<p class="ord-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) +
             (it.color ? ' · ' + IPC.esc(it.color) : '') + ' × ' + it.qty + '</span><span>' +
@@ -4607,7 +4710,7 @@ img.tc-true{filter:none !important}
       host.innerHTML = chips + head + '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
         '<th>ORDER</th><th>BUYER</th><th>DELIVER TO</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>TRACKING</th><th>PLACED</th></tr></thead><tbody>' +
       shown.map(function (o, i) {
-          var cityLine = [o.city, o.province].filter(Boolean).join(', ');
+          var cityLine = [o.barangay, o.city, o.province].filter(Boolean).join(', ');
           var delivery = '<b>' + IPC.esc(o.addressLine || 'NO STREET GIVEN') + '</b>' +
             '<br /><small>' + IPC.esc(cityLine || 'NO CITY') + (o.postalCode ? ' ' + IPC.esc(o.postalCode) : '') + '</small>' +
             (o.notes ? '<br /><small>NOTE — ' + IPC.esc(o.notes) + '</small>' : '');
@@ -6212,10 +6315,10 @@ setTimeout(function () {
       return '<span class="prod-flag core">LIVE</span>';
     };
     var visCell = function (p) {
-      var chip = function (surf, on) {
-        return '<label class="vis-chip' + (on ? ' on' : '') + '"><input type="checkbox" data-vis="' + esc(p.id) + '|' + surf + '"' + (on ? ' checked' : '') + ' /> ' + surf.toUpperCase() + '</label>';
+      var chip = function (surf, label, on) {
+        return '<label class="vis-chip' + (on ? ' on' : '') + '"><input type="checkbox" data-vis="' + esc(p.id) + '|' + surf + '"' + (on ? ' checked' : '') + ' /> ' + label + '</label>';
       };
-      return chip('shop', p.shopVisible !== false) + chip('gallery', p.galleryVisible !== false) + chip('collection', p.collectionVisible !== false);
+      return chip('store', 'SHOP + COLLECTION', p.shopVisible !== false) + chip('gallery', 'GALLERY', p.galleryVisible !== false);
     };
     var rows = items.map(function (p) {
       var flags = (p.custom ? '<span class="prod-flag">CLUB-ADDED</span>' : '<span class="prod-flag core">CORE</span>') + statusChip(p);
@@ -6233,7 +6336,7 @@ setTimeout(function () {
       '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">' +
       '<button type="button" class="btn-w btn-sm" id="ipcProdAdd">+ ADD A PIECE</button>' +
       '<p class="count-chip" style="margin:0">' + customCount + ' CLUB-ADDED' + (offCount ? ' · ' + offCount + ' PULLED' : '') +
-      ' — VISIBILITY SWITCHES CONTROL WHERE A PIECE SHOWS; PULLING OR HIDING NEVER DELETES THE PIECE, ITS ORDERS OR ITS HISTORY</p></div>' +
+      ' — SHOP AND COLLECTION RIDE ON ONE SWITCH, GALLERY HAS ITS OWN; PULLING OR HIDING NEVER DELETES THE PIECE, ITS ORDERS OR ITS HISTORY</p></div>' +
       '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
       '<th>PIECE</th><th>PRICE</th><th>TAG</th><th>SIZES</th><th>UNITS SOLD</th><th>VERIFIED REVENUE</th><th>SHOWS ON</th><th>SHELF</th></tr></thead><tbody>' +
       rows + '</tbody></table></div>';
@@ -6313,16 +6416,16 @@ setTimeout(function () {
     var pid = parts[0], surf = parts[1];
     var row = ev.target.closest('tr');
     if (!row) return;
-    /* send the full flag set as the row now shows it */
+    /* send the full flag set as the row now shows it — shop and
+       collection are one switch on this side, so they always go out
+       together */
     var body = { id: pid };
-    ['shop', 'gallery', 'collection'].forEach(function (s) {
-      var key = s + 'Visible';
-      if (s === surf) body[key] = ev.target.checked;
-      else {
-        var other = row.querySelector('[data-vis="' + pid + '|' + s + '"]');
-        body[key] = other ? other.checked : true;
-      }
-    });
+    var storeEl = row.querySelector('[data-vis="' + pid + '|store"]');
+    var galleryEl = row.querySelector('[data-vis="' + pid + '|gallery"]');
+    var storeOn = storeEl ? storeEl.checked : true;
+    body.shopVisible = storeOn;
+    body.collectionVisible = storeOn;
+    body.galleryVisible = galleryEl ? galleryEl.checked : true;
     ev.target.disabled = true;
     IPC.api('/api/admin/products/visibility', { method: 'POST', body: body })
       .then(function (d) {
