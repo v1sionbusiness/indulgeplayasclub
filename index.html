@@ -629,12 +629,20 @@ textarea.inp{min-height:110px;resize:vertical}
 .contact-p{max-width:560px;color:var(--muted);line-height:1.75;margin-top:22px}
 .contact-facts{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
 .contact-facts span{font-family:var(--mono);font-size:10px;letter-spacing:.2em;border:1px solid var(--line-2);padding:8px 14px;color:var(--muted);text-transform:uppercase}
-.contact-form{margin-top:44px;border:1px solid var(--line);background:var(--panel);padding:34px;max-width:820px}
-.cf-title{font-family:var(--display);font-size:20px;text-transform:uppercase}
+.contact-form{margin-top:44px;border:1px solid var(--line);background:var(--panel);padding:clamp(22px,3.5vw,34px);max-width:820px}
+.cf-title{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.24em;text-transform:uppercase}
+.cf-title::before{content:"";display:inline-block;width:22px;height:1px;background:var(--white)}
 .cf-sub{font-family:var(--mono);font-size:10px;letter-spacing:.16em;line-height:1.9;color:var(--faint);margin-top:12px;text-transform:uppercase}
 .cf-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
 .cf-field{display:flex;flex-direction:column;gap:8px}
 .cf-field label{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+/* contact form inputs — the club's own language: dark field, sharp border,
+   mono type. the glassmorphism skin is gone; the form now reads like every
+   other club surface (auth panels, account cards, admin console) */
+.cf-field input,.cf-field textarea{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--line-2);border-radius:0;color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:.12em;padding:13px 15px;caret-color:var(--white);outline:none;transition:border-color .2s ease;-webkit-appearance:none;appearance:none}
+.cf-field input::placeholder,.cf-field textarea::placeholder{color:var(--faint);opacity:1}
+.cf-field input:focus,.cf-field textarea:focus{border-color:var(--white)}
+.cf-field textarea{min-height:150px;resize:vertical;line-height:1.8}
 .cf-full{grid-column:1/-1}
 .cf-hp{position:absolute;left:-9999px;height:0;overflow:hidden}
 .cf-send{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--black);border:1px solid var(--white);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.18em;padding:16px 28px;text-transform:uppercase;transition:all .25s var(--ease)}
@@ -783,8 +791,6 @@ textarea.inp{min-height:110px;resize:vertical}
 .contact-brand{display:flex;align-items:center;gap:14px;margin:0 0 34px;color:var(--white);font-family:var(--mono);font-size:10px;line-height:1.8;letter-spacing:.2em;text-transform:uppercase}
 .contact-brand-mark{display:inline-flex;width:46px;height:46px;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.7);font-family:var(--display);font-size:19px;letter-spacing:-.06em}
 .contact-brand small{display:block;color:var(--faint);font-size:8px;letter-spacing:.18em}
-.contact-form{background:linear-gradient(145deg,rgba(255,255,255,.095),rgba(255,255,255,.035));border-color:rgba(255,255,255,.2);box-shadow:0 22px 70px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(14px)}
-.contact-facts span{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.2)}
 :where(a,button,input,textarea,select):focus-visible{outline:2px solid currentColor;outline-offset:4px}
 .btn-w,.btn-o,.btn-sm,.cf-send{transition:transform .22s ease,background .22s ease,color .22s ease,border-color .22s ease,box-shadow .22s ease}
 .btn-w:hover,.cf-send:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(255,255,255,.12)}
@@ -855,15 +861,11 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 .ipc-glass-field i:nth-child(2){width:560px;height:560px;bottom:-180px;left:-150px;opacity:.75}
 .ipc-glass-field i:nth-child(3){width:300px;height:300px;top:40%;left:42%;opacity:.5}
 .contact-standalone .contact-inner{position:relative;z-index:1}
-.ipc-glass{background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.05))!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:22px!important;backdrop-filter:blur(18px) saturate(135%);-webkit-backdrop-filter:blur(18px) saturate(135%);box-shadow:0 18px 55px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.12)!important;padding:clamp(20px,4vw,34px)!important}
-.ipc-glass input,.ipc-glass textarea{box-sizing:border-box!important;width:100%!important;color:#171717!important;-webkit-text-fill-color:#171717!important;background:rgba(255,255,255,.94)!important;border:1px solid rgba(255,255,255,.7)!important;border-radius:11px!important;padding:13px 15px!important;caret-color:#171717!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.06)!important;transition:border-color .2s ease,box-shadow .2s ease!important}
-.ipc-glass input::placeholder,.ipc-glass textarea::placeholder{color:#666!important;-webkit-text-fill-color:#666!important;opacity:1!important}
-.ipc-glass input:focus,.ipc-glass textarea:focus{outline:none!important;border-color:#0a0a0a!important;box-shadow:0 0 0 3px rgba(255,255,255,.35),inset 0 1px 2px rgba(0,0,0,.06)!important}
-.ipc-glass label{color:#f5f5f5!important;font-family:var(--mono);font-size:10px;letter-spacing:.2em}
-.ipc-glass .cf-title{margin:0 0 6px}
-.ipc-glass .cf-sub{color:rgba(245,245,245,.75)!important}
+/* contact form — glassmorphism skin retired; the surface speaks the club's
+   language (dark panels, sharp 1px borders, mono type) like everything else */
 .ipc-glass-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0 8px}
-.ipc-glass-chip{background:linear-gradient(145deg,rgba(255,255,255,.11),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:16px 18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.ipc-glass-chip{background:var(--panel);border:1px solid var(--line-2);border-radius:0;padding:16px 18px;transition:border-color .25s}
+.ipc-glass-chip:hover{border-color:rgba(255,255,255,.4)}
 .ipc-glass-chip b{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--white);margin-bottom:7px}
 .ipc-glass-chip small{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:rgba(240,240,240,.62);line-height:1.7}
 .socials .social{transition:border-color .25s,background .25s}
@@ -1621,7 +1623,7 @@ img.tc-true{filter:none !important}
         <div class="ipc-glass-chip"><b>FREE SHIPPING</b><small>NO MINIMUM — WHERE COVERAGE REACHES</small></div>
       </div>
       <!-- message box — the only contact channel, nothing else collects or shows an email -->
-      <form class="contact-form ipc-glass reveal-sm" id="contactForm" style="--d:.3s" novalidate>
+      <form class="contact-form reveal-sm" id="contactForm" style="--d:.3s" novalidate>
         <p class="cf-title">CONTACT THE CLUB</p>
         <p class="cf-sub">Have a question or need assistance? Send us a message and our team will be in touch.</p>
         <div class="cf-grid">
@@ -2410,7 +2412,7 @@ img.tc-true{filter:none !important}
       <a href="#/terms" data-route="terms">TERMS &amp; CONDITIONS</a>
       <a href="#/privacy" data-route="privacy">PRIVACY POLICY</a>
       <p>MADE IN THE PHILIPPINES — EST. 2023</p>
-      <p>MADE BY VISION</p>
+      <p>MADE BY VIZTECH STUDIOS</p>
       <a href="#/" data-anchor="#top">BACK TO TOP &uarr;</a>
     </div>
   </div>
@@ -2701,7 +2703,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v23-20261123-accountfixes';
+  var IPC_BUILD = 'ipc-v24-20261123-contactviztech';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
