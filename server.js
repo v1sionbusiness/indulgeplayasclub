@@ -171,9 +171,54 @@ const PRODUCTS = [
   { id: "stripe-ls",    name: "STRIPE LONG SLEEVE", priceCentavos:  95000, sizes: ["S","M","L","XL"],   colors: ["BLACK / WHITE"] },
   { id: "club-tote",    name: "CLUB TOTE",          priceCentavos:  65000, sizes: ["OS"],               colors: ["HEAVY BLACK"] },
 ];
-const SHIPPING_CENTAVOS = 0; /* Free at checkout — courier coverage depends on the
-   member's location (see T&C 04); where a courier can't reach, the club sorts
-   a Metro Manila meetup first. */
+/* ---------- SHIPPING — priced by location, not by guesswork ----------
+   Metro Manila rides a flat rate; everywhere else pays by zone. The
+   tables below are the whole pricing model — edit a fee here and the
+   checkout estimate, the voucher math and the order document all
+   follow. The server recomputes the fee from the delivery address when
+   the order is placed, so the number on the order is the real one.
+   Rates are integer centavos. Keys are normalized (lowercase, ñ -> n,
+   punctuation -> spaces) and matched as whole words on BOTH the city
+   and the province field. Metro Manila is checked first so "quezon
+   city" wins over the bare "quezon" province key. */
+const SHIPPING_ZONES = [
+  { key: "metro_manila", fee: 6000, label: "METRO MANILA",
+    provinces: ["metro manila", "ncr", "national capital region", "manila"],
+    cities: ["quezon city", "manila", "makati", "taguig", "pasig", "pasay", "mandaluyong", "san juan", "marikina", "caloocan", "malabon", "navotas", "valenzuela", "paranaque", "las pinas", "muntinlupa", "pateros"] },
+  { key: "greater_manila", fee: 10000, label: "GREATER MANILA",
+    provinces: ["rizal", "cavite", "laguna", "bulacan"],
+    cities: ["antipolo", "cainta", "bacoor", "imus", "dasmariinas", "general trias", "santa rosa", "calamba", "san pedro", "binan", "cabuyao"] },
+  { key: "rest_luzon", fee: 13000, label: "REST OF LUZON",
+    provinces: ["batangas", "pampanga", "zambales", "bataan", "tarlac", "pangasinan", "nueva ecija", "aurora", "quezon", "marinduque", "mindoro oriental", "oriental mindoro", "mindoro occidental", "occidental mindoro", "palawan", "romblon", "albay", "camarines norte", "camarines sur", "catanduanes", "sorsogon", "masbate", "batanes", "cagayan", "isabela", "nueva vizcaya", "quirino", "ifugao", "mountain province", "benguet", "kalinga", "abra", "ilocos norte", "ilocos sur", "la union"],
+    cities: ["baguio", "angeles", "san fernando", "olongapo", "cabanatuan", "legazpi", "naga", "lucena", "batangas city", "lipa", "tarlac city", "vigan", "laoag", "tuguegarao", "dagupan"] },
+  { key: "visayas", fee: 16000, label: "VISAYAS",
+    provinces: ["cebu", "bohol", "negros occidental", "negros oriental", "siquijor", "samar", "eastern samar", "northern samar", "western samar", "leyte", "southern leyte", "biliran", "iloilo", "guimaras", "capiz", "aklan", "antique"],
+    cities: ["cebu city", "mandaue", "lapu lapu", "iloilo city", "bacolod", "tacloban", "ormoc", "roxas", "calbayog", "dumaguete", "tagbilaran"] },
+  { key: "mindanao", fee: 18000, label: "MINDANAO",
+    provinces: ["zamboanga del norte", "zamboanga del sur", "zamboanga sibugay", "zamboanga city", "misamis oriental", "misamis occidental", "lanao del norte", "lanao del sur", "bukidnon", "camiguin", "cotabato", "north cotabato", "south cotabato", "sultan kudarat", "sarangani", "maguindanao", "davao del sur", "davao del norte", "davao oriental", "davao de oro", "davao occidental", "agusan del norte", "agusan del sur", "surigao del norte", "surigao del sur", "dinagat islands", "basilan", "sulu", "tawi tawi"],
+    cities: ["davao city", "cagayan de oro", "general santos", "butuan", "iligan", "tagum", "mati", "koronadal", "dipolog", "pagadian", "surigao city"] },
+];
+const SHIPPING_DEFAULT_FEE = 18000; /* an address outside every table pays the standard rate */
+const SHIPPING_DEFAULT_LABEL = "STANDARD RATE";
+
+function zoneNorm(s) {
+  return String(s || "").toLowerCase()
+    .replace(/ñ/g, "n")
+    .replace(/[-.,']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function computeShipping(city, province) {
+  const hay = " " + zoneNorm(city) + " " + zoneNorm(province) + " ";
+  for (const z of SHIPPING_ZONES) {
+    const keys = z.provinces.concat(z.cities);
+    if (keys.some((k) => hay.indexOf(" " + k + " ") !== -1)) {
+      return { fee: z.fee, zone: z.label, key: z.key };
+    }
+  }
+  return { fee: SHIPPING_DEFAULT_FEE, zone: SHIPPING_DEFAULT_LABEL, key: "standard" };
+}
 
 /* Share-card data for the baked-in shelf. The server mirrors the client's
    product pages so /p/<id> links unfurl with a real product card and Product
@@ -322,7 +367,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v25-20261123-cartopsadmin";
+const BUILD_STAMP = "ipc-v26-20261123-shiptrackpolish";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -1998,7 +2043,9 @@ async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos) {
   }
   const discountCentavos = calculateVoucherDiscount(subtotalCentavos, voucher);
   if (discountCentavos <= 0) throw new Error("THIS VOUCHER DOES NOT APPLY TO YOUR CURRENT BAG.");
-  if (subtotalCentavos + SHIPPING_CENTAVOS - discountCentavos < 100) {
+  /* shipping is priced from the delivery address at order time — the
+     voucher check here judges the pieces alone */
+  if (subtotalCentavos - discountCentavos < 100) {
     throw new Error("THE VOUCHER MUST LEAVE AT LEAST ₱1.00 TO PAY.");
   }
   return { voucher, code, discountCentavos };
@@ -2016,13 +2063,20 @@ async function handleValidateVoucher(req, res) {
     const phone = await linkAccountPhone(d, found.user, body.phone);
     const subtotalCentavos = subtotalFromCart(body.items);
     const result = await resolveVoucher(d, body.code, found.user, phone, subtotalCentavos);
+    /* with the member's city + province in, the estimate carries the real
+       zone rate; before that, shipping stays out of the math */
+    const ship = body.city
+      ? computeShipping(String(body.city), String(body.province || body.city))
+      : { fee: 0, zone: null, key: "unknown" };
     return send(res, 200, {
       ok: true,
       code: result.code,
       label: result.voucher.label || result.code,
       subtotalCentavos,
       discountCentavos: result.discountCentavos,
-      totalCentavos: Math.max(0, subtotalCentavos + SHIPPING_CENTAVOS - result.discountCentavos),
+      shippingCentavos: ship.fee,
+      shippingZone: ship.zone,
+      totalCentavos: Math.max(0, subtotalCentavos + ship.fee - result.discountCentavos),
       message: "VOUCHER APPLIED — YOUR DISCOUNT IS RESERVED WHEN YOU PLACE THE ORDER.",
     });
   } catch (err) {
@@ -2277,6 +2331,11 @@ async function handleCreateOrder(req, res) {
     return fail(res, 422, "invalid", "COMPLETE THE DELIVERY DETAILS BEFORE PLACING THE ORDER.");
   }
 
+  /* shipping is the server's call, priced from the delivery address —
+     the client's number is an estimate, this one is the order */
+  const ship = computeShipping(city, province);
+  const shippingCentavos = ship.fee;
+
   let voucherReservation = null;
   let voucherDatabase = null;
   let orderSaved = false;
@@ -2355,7 +2414,7 @@ async function handleCreateOrder(req, res) {
       }
     }
     const discountCentavos = voucherResult ? voucherResult.discountCentavos : 0;
-    const totalCentavos = subtotalCentavos + SHIPPING_CENTAVOS - discountCentavos;
+    const totalCentavos = subtotalCentavos + shippingCentavos - discountCentavos;
     if (totalCentavos < 100) return fail(res, 422, "voucher_too_large", "THE VOUCHER MUST LEAVE AT LEAST ₱1.00 TO PAY.");
 
     const orderDoc = {
@@ -2379,7 +2438,8 @@ async function handleCreateOrder(req, res) {
       subtotalCentavos,
       discountCentavos,
       voucherCode: voucherResult ? voucherResult.code : null,
-      shippingCentavos: SHIPPING_CENTAVOS,
+      shippingCentavos,
+      shippingZone: ship.zone,
       totalCentavos,
       status: "awaiting_payment",
       createdAt: now,
@@ -2414,7 +2474,8 @@ async function handleCreateOrder(req, res) {
       subtotalCentavos,
       discountCentavos,
       voucherCode: voucherResult ? voucherResult.code : null,
-      shippingCentavos: SHIPPING_CENTAVOS,
+      shippingCentavos,
+      shippingZone: ship.zone,
       guest: guestMode,
       ...(guestToken ? { guestToken } : {}),
     });
@@ -4364,8 +4425,10 @@ async function handleSupportMine(req, res) {
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
+    /* closed conversations file out of the member's account view — the
+       record stays in the database, the list stays clean */
     const rows = await d.collection("supportTickets")
-      .find({ userId: found.user._id }).sort({ updatedAt: -1 }).limit(100).toArray();
+      .find({ userId: found.user._id, status: { $ne: "closed" } }).sort({ updatedAt: -1 }).limit(100).toArray();
     const unread = rows.filter((r) => r.customerUnread).length;
     return send(res, 200, { ok: true, tickets: rows.map(supportTicketView), unread });
   } catch (err) {
@@ -4432,9 +4495,11 @@ async function handleAdminSupport(req, res) {
   try {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
+    /* closed tickets leave the desk the moment they close — the record
+       lives on in the database and the activity log, not on this screen */
     const rows = await d.collection("supportTickets")
-      .find({}).sort({ updatedAt: -1 }).limit(200).toArray();
-    const counts = { open: 0, in_progress: 0, resolved: 0, closed: 0 };
+      .find({ status: { $ne: "closed" } }).sort({ updatedAt: -1 }).limit(200).toArray();
+    const counts = { open: 0, in_progress: 0, resolved: 0 };
     rows.forEach((r) => { if (counts[r.status] !== undefined) counts[r.status]++; });
     return send(res, 200, { ok: true, tickets: rows.map(supportTicketView), counts });
   } catch (err) {

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-23 — v21 growth platform -->
+<!-- IPC BUILD 2026-11-23 — v26 shipping rates · unique tracking · polish pass -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -994,6 +994,42 @@ img.tc-true{filter:none !important}
 .usd-hint{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
 .focus-visible-pass:focus-visible{outline:2px solid var(--white);outline-offset:2px}
 </style>
+<style id="ipc-polish-v26">
+/* ================================================================
+   IPC POLISH LAYER — v26 professional finish. Additive only:
+   depth, motion and the update chip. Nothing here rewrites the
+   monochrome system above.
+   ================================================================ */
+.ipc-update-chip{position:fixed;right:18px;bottom:18px;z-index:130;display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line-2);padding:12px 14px;font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--text);text-transform:uppercase;box-shadow:0 18px 50px rgba(0,0,0,.55);animation:chipIn .45s var(--ease)}
+.ipc-update-chip .uc-dot{width:7px;height:7px;background:var(--white);border-radius:50%;animation:blink 1.2s infinite}
+.ipc-update-chip .uc-text{color:var(--muted)}
+.ipc-update-chip .uc-load{background:var(--white);color:var(--black);border:1px solid var(--white);padding:7px 13px;font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;cursor:pointer}
+.ipc-update-chip .uc-load:hover{background:var(--black);color:var(--white)}
+.ipc-update-chip .uc-x{color:var(--faint);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+.ipc-update-chip .uc-x:hover{color:var(--white)}
+@keyframes chipIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+/* buttons settle after lifting */
+.btn-w,.btn-o,.btn-k,.qty-btn,.uc-load{transition:transform .16s var(--ease),box-shadow .16s var(--ease),background .16s var(--ease),color .16s var(--ease),border-color .16s var(--ease)}
+.btn-w:not(:disabled):hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(255,255,255,.09)}
+.btn-o:not(:disabled):hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.45);border-color:var(--white)}
+.btn-w:not(:disabled):active,.btn-o:not(:disabled):active,.btn-k:active{transform:translateY(0);box-shadow:none}
+/* fields answer the hand */
+.inp{transition:border-color .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease)}
+.inp:focus{border-color:var(--white);background:var(--panel-2);box-shadow:inset 0 0 0 1px var(--white)}
+/* panels breathe */
+.bag-line,.sup-ticket,.co-summary,.ipc-voucher-box,.auth-panel,.feat-row,.method{transition:border-color .25s var(--ease),box-shadow .25s var(--ease)}
+.bag-line:hover,.sup-ticket:hover{border-color:var(--line-2)}
+.bag-line:hover{box-shadow:0 14px 40px rgba(0,0,0,.3)}
+.co-summary,.ipc-voucher-box{box-shadow:0 20px 60px rgba(0,0,0,.28)}
+/* admin console: tabs with an underline memory */
+.adm-tab{position:relative}
+.adm-tab::after{content:"";position:absolute;left:18px;right:18px;bottom:6px;height:1px;background:var(--white);transform:scaleX(0);transform-origin:left;transition:transform .25s var(--ease)}
+.adm-tab:not(.active):hover{color:var(--text)}
+.adm-tab:not(.active):hover::after{transform:scaleX(1)}
+/* checkout shipping note */
+.co-ship-note{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase;margin-top:10px;line-height:1.9}
+@media(max-width:640px){.ipc-update-chip{left:14px;right:14px;bottom:14px;justify-content:space-between}.ipc-update-chip .uc-text{display:none}}
+</style>
 <link rel="canonical" href="https://indulgeplayasclub.onrender.com/" />
 <meta property="og:site_name" content="INDULGE PLAYAS CLUB" />
 <meta property="og:type" content="website" />
@@ -1021,8 +1057,8 @@ img.tc-true{filter:none !important}
 <header class="nav" id="nav">
   <div class="topstrip" aria-hidden="true">
     <div class="mtrack">
-      <div class="mitems"><span>FREE SHIPPING — WHERE COVERAGE REACHES</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
-      <div class="mitems"><span>FREE SHIPPING — WHERE COVERAGE REACHES</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
+      <div class="mitems"><span>SHIPPING BY LOCATION — FLAT RATE IN METRO MANILA</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
+      <div class="mitems"><span>SHIPPING BY LOCATION — FLAT RATE IN METRO MANILA</span><span>STRICTLY FOR PLAYAS ONLY</span><span>EST. 2023 — PH</span><span>IPC PAY — QR ONLY</span><span>SMALL BATCHES ONLY</span></div>
     </div>
   </div>
   <nav class="nav-inner" aria-label="Main navigation">
@@ -1129,8 +1165,8 @@ img.tc-true{filter:none !important}
 <section class="marquee" aria-hidden="true">
   <div class="mwrap">
     <div class="mtrack">
-      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">FREE SHIPPING — WHERE COVERAGE REACHES <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
-      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">FREE SHIPPING — WHERE COVERAGE REACHES <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
+      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">SHIPPING BY LOCATION — FLAT IN METRO MANILA <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
+      <div class="mitems"><span class="mitem">INDULGE PLAYAS CLUB <i></i></span><span class="mitem">STRICTLY FOR PLAYAS ONLY <i></i></span><span class="mitem">SHIPPING BY LOCATION — FLAT IN METRO MANILA <i></i></span><span class="mitem">MADE IN THE PHILIPPINES <i></i></span><span class="mitem">EST. 2023 <i></i></span><span class="mitem">LIMITED DROPS <i></i></span><span class="mitem">FRESHNESS ERRDAY <i></i></span><span class="mitem">HEAVY FABRIC <i></i></span><span class="mitem">STREETS AND SHORE <i></i></span><span class="mitem">WEAR THE CLUB <i></i></span></div>
     </div>
   </div>
 </section>
@@ -1144,7 +1180,7 @@ img.tc-true{filter:none !important}
     </div>
     <div class="feat-grid" id="featGrid"><!-- rendered by JS --></div>
     <div class="shop-cta-row reveal-sm">
-      <p class="count-chip">FREE SHIPPING ON EVERY ORDER — WHERE COVERAGE REACHES</p>
+      <p class="count-chip">SHIPPING BY LOCATION — FLAT RATE METRO MANILA, ZONE RATES BEYOND</p>
       <a href="#/shop" class="link-arrow" data-route="shop">SHOP ALL PIECES
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
       </a>
@@ -1358,7 +1394,7 @@ img.tc-true{filter:none !important}
       <div class="about-body">
         <div class="about-copy reveal-sm">
           <p>INDULGE PLAYAS CLUB is a Manila-born clothing brand, running since 2023 — founded by a small circle of friends who wanted pieces they couldn't find in local stores: clean designs, heavyweight fabric, and fits that hold up from the morning commute to the late-night gig. The OG logo tee with its silver stitch marked the beginning, and that same club mark still leads every drop.</p>
-          <p>The brand grew out of the local scene — the music, the courts, the streets — and it still moves that way. Every drop gets announced on our Facebook page first, reserved by message, then released in numbered batches: meetup around the metro or shipped anywhere in the country — free where courier coverage reaches. That model keeps the circle small and the quality up — pieces we actually wear, tested where we actually live.</p>
+          <p>The brand grew out of the local scene — the music, the courts, the streets — and it still moves that way. Every drop gets announced on our Facebook page first, reserved by message, then released in numbered batches: meetup around the metro or shipped anywhere in the country — priced by location, one flat rate around Metro Manila and zone rates beyond. That model keeps the circle small and the quality up — pieces we actually wear, tested where we actually live.</p>
           <p>Every piece we release carries the club motto — strictly for playas only. It sets the standard for who we build for: people who play hard, work harder, and look right doing both. The circle stays small on purpose, and every new member earns the spot.</p>
         </div>
         <div class="pillars">
@@ -1379,8 +1415,8 @@ img.tc-true{filter:none !important}
           </div>
           <div class="pillar reveal-x" style="--d:.3s">
             <span class="num">04</span>
-            <span class="k">Free Shipping</span>
-            <span class="v">Orders ship free where courier coverage reaches — no minimum spend. Outside covered areas, the club sorts a meetup with you first.</span>
+            <span class="k">Shipping By Location</span>
+            <span class="v">Metro Manila rides one flat rate; outside the metro, shipping is priced by zone — the exact rate shows at checkout before you confirm.</span>
           </div>
         </div>
         <div class="about-mark reveal-sm" style="--d:.15s">
@@ -1421,7 +1457,7 @@ img.tc-true{filter:none !important}
         <p class="kicker">FROM THE VAULT</p>
         <h2>Where it<br /><span class="ts">started.</span></h2>
       </div>
-      <p class="vault-p reveal-sm" style="--d:.1s">Straight outta Sampaloc, Manila — this is where the club began. Before the numbered batches and the free shipping, there was the circle, one heavy tee and graphics loud enough to speak for themselves. We keep the early work archived here — same energy, cleaner lines, same club.</p>
+      <p class="vault-p reveal-sm" style="--d:.1s">Straight outta Sampaloc, Manila — this is where the club began. Before the numbered batches and the drop calendar, there was the circle, one heavy tee and graphics loud enough to speak for themselves. We keep the early work archived here — same energy, cleaner lines, same club.</p>
       <div class="vault-solo-wrap">
         <figure class="vault-item reveal" style="--d:.05s">
           <div class="vimg">
@@ -1465,7 +1501,7 @@ img.tc-true{filter:none !important}
         <div class="cop-step reveal-x" style="--d:.3s">
           <span class="num">04</span>
           <h3>MEETUP OR SHIP NATIONWIDE</h3>
-          <p>Pick it up around Metro Manila, or sit back — it ships anywhere in the Philippines, free where courier coverage reaches and standard rates outside covered areas, packed and handed to a trusted local courier.</p>
+          <p>Pick it up around Metro Manila, or sit back — it ships anywhere in the Philippines — flat rate around Metro Manila, zone rates beyond, shown at checkout before you confirm — packed and handed to a trusted local courier.</p>
         </div>
       </div>
       <div class="cop-cards">
@@ -1577,7 +1613,7 @@ img.tc-true{filter:none !important}
         </details>
         <details class="faq-item reveal-sm" style="--d:.15s">
           <summary>Is shipping really free?<span class="plus" aria-hidden="true"></span></summary>
-          <p class="a">Shipping is free on every order, no minimum spend — wherever courier coverage reaches. Metro Manila usually takes a few days; provinces a little longer, depending on your location.</p>
+          <p class="a">Shipping is priced by location: one flat rate around Metro Manila, zone rates for the rest of the country — the exact amount shows in the bag and at checkout before you confirm. Metro Manila usually takes a few days; provinces a little longer.</p>
         </details>
         <details class="faq-item reveal-sm" style="--d:.2s">
           <summary>What if my size sells out?<span class="plus" aria-hidden="true"></span></summary>
@@ -1620,7 +1656,7 @@ img.tc-true{filter:none !important}
       <div class="ipc-glass-facts reveal-sm" style="--d:.25s">
         <div class="ipc-glass-chip"><b>REPLIES WITHIN A DAY</b><small>EVERY MESSAGE IS READ BY A HUMAN</small></div>
         <div class="ipc-glass-chip"><b>MEETUPS — METRO MANILA</b><small>SPOTS CONFIRMED WHEN YOU RESERVE</small></div>
-        <div class="ipc-glass-chip"><b>FREE SHIPPING</b><small>NO MINIMUM — WHERE COVERAGE REACHES</small></div>
+        <div class="ipc-glass-chip"><b>SHIPPING BY LOCATION</b><small>FLAT RATE METRO MANILA — ZONES BEYOND</small></div>
       </div>
       <!-- message box — the only contact channel, nothing else collects or shows an email -->
       <form class="contact-form reveal-sm" id="contactForm" style="--d:.3s" novalidate>
@@ -1674,7 +1710,7 @@ img.tc-true{filter:none !important}
     <p class="terms-updated reveal-sm" style="--d:.15s">LAST UPDATED — NOVEMBER 2026</p>
 
     <div class="terms-short reveal-sm" style="--d:.2s">
-      <p>THE SHORT VERSION: buy through the shop, pay with IPC Pay (QR), the club verifies every payment by hand, and your order ships anywhere in the Philippines — free where courier coverage reaches. Pre-orders are produced in their window and ship when the run lands. Every verified purchase levels you up — ROOKIE, HOMIE, OG, VIP — with perks at each level. Be straight with us and we'll be straight with you.</p>
+      <p>THE SHORT VERSION: buy through the shop, pay with IPC Pay (QR), the club verifies every payment by hand, and your order ships anywhere in the Philippines — shipping priced by location. Pre-orders are produced in their window and ship when the run lands. Every verified purchase levels you up — ROOKIE, HOMIE, OG, VIP — with perks at each level. Be straight with us and we'll be straight with you.</p>
     </div>
 
     <div class="terms-block reveal-sm">
@@ -1684,7 +1720,7 @@ img.tc-true{filter:none !important}
       <ul>
         <li>An order is only locked in once it has a reference number (IPC-XXXXX) on your account.</li>
         <li>Orders unpaid after 48 hours can be released back to the batch.</li>
-        <li>Prices are in Philippine pesos (PHP) and include free shipping where courier coverage allows.</li>
+        <li>Prices are in Philippine pesos (PHP); shipping is priced by location and shown at checkout before you confirm.</li>
       </ul>
     </div>
 
@@ -1709,7 +1745,7 @@ img.tc-true{filter:none !important}
 
     <div class="terms-block reveal-sm">
       <h3>04 — SHIPPING</h3>
-      <p>Shipping is free wherever courier coverage reaches — whether your area is covered depends on your location, and the club confirms it with you before anything goes out. Once payment is verified, the order is packed and handed to a trusted local courier.</p>
+      <p>Shipping is priced by location — one flat rate around Metro Manila, zone rates everywhere else — and the exact rate shows at checkout before anything goes out. Once payment is verified, the order is packed and handed to a trusted local courier.</p>
       <ul>
         <li>Metro Manila usually lands within a few days; provinces take a little longer — the exact timing depends on your location and the courier.</li>
         <li>If the courier doesn't reach your address, the club messages you first to sort a Metro Manila meetup or another drop-off — nothing ships blind and nothing is charged without a heads-up.</li>
@@ -1840,7 +1876,7 @@ img.tc-true{filter:none !important}
       <div class="bag-summary">
         <p class="sum-row"><span>SUBTOTAL</span><b id="bagSubtotal">₱0</b></p>
         <p class="sum-row" id="bagDiscountRow" style="display:none"><span>VOUCHER</span><b id="bagVoucherNote"></b></p>
-        <p class="sum-row"><span>SHIPPING</span><b>FREE — BASED ON LOCATION</b></p>
+        <p class="sum-row"><span>SHIPPING</span><b id="bagShipping">—</b></p>
         <p class="sum-row total"><span>TOTAL</span><b id="bagTotal">₱0</b></p>
         <p class="ship-note">PAID WITH IPC PAY (QR) — EVERY PAYMENT VERIFIED BY HAND BEFORE ANYTHING SHIPS. VOUCHER DISCOUNTS LOCK IN AT CHECKOUT.</p>
         <div class="bag-actions">
@@ -1926,12 +1962,13 @@ img.tc-true{filter:none !important}
       <div id="coLines"></div>
       <div class="co-totals">
         <p class="sum-row"><span>SUBTOTAL</span><b id="coSubtotal">₱0</b></p>
-        <p class="sum-row"><span>SHIPPING</span><b>FREE — BASED ON LOCATION</b></p>
+        <p class="sum-row"><span>SHIPPING</span><b id="coShipping">—</b></p>
         <p class="sum-row total"><span>TOTAL</span><b id="coTotal">₱0</b></p>
+        <p class="co-ship-note" id="coShipNote">RATE APPEARS ONCE CITY + PROVINCE ARE IN — FROM ₱60.00</p>
       </div>
       <p class="pay-note">THE TOTAL IS LOCKED IN WRITING THE MOMENT THE ORDER IS PLACED. PAYMENT HAPPENS ON THE NEXT SCREEN VIA IPC PAY — QR ONLY FOR NOW, CARDS AND E-WALLETS ARE COMING SOON.</p>
       <p class="pay-note">TOTAL IN YOUR CURRENCY: <span id="coUsd">—</span> (APPROXIMATION — IPC BILLS IN PESOS).</p>
-      <div class="duty-note"><p>SHIPPING IS FREE WHERE COURIER COVERAGE REACHES — IT DEPENDS ON YOUR LOCATION AND SHOWS BEFORE YOU CONFIRM. INTERNATIONAL ORDERS: ANY CUSTOMS DUTIES OR TAXES ON ARRIVAL ARE THE BUYER'S SIDE OF THE DEAL.</p></div>
+      <div class="duty-note"><p>SHIPPING IS PRICED BY LOCATION — THE EXACT RATE SHOWS BEFORE YOU CONFIRM. INTERNATIONAL ORDERS: ANY CUSTOMS DUTIES OR TAXES ON ARRIVAL ARE THE BUYER'S SIDE OF THE DEAL.</p></div>
     </aside>
   </div>
 </div>
@@ -1955,7 +1992,7 @@ img.tc-true{filter:none !important}
             <span class="num">01</span>
             <div>
               <h4>ADD TO BAG &amp; CHECK OUT</h4>
-              <p>Bag the pieces, drop your delivery details, place the order. The total is locked in writing — shipping is free where courier coverage reaches, and rates show at checkout before you confirm.</p>
+              <p>Bag the pieces, drop your delivery details, place the order. The total is locked in writing — shipping is priced by location and shows at checkout before you confirm.</p>
             </div>
           </div>
           <div class="pay-step">
@@ -2396,7 +2433,7 @@ img.tc-true{filter:none !important}
           <li><a href="https://www.facebook.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer">FACEBOOK — INDULGE PLAYAS CLUB</a></li>
           <li><a href="https://www.instagram.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer">INSTAGRAM — @INDULGEPLAYASCLUB</a></li>
           <li><span>MEETUPS — METRO MANILA</span></li>
-          <li><span>FREE SHIPPING — BASED ON LOCATION</span></li>
+          <li><span>SHIPPING BY LOCATION — FLAT RATE METRO MANILA</span></li>
         </ul>
       </div>
     </div>
@@ -2423,7 +2460,7 @@ img.tc-true{filter:none !important}
 <div class="lightbox" id="lightbox"><img id="lightboxImg" alt="Payment proof" /></div>
 
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"ClothingStore","name":"INDULGE PLAYAS CLUB","alternateName":"IPC","description":"Local clothing brand from the Philippines. Heavyweight pieces, limited drops, free shipping where coverage reaches. Strictly for playas only.","foundingDate":"2023","address":{"@type":"PostalAddress","addressLocality":"Manila","addressCountry":"PH"},"sameAs":["https://www.facebook.com/indulgeplayasclub","https://www.instagram.com/indulgeplayasclub"]}
+{"@context":"https://schema.org","@type":"ClothingStore","name":"INDULGE PLAYAS CLUB","alternateName":"IPC","description":"Local clothing brand from the Philippines. Heavyweight pieces, limited drops, shipping priced by location. Strictly for playas only.","foundingDate":"2023","address":{"@type":"PostalAddress","addressLocality":"Manila","addressCountry":"PH"},"sameAs":["https://www.facebook.com/indulgeplayasclub","https://www.instagram.com/indulgeplayasclub"]}
 </script>
 <script>
 /* BLOCK 1 — CORE + ANIMATIONS (runs first, fully standalone): footer year +
@@ -2704,7 +2741,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v25-20261123-cartopsadmin';
+  var IPC_BUILD = 'ipc-v26-20261123-shiptrackpolish';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -2720,18 +2757,16 @@ img.tc-true{filter:none !important}
             if (localStorage.getItem('ipc_build_seen') === h.build) return;
             localStorage.setItem('ipc_build_seen', h.build);
           } catch (e1) { /* storage blocked — the 60s guard below still caps us */ }
-          if (Date.now() - __ipcReloadGuard < 60000) return; /* at most one nudge a minute */
+          if (Date.now() - __ipcReloadGuard < 60000) return; /* at most one chip a minute */
           __ipcReloadGuard = Date.now();
           var head = (location.hash || '#/').split('?')[0];
           var midPayment = head === '#/checkout' || head === '#/payorder' || head.indexOf('#/pay/') === 0;
           if (midPayment) {
-            /* never yank someone mid-payment — nudge only */
+            /* never interrupt a payment — the chip waits for a calmer moment */
             IPC.toast('THE CLUB SHIPPED AN UPDATE — IT LOADS AFTER THIS PAYMENT.');
             return;
           }
-          if (document.hidden) { location.reload(); return; }
-          IPC.toast('THE CLUB SHIPPED AN UPDATE — REFRESHING THE SITE.');
-          setTimeout(function () { location.reload(); }, 900);
+          IPC.updatePrompt(h.build);
         })
         .catch(function () { /* offline / cold server — ignore */ });
     } catch (e) { /* ignore */ }
@@ -2740,6 +2775,80 @@ img.tc-true{filter:none !important}
   window.addEventListener('focus', __ipcBuildCheck);
   setInterval(function () { if (!document.hidden) __ipcBuildCheck(); }, 120000);
   setTimeout(__ipcBuildCheck, 6000);
+
+  /* nothing on this site reloads itself anymore — when the club ships an
+     update, a quiet chip appears and the visitor loads it when they
+     choose. The only reload in the codebase lives behind that button. */
+  IPC.updatePrompt = function (build) {
+    var old = document.getElementById('ipcUpdateChip');
+    if (old) { old.setAttribute('data-build', build || ''); return; }
+    var chip = document.createElement('div');
+    chip.id = 'ipcUpdateChip';
+    chip.className = 'ipc-update-chip';
+    chip.setAttribute('role', 'status');
+    chip.innerHTML = '<span class="uc-dot"></span><span class="uc-text">SITE UPDATE READY</span>' +
+      '<button type="button" class="uc-load">LOAD IT</button>' +
+      '<button type="button" class="uc-x" aria-label="Dismiss">&times;</button>';
+    chip.querySelector('.uc-load').addEventListener('click', function () { location.reload(); });
+    chip.querySelector('.uc-x').addEventListener('click', function () { chip.remove(); });
+    document.body.appendChild(chip);
+  };
+
+  /* ---- shipping: priced by location, not by guesswork ----------------
+     Mirror of server.js SHIPPING_ZONES — the server recomputes the real
+     fee from the delivery address the moment the order is placed, so
+     this number is for the eyes; the order document is the law. ---- */
+  IPC.SHIPPING_MIN_FEE = 6000;
+  IPC.shippingZones = [
+    { fee: 6000, zone: 'METRO MANILA', keys: ['metro manila', 'ncr', 'national capital region', 'manila', 'quezon city', 'makati', 'taguig', 'pasig', 'pasay', 'mandaluyong', 'san juan', 'marikina', 'caloocan', 'malabon', 'navotas', 'valenzuela', 'paranaque', 'las pinas', 'muntinlupa', 'pateros'] },
+    { fee: 10000, zone: 'GREATER MANILA', keys: ['rizal', 'cavite', 'laguna', 'bulacan', 'antipolo', 'cainta', 'bacoor', 'imus', 'dasmariinas', 'general trias', 'santa rosa', 'calamba', 'san pedro', 'binan', 'cabuyao'] },
+    { fee: 13000, zone: 'REST OF LUZON', keys: ['batangas', 'pampanga', 'zambales', 'bataan', 'tarlac', 'pangasinan', 'nueva ecija', 'aurora', 'quezon', 'marinduque', 'mindoro oriental', 'oriental mindoro', 'mindoro occidental', 'occidental mindoro', 'palawan', 'romblon', 'albay', 'camarines norte', 'camarines sur', 'catanduanes', 'sorsogon', 'masbate', 'batanes', 'cagayan', 'isabela', 'nueva vizcaya', 'quirino', 'ifugao', 'mountain province', 'benguet', 'kalinga', 'abra', 'ilocos norte', 'ilocos sur', 'la union', 'baguio', 'angeles', 'san fernando', 'olongapo', 'cabanatuan', 'legazpi', 'naga', 'lucena', 'batangas city', 'lipa', 'tarlac city', 'vigan', 'laoag', 'tuguegarao', 'dagupan'] },
+    { fee: 16000, zone: 'VISAYAS', keys: ['cebu', 'bohol', 'negros occidental', 'negros oriental', 'siquijor', 'samar', 'eastern samar', 'northern samar', 'western samar', 'leyte', 'southern leyte', 'biliran', 'iloilo', 'guimaras', 'capiz', 'aklan', 'antique', 'cebu city', 'mandaue', 'lapu lapu', 'iloilo city', 'bacolod', 'tacloban', 'ormoc', 'roxas', 'calbayog', 'dumaguete', 'tagbilaran'] },
+    { fee: 18000, zone: 'MINDANAO', keys: ['zamboanga del norte', 'zamboanga del sur', 'zamboanga sibugay', 'zamboanga city', 'misamis oriental', 'misamis occidental', 'lanao del norte', 'lanao del sur', 'bukidnon', 'camiguin', 'cotabato', 'north cotabato', 'south cotabato', 'sultan kudarat', 'sarangani', 'maguindanao', 'davao del sur', 'davao del norte', 'davao oriental', 'davao de oro', 'davao occidental', 'agusan del norte', 'agusan del sur', 'surigao del norte', 'surigao del sur', 'dinagat islands', 'basilan', 'sulu', 'tawi tawi', 'davao city', 'cagayan de oro', 'general santos', 'butuan', 'iligan', 'tagum', 'mati', 'koronadal', 'dipolog', 'pagadian', 'surigao city'] },
+  ];
+  IPC.shippingFor = function (city, province) {
+    var norm = function (v) {
+      return String(v || '').toLowerCase().replace(/ñ/g, 'n')
+        .replace(/[-.,']/g, ' ').replace(/\s+/g, ' ').trim();
+    };
+    var hay = ' ' + norm(city) + ' ' + norm(province) + ' ';
+    for (var i = 0; i < IPC.shippingZones.length; i++) {
+      var z = IPC.shippingZones[i];
+      for (var j = 0; j < z.keys.length; j++) {
+        if (hay.indexOf(' ' + z.keys[j] + ' ') !== -1) return { fee: z.fee, zone: z.zone };
+      }
+    }
+    return { fee: 18000, zone: 'STANDARD RATE' };
+  };
+  /* one painter for the whole checkout summary: subtotal, voucher
+     discount, live shipping by zone, grand total — all in place */
+  IPC.coPaintTotals = function () {
+    var coSub = $('#coSubtotal');
+    if (!coSub || !IPC.bag) return;
+    var voucher = IPC.appliedVoucher || null;
+    var discount = voucher && voucher.discountCentavos ? voucher.discountCentavos : 0;
+    coSub.textContent = IPC.fmtP(IPC.bag.subtotalC);
+    var dRow = $('#ipcDiscountRow');
+    if (dRow) {
+      dRow.style.display = voucher ? 'flex' : 'none';
+      var dv = $('#ipcDiscountValue');
+      if (voucher && dv) dv.textContent = '−' + IPC.fmtP(discount);
+    }
+    var city = ($('#coCity') && $('#coCity').value.trim()) || '';
+    var prov = ($('#coProvince') && $('#coProvince').value.trim()) || '';
+    var ready = Boolean(city && prov);
+    var fee = 0, zone = null;
+    if (ready) { var sh = IPC.shippingFor(city, prov); fee = sh.fee; zone = sh.zone; }
+    var shipEl = $('#coShipping');
+    if (shipEl) shipEl.textContent = ready ? IPC.fmtP(fee) + (zone ? ' — ' + zone : '') : '—';
+    var note = $('#coShipNote');
+    if (note) note.textContent = ready
+      ? zone + ' RATE — THE ORDER BILLS EXACTLY THIS AT PLACEMENT'
+      : 'RATE APPEARS ONCE CITY + PROVINCE ARE IN — FROM ' + IPC.fmtP(IPC.SHIPPING_MIN_FEE);
+    var coTotal = $('#coTotal');
+    if (coTotal) coTotal.textContent = IPC.fmtP(Math.max(0, IPC.bag.subtotalC - discount + fee));
+  };
+  IPC.appliedVoucher = null;
 
   /* ---- money: integer centavos in, peso string out ---- */
   IPC.fmtP = function (c) {
@@ -3403,7 +3512,7 @@ img.tc-true{filter:none !important}
       '<div class="spec-row"><dt>FIT</dt><dd>' + esc(p.fit) + '</dd></div>' +
       '<div class="spec-row"><dt>COLORWAYS</dt><dd>' + esc(p.colors.join(' · ')) + '</dd></div>' +
       (p.modelInfo ? '<div class="spec-row"><dt>MODEL</dt><dd>' + esc(p.modelInfo) + '</dd></div>' : '') +
-      '<div class="spec-row"><dt>SHIPPING</dt><dd>FREE — WHERE COVERAGE REACHES, DEPENDING ON YOUR LOCATION. MEETUPS AROUND METRO MANILA.</dd></div>' +
+      '<div class="spec-row"><dt>SHIPPING</dt><dd>PRICED BY LOCATION — FLAT RATE AROUND METRO MANILA, ZONE RATES BEYOND. MEETUPS AROUND METRO MANILA.</dd></div>' +
       '<div class="spec-row"><dt>PAYMENT</dt><dd>IPC Pay (QR Ph via Maya) at checkout — verified by hand before anything ships.</dd></div>';
     /* early-access state on a gated collection */
     var col = (IPC.COLLECTIONS || []).filter(function (c) { return c.slug === p.collection; })[0];
@@ -3653,6 +3762,8 @@ img.tc-true{filter:none !important}
         '</div>';
       }).join('');
       $('#bagSubtotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
+      var bagShip = $('#bagShipping');
+      if (bagShip) bagShip.textContent = 'FROM ' + IPC.fmtP(IPC.SHIPPING_MIN_FEE) + ' — BY LOCATION';
       $('#bagTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
       /* the voucher a member validated at checkout shows here too — the
          actual discount amount is computed fresh when the order is placed */
@@ -3710,6 +3821,11 @@ img.tc-true{filter:none !important}
       localStorage.setItem('ipc-delivery-v1', JSON.stringify(d));
     } catch (e) {}
   }
+  /* typing a location repaints the totals in place — no reload, no jumps */
+  ['coCity', 'coProvince', 'coPostal'].forEach(function (id) {
+    var el = $('#' + id);
+    if (el) el.addEventListener('input', function () { coRemember(); IPC.coPaintTotals(); });
+  });
   /* guest checkout flag — set when a logged-out visitor picks CONTINUE AS GUEST */
   IPC.checkoutGuest = false;
   var coGuestBtn = $('#coGuestBtn');
@@ -3747,11 +3863,12 @@ img.tc-true{filter:none !important}
         var flag = (it.issue === 'unavailable' || it.issue === 'soldout') ? ' — UNAVAILABLE' : '';
         return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + flag + '</span><span>' + IPC.fmtP(it.priceC * it.qty) + '</span></p>';
     }).join('');
-    $('#coSubtotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
-    $('#coTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
+    IPC.coPaintTotals();
     var usd = $('#coUsd');
     if (usd) usd.textContent = IPC.fmtUsd(IPC.bag.subtotalC);
-    if (!guest) coRecall();
+    /* prefill once, while the form is still empty — never overwrite
+       what the member is typing mid-session */
+    if (!guest && !$('#coName').value.trim() && !$('#coCity').value.trim()) coRecall();
   };
   document.addEventListener('ipc:auth', function () {
     var co = document.getElementById('v-checkout');
@@ -3896,7 +4013,7 @@ img.tc-true{filter:none !important}
         poState.paidHandledRef = pay.paymentReference;
       }
       headline.textContent = 'Paid. You\u2019re locked in.';
-      copy.textContent = 'The club verified your payment — the order is unlocked and being packed. Shipping is free where courier coverage reaches, Metro Manila usually lands within a few days.';
+      copy.textContent = 'The club verified your payment — the order is unlocked and being packed. Shipping is priced by your location — Metro Manila usually lands within a few days.';
       form.style.display = 'none';
       if (IPC.renderPayTracking) IPC.renderPayTracking(order);
       IPC.renderPayExtras(pay, order);
@@ -4182,7 +4299,7 @@ img.tc-true{filter:none !important}
   }
   var IPC_TIERS = [
     { key: 'ROOKIE', min: 0,
-      perks: ['MEMBER ACCOUNT + LIVE ORDER TRACKING', 'FREE SHIPPING ON EVERY ORDER — WHERE COVERAGE REACHES', 'CLUB VOUCHER ACCESS'] },
+      perks: ['MEMBER ACCOUNT + LIVE ORDER TRACKING', 'SHIPPING BY LOCATION — FLAT RATE IN METRO MANILA', 'CLUB VOUCHER ACCESS'] },
     { key: 'HOMIE', min: 250000,
       perks: ['EVERYTHING ROOKIE', 'PRIORITY PAYMENT VERIFICATION', 'FIRST DIBS ON RESTOCKS'] },
     { key: 'OG', min: 750000,
@@ -5066,7 +5183,8 @@ setTimeout(function () {
   var $ = function (s, c) { return (c || document).querySelector(s); };
   var all = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
   var esc = function (v) { return IPC.esc ? IPC.esc(v == null ? '' : String(v)) : String(v == null ? '' : v).replace(/[&<>"']/g, function (x) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]); }); };
-  var appliedVoucher = null;
+  /* shared with the checkout painter — coPaintTotals reads it */
+  IPC.appliedVoucher = null;
 
   var style = document.createElement('style');
   style.textContent = [
@@ -5144,11 +5262,9 @@ setTimeout(function () {
   }
 
   function clearVoucher(message) {
-    appliedVoucher = null;
+    IPC.appliedVoucher = null;
     try { localStorage.removeItem('ipc-voucher-code-v1'); } catch (e) {}
-    var row = $('#ipcDiscountRow');
-    if (row) row.style.display = 'none';
-    if ($('#coTotal') && IPC.bag) $('#coTotal').textContent = IPC.fmtP(IPC.bag.subtotalC);
+    if (typeof IPC.renderCheckout === 'function') { try { IPC.renderCheckout(); } catch (e2) {} }
     var msg = $('#ipcVoucherMsg');
     if (msg) { msg.textContent = message || 'FIRST-ORDER OFFERS ARE LINKED TO YOUR ACCOUNT AND MOBILE NUMBER.'; msg.className = 'ipc-voucher-msg'; }
     try { if (IPC.renderBag) IPC.renderBag(); } catch (e) {}
@@ -5161,9 +5277,9 @@ setTimeout(function () {
       if (path === '/api/auth/register') {
         opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { phone: ($('#suPhone') && $('#suPhone').value.trim()) || '' }) });
       }
-      if (path === '/api/orders' && appliedVoucher && IPC.auth && IPC.auth.user && appliedVoucher.userId === IPC.auth.user.id) {
-        opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { voucherCode: appliedVoucher.code }) });
-      } else if (path === '/api/orders' && appliedVoucher) {
+      if (path === '/api/orders' && IPC.appliedVoucher && IPC.auth && IPC.auth.user && IPC.appliedVoucher.userId === IPC.auth.user.id) {
+        opts = Object.assign({}, opts, { body: Object.assign({}, opts.body || {}, { voucherCode: IPC.appliedVoucher.code }) });
+      } else if (path === '/api/orders' && IPC.appliedVoucher) {
         clearVoucher('ACCOUNT CHANGED — APPLY THE VOUCHER AGAIN.');
       }
       return originalApi.call(this, path, opts);
@@ -5185,13 +5301,12 @@ setTimeout(function () {
     var items = (IPC.bag && IPC.bag.items || []).map(function (it) {
       return { productId: it.productId, size: it.size, color: it.color, qty: it.qty };
     });
-    IPC.api('/api/vouchers/validate', { method: 'POST', body: { code: code, phone: phone, items: items } })
+    IPC.api('/api/vouchers/validate', { method: 'POST', body: { code: code, phone: phone, items: items, city: ($('#coCity') && $('#coCity').value.trim()) || undefined, province: ($('#coProvince') && $('#coProvince').value.trim()) || undefined } })
       .then(function (d) {
-        appliedVoucher = { code: d.code, discountCentavos: d.discountCentavos, userId: IPC.auth && IPC.auth.user && IPC.auth.user.id };
+        IPC.appliedVoucher = { code: d.code, discountCentavos: d.discountCentavos, userId: IPC.auth && IPC.auth.user && IPC.auth.user.id };
         try { localStorage.setItem('ipc-voucher-code-v1', JSON.stringify({ code: d.code })); } catch (e) {}
-        $('#ipcDiscountRow').style.display = 'flex';
-        $('#ipcDiscountValue').textContent = '−' + IPC.fmtP(d.discountCentavos);
-        $('#coTotal').textContent = IPC.fmtP(d.totalCentavos);
+        /* one repaint does everything: discount row, shipping, total */
+        IPC.renderCheckout();
         msg.textContent = d.message || 'VOUCHER APPLIED.';
         msg.className = 'ipc-voucher-msg ok';
       })
@@ -5206,14 +5321,14 @@ setTimeout(function () {
 
   var phoneInput = $('#coPhone');
   if (phoneInput) phoneInput.addEventListener('input', function () {
-    if (appliedVoucher) clearVoucher('MOBILE NUMBER CHANGED — APPLY THE VOUCHER AGAIN.');
+    if (IPC.appliedVoucher) clearVoucher('MOBILE NUMBER CHANGED — APPLY THE VOUCHER AGAIN.');
   });
   document.addEventListener('ipc:bag', function () {
-    if (appliedVoucher) clearVoucher('YOUR BAG CHANGED — APPLY THE VOUCHER AGAIN.');
+    if (IPC.appliedVoucher) clearVoucher('YOUR BAG CHANGED — APPLY THE VOUCHER AGAIN.');
   });
   document.addEventListener('ipc:auth', function () {
     var user = IPC.auth && IPC.auth.user;
-    if (appliedVoucher && (!user || appliedVoucher.userId !== user.id)) clearVoucher('ACCOUNT CHANGED — APPLY THE VOUCHER AGAIN.');
+    if (IPC.appliedVoucher && (!user || IPC.appliedVoucher.userId !== user.id)) clearVoucher('ACCOUNT CHANGED — APPLY THE VOUCHER AGAIN.');
     if (user && user.phone && $('#coPhone') && $('#coPhone').value !== user.phone) $('#coPhone').value = user.phone;
   });
 
@@ -6710,13 +6825,12 @@ setTimeout(function () {
       '<div id="admAnalytics"><p class="adm-empty">LOADING ANALYTICS…</p></div>';
 
     $('#pane-support').innerHTML =
-      '<p class="count-chip">THE SUPPORT DESK — MEMBERS RAISE TICKETS FROM THEIR ACCOUNT, THE CLUB ANSWERS HERE. STATUSES: OPEN → IN PROGRESS → RESOLVED → CLOSED.</p>' +
+      '<p class="count-chip">THE SUPPORT DESK — MEMBERS RAISE TICKETS FROM THEIR ACCOUNT, THE CLUB ANSWERS HERE. STATUSES: OPEN → IN PROGRESS → RESOLVED. CLOSED CONVERSATIONS FILE OUT OF THIS VIEW AUTOMATICALLY.</p>' +
       '<div class="ana-range" id="supFilter">' +
         '<button type="button" data-st="all" class="active">ALL</button>' +
         '<button type="button" data-st="open">OPEN</button>' +
         '<button type="button" data-st="in_progress">IN PROGRESS</button>' +
         '<button type="button" data-st="resolved">RESOLVED</button>' +
-        '<button type="button" data-st="closed">CLOSED</button>' +
       '</div>' +
       '<div id="admSupport"><p class="adm-empty">LOADING TICKETS…</p></div>';
 
@@ -6846,7 +6960,7 @@ setTimeout(function () {
       var list = (d.tickets || []).filter(function (t) { return supFilterState === 'all' || t.status === supFilterState; });
       var counts = d.counts || {};
       var head = Object.keys(counts).length
-        ? '<p class="count-chip">' + (counts.open || 0) + ' OPEN · ' + (counts.in_progress || 0) + ' IN PROGRESS · ' + (counts.resolved || 0) + ' RESOLVED · ' + (counts.closed || 0) + ' CLOSED</p>' : '';
+        ? '<p class="count-chip">' + (counts.open || 0) + ' OPEN · ' + (counts.in_progress || 0) + ' IN PROGRESS · ' + (counts.resolved || 0) + ' RESOLVED</p>' : '';
       if (!list.length) { host.innerHTML = head + '<p class="adm-empty">NO TICKETS IN THIS VIEW YET — MEMBERS OPEN THEM FROM THEIR ACCOUNT PAGE.</p>'; return; }
       host.innerHTML = head + list.map(function (t) {
         var replies = (t.replies || []).map(function (r) {
@@ -6947,6 +7061,7 @@ setTimeout(function () {
       '<div class="club-card" id="supportSection" style="margin-top:18px">' +
       '<h4>SUPPORT — TALK TO THE CLUB<span id="supUnread"></span></h4>' +
       '<p>ORDER PROBLEM, SIZING QUESTION, PAYMENT CONCERN — OPEN A TICKET AND THE CLUB ANSWERS RIGHT HERE IN YOUR ACCOUNT.</p>' +
+      '<p class="sup-meta">CLOSED CONVERSATIONS FILE THEMSELVES OUT OF THIS LIST — THE CLUB KEEPS THE RECORD.</p>' +
       '<div id="supList" style="margin-top:14px"></div>' +
       '<form id="supForm" class="rev-form" style="max-width:560px;margin-top:18px" novalidate>' +
       '<label>SUBJECT<input id="supSubject" maxlength="120" placeholder="E.G. WRONG SIZE ARRIVED" /></label>' +

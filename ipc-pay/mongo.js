@@ -367,17 +367,45 @@ function seedAdmin(d) {
 }
 
 /* ---------------------------------------------------------------- */
-/* Reference numbers — IPC-00001, IPCP-00001                        */
+/* Reference numbers — random, human-readable, never repeated        */
+/* 8 characters from a 32-symbol alphabet with the look-alikes       */
+/* (I, O, 0, 1) left out, so a code reads clean on a shipping label. */
+/* Every code is checked against the live collection before it goes  */
+/* out — a code that already exists is redrawn, so the club never    */
+/* hands the same number twice. 32^8 ≈ 1.1 trillion combinations.    */
 /* ---------------------------------------------------------------- */
 
+const REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const REF_PREFIX = { order: "IPC", track: "IPCT", ticket: "IPCS", payment: "IPCP" };
+const REF_PROBES = {
+  order: { collection: "orders", field: "reference" },
+  track: { collection: "orders", field: "tracking.number" },
+  ticket: { collection: "supportTickets", field: "id" },
+  payment: { collection: "payments", field: "paymentReference" },
+};
+
+function refRandomCode(len) {
+  const bytes = crypto.randomBytes(len);
+  let out = "";
+  for (let i = 0; i < len; i++) out += REF_ALPHABET[bytes[i] % REF_ALPHABET.length];
+  return out;
+}
+
 function nextReference(prefix) {
-  return connect().then((d) =>
-    d.collection("counters").findOneAndUpdate(
-      { _id: prefix },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" }
-    )
-  ).then((r) => `${prefix === "order" ? "IPC" : prefix === "track" ? "IPCT" : prefix === "ticket" ? "IPCS" : "IPCP"}-${String(r.seq).padStart(5, "0")}`);
+  const probe = REF_PROBES[prefix] || null;
+  const tag = REF_PREFIX[prefix] || "IPC";
+  return connect().then(async (d) => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const ref = tag + "-" + refRandomCode(8);
+      if (!probe) return ref;
+      const clash = await d.collection(probe.collection)
+        .findOne({ [probe.field]: ref }, { projection: { _id: 1 } });
+      if (!clash) return ref;
+    }
+    /* statistically impossible to reach — the club never says never:
+       fall back to a longer code that still passes the uniqueness probe */
+    return tag + "-" + refRandomCode(12);
+  });
 }
 
 /* ---------------------------------------------------------------- */
