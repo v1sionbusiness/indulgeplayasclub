@@ -201,7 +201,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v19-20261123-shopcontrol";
+const BUILD_STAMP = "ipc-v20-20261123-auditfixes";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 function serveIndex(req, res) {
@@ -1144,6 +1144,7 @@ async function route(req, res) {
   if (p === "/api/admin/tracking") return handleAdminTracking(req, res);
   if (p === "/api/admin/members/remove") return handleMemberRemove(req, res);
   if (p === "/api/admin/members/restore") return handleMemberRestore(req, res);
+  if (p === "/api/admin/members/password") return handleAdminMemberPassword(req, res);
   if (p === "/api/ipc-pay/maya-webhook") return handleMayaWebhook(req, res);
 
   /* --- club inventory: the team adds their own pieces straight to the shop --- */
@@ -2374,6 +2375,51 @@ async function handleMemberRestore(req, res) {
     });
   } catch (err) {
     return mongoError(res, err, "member restore failed");
+  }
+}
+
+/* ADMIN PASSWORD RESET — a member forgot theirs. The club sets a fresh  */
+/* one straight from the members tab: the scrypt hash rotates, every      */
+/* session of that member dies, and the next sign-in uses the new word.   */
+/* The member should change it to their own from the account page after.  */
+async function handleAdminMemberPassword(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+  const newPassword = String(body.newPassword ?? "");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+  if (newPassword.length < 8 || newPassword.length > 72) {
+    return fail(res, 422, "invalid", "THE NEW PASSWORD NEEDS 8 TO 72 CHARACTERS.");
+  }
+  try {
+    const { connect, hashPassword } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const target = await d.collection("users").findOne({ email });
+    if (!target) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+    if (target.status === "removed") return fail(res, 422, "removed", "THAT ACCOUNT IS REMOVED — RESTORE IT FIRST.");
+    const next = hashPassword(newPassword);
+    await d.collection("users").updateOne(
+      { _id: target._id },
+      { $set: {
+        salt: next.salt,
+        hash: next.hash,
+        passwordChangedAt: new Date(),
+        passwordResetBy: found.user.email,
+      } }
+    );
+    /* every sign-in of the member dies — the next login uses the new word */
+    await d.collection("sessions").deleteMany({ userId: target._id });
+    console.log("[ipc-pay] admin password reset:", email, "by", found.user.email);
+    return send(res, 200, {
+      ok: true,
+      message: "PASSWORD SET — EVERY SIGN-IN OF " + email.toUpperCase() + " WAS SIGNED OUT. HAND THE NEW ONE OVER AND HAVE THEM CHANGE IT FROM THE ACCOUNT PAGE.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "member password reset failed");
   }
 }
 
