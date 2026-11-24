@@ -2360,12 +2360,12 @@ img.tc-true{filter:none !important}
             <span class="ipc-id-brand">INDULGE PLAYAS CLUB</span>
             <span class="ipc-id-chip" id="acIdChip">MEMBER</span>
           </div>
-          <p class="ipc-id-k">OFFICIAL MEMBER ID — PERMANENT</p>
+          <p class="ipc-id-k">OFFICIAL MEMBER ID</p>
           <div class="ipc-id-value-row">
             <span class="ipc-id-value" id="acMemberId">—</span>
             <button type="button" class="ipc-id-copy" id="acCopyId" title="COPY YOUR MEMBER ID">COPY ID</button>
           </div>
-          <p class="ipc-id-note">ISSUED ONCE, YOURS FOREVER — IT NEVER CHANGES AND NEVER EXPIRES. GIVE THIS NUMBER TO THE CLUB WHEN ASKING ABOUT ORDERS, VOUCHERS OR YOUR ACCOUNT.</p>
+          <p class="ipc-id-note">GIVE THIS NUMBER TO THE CLUB WHEN ASKING ABOUT ORDERS, VOUCHERS OR YOUR ACCOUNT.</p>
         </div>
         <div class="acct-card">
           <h3>PROFILE</h3>
@@ -2395,9 +2395,22 @@ img.tc-true{filter:none !important}
           <div class="wish-list" id="wishList"></div>
         </div>
         <div class="acct-card ipc-member-card" id="ipcMemberCard">
-          <h3>MEMBERSHIP — LEVEL UP</h3>
-          <div id="ipcMemberBody"><p class="orders-empty">CHECKING YOUR LEVEL…</p></div>
-          <div id="clubExtras"></div>
+          <h3>MEMBERSHIP</h3>
+          <div class="mem-tabs">
+            <button type="button" class="mem-tab active" data-actab="level">LEVEL UP</button>
+            <button type="button" class="mem-tab" data-actab="referral">REFERRAL</button>
+            <button type="button" class="mem-tab" data-actab="security" id="secTab" style="display:none">ADMIN SECURITY</button>
+          </div>
+          <div class="mem-pane active" data-acpane="level">
+            <div id="ipcMemberBody"><p class="orders-empty">CHECKING YOUR LEVEL…</p></div>
+            <div id="clubBirthday"></div>
+          </div>
+          <div class="mem-pane" data-acpane="referral">
+            <div id="clubReferral"><p class="orders-empty">YOUR REFERRAL CODE SHOWS UP HERE ONCE THE CLUB ISSUES IT.</p></div>
+          </div>
+          <div class="mem-pane" data-acpane="security">
+            <div id="clubTwofa"><p class="orders-empty">ADMIN ONLY — THIS TAB APPEARS FOR CLUB ADMIN ACCOUNTS.</p></div>
+          </div>
         </div>
         <div class="acct-card">
           <details class="acct-drop" id="ordersDrop">
@@ -2416,14 +2429,24 @@ img.tc-true{filter:none !important}
           </details>
         </div>
         <div class="acct-card" id="accTrackCard">
-          <h3>SHIP TRACKER</h3>
-          <p class="orders-empty" style="margin-bottom:12px">PASTE AN ORDER NUMBER — THE TRACKER PULLS THAT ORDER'S DELIVERY JOURNEY UP ON ITS OWN.</p>
-          <form class="acc-track-form" id="accTrackForm" novalidate>
-            <input type="text" id="accTrackRef" placeholder="ORDER NUMBER — E.G. IPC-8F2K91" maxlength="24" autocomplete="off" />
-            <button type="submit" class="btn-w btn-sm">TRACK IT</button>
-          </form>
-          <p class="form-msg" id="accTrackMsg" role="status"></p>
-          <div id="accTrackResult"></div>
+          <div class="mem-tabs">
+            <button type="button" class="mem-tab active" data-actab="tracker">SHIP TRACKER</button>
+            <button type="button" class="mem-tab" data-actab="support">SUPPORT<span id="supUnread"></span></button>
+          </div>
+          <div class="mem-pane active" data-acpane="tracker">
+            <p class="orders-empty" style="margin-bottom:12px">PASTE AN ORDER NUMBER — THE TRACKER PULLS THAT ORDER'S DELIVERY JOURNEY UP ON ITS OWN.</p>
+            <form class="acc-track-form" id="accTrackForm" novalidate>
+              <input type="text" id="accTrackRef" placeholder="ORDER NUMBER — E.G. IPC-8F2K91" maxlength="24" autocomplete="off" />
+              <button type="submit" class="btn-w btn-sm">TRACK IT</button>
+            </form>
+            <p class="form-msg" id="accTrackMsg" role="status"></p>
+            <div id="accTrackResult"></div>
+          </div>
+          <div class="mem-pane" data-acpane="support">
+            <p class="orders-empty" style="margin-bottom:12px">ORDER PROBLEM, SIZING QUESTION, PAYMENT CONCERN — OPEN A TICKET AND THE CLUB ANSWERS RIGHT HERE.</p>
+            <div id="supList"><p class="sup-meta">CHECKING YOUR TICKETS…</p></div>
+            <div id="supHost"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -2901,7 +2924,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v32-20261124-members';
+  var IPC_BUILD = 'ipc-v33-20261124-ui-cleanup';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -4856,39 +4879,54 @@ img.tc-true{filter:none !important}
     return '<span class="ipc-tier-badge' + (key === 'VIP' ? ' vip' : '') + '">' + key + '</span>';
   }
 
-  /* club extras — referral code, birthday voucher, admin two-factor */
+  /* club extras — birthday voucher, referral code, admin two-factor.
+     each one lives in its own MEMBERSHIP tab pane (level / referral /
+     security) instead of stacking three loose cards under the grid. */
   IPC.renderClubExtras = function (user) {
-    var host = $('#clubExtras');
-    if (!host) return;
-    var html = '';
-    if (user.birthdayVoucher) {
-      html += '<div class="club-card"><h4>HAPPY BIRTHDAY, PLAYA</h4>' +
-        '<p>THE CLUB PUT A BIRTHDAY VOUCHER IN YOUR NAME — IT WORKS AT CHECKOUT THIS MONTH ONLY.</p>' +
-        '<div class="code-line"><code>' + IPC.esc(user.birthdayVoucher) + '</code>' +
-        '<button type="button" class="copy-btn ghost" data-copy="' + IPC.esc(user.birthdayVoucher) + '">COPY</button></div></div>';
+    var bday = $('#clubBirthday'), ref = $('#clubReferral'), sec = $('#clubTwofa'), secTab = $('#secTab');
+    if (!bday && !ref && !sec) return;
+    if (bday) {
+      bday.innerHTML = user.birthdayVoucher
+        ? '<p class="ipc-id-k" style="margin-top:18px">HAPPY BIRTHDAY, PLAYA</p>' +
+          '<p class="orders-empty" style="margin-bottom:10px">THE CLUB PUT A BIRTHDAY VOUCHER IN YOUR NAME — IT WORKS AT CHECKOUT THIS MONTH ONLY.</p>' +
+          '<div class="code-line"><code>' + IPC.esc(user.birthdayVoucher) + '</code>' +
+          '<button type="button" class="copy-btn ghost" data-copy="' + IPC.esc(user.birthdayVoucher) + '">COPY</button></div>'
+        : '';
     }
-    if (user.referral && user.referral.code) {
-      var link = location.origin + '/#/signup';
-      html += '<div class="club-card"><h4>REFER THE CLUB — ' + (user.referral.count || 0) + ' FRIEND' + ((user.referral.count || 0) === 1 ? '' : 'S') + ' IN</h4>' +
-        '<p>YOUR PERSONAL CODE GIVES YOUR FRIEND PHP 100 OFF THEIR ORDER. WHEN THEY PAY, YOU GET A PHP 100 CREDIT VOUCHER TOO. CODES CARRY — BROTHERHOOD PAYS.</p>' +
-        '<div class="code-line"><code>' + IPC.esc(user.referral.code) + '</code>' +
-        '<button type="button" class="copy-btn ghost" data-copy="' + IPC.esc(user.referral.code) + '">COPY CODE</button>' +
-        '<button type="button" class="copy-btn ghost" data-copy="' + IPC.esc(link) + '" data-copy-label="INVITE LINK">COPY INVITE LINK</button></div></div>';
+    if (ref) {
+      if (user.referral && user.referral.code) {
+        var link = location.origin + '/#/signup';
+        ref.innerHTML = '<p class="ipc-id-k" style="margin-top:18px">REFER THE CLUB — ' + (user.referral.count || 0) + ' FRIEND' + ((user.referral.count || 0) === 1 ? '' : 'S') + ' IN</p>' +
+          '<p class="orders-empty" style="margin-bottom:10px">YOUR PERSONAL CODE GIVES YOUR FRIEND PHP 100 OFF THEIR ORDER. WHEN THEY PAY, YOU GET A PHP 100 CREDIT VOUCHER TOO. CODES CARRY — BROTHERHOOD PAYS.</p>' +
+          '<div class="code-line"><code>' + IPC.esc(user.referral.code) + '</code>' +
+          '<button type="button" class="copy-btn ghost" data-copy="' + IPC.esc(user.referral.code) + '">COPY CODE</button>' +
+          '<button type="button" class="copy-btn ghost" data-copy="' + IPC.esc(link) + '" data-copy-label="INVITE LINK">COPY INVITE LINK</button></div>';
+      } else {
+        ref.innerHTML = '<p class="orders-empty" style="margin-top:18px">YOUR REFERRAL CODE SHOWS UP HERE ONCE THE CLUB ISSUES IT.</p>';
+      }
     }
-    if (user.role === 'admin') {
-      var on = !!user.twoFAEnabled;
-      html += '<div class="club-card" id="twofaCard"><h4>ADMIN SECURITY — TWO-FACTOR ' + (on ? 'ON' : 'OFF') + '</h4>' +
-        '<p>THE ADMIN ACCOUNT CONTROLS PAYMENTS, MEMBERS AND INVENTORY. TURN ON AN AUTHENTICATOR APP (GOOGLE AUTHENTICATOR, AUTHY) SO A STOLEN PASSWORD IS NOT ENOUGH.</p>' +
-        (on
-          ? '<div class="code-line"><button type="button" class="copy-btn ghost" id="twofaDisableBtn">TURN OFF (PASSWORD + CODE)</button></div>' +
-            '<form id="twofaDisableForm" style="display:none;margin-top:12px"><input type="password" id="twofaDisablePw" placeholder="ADMIN PASSWORD" maxlength="72" style="width:100%;margin-bottom:8px" /><input type="text" id="twofaDisableCode" placeholder="6-DIGIT CODE" maxlength="6" style="width:100%;margin-bottom:8px" /><button type="submit" class="btn-o btn-sm">CONFIRM — TURN OFF</button></form>'
-          : '<div class="code-line"><button type="button" class="btn-w btn-sm" id="twofaStartBtn">SET UP TWO-FACTOR</button></div>') +
-        '<div id="twofaBody"></div>' +
-        '<p class="form-msg" id="twofaMsg" role="status" aria-live="polite"></p></div>';
+    if (sec) {
+      if (user.role === 'admin') {
+        if (secTab) secTab.style.display = '';
+        var on = !!user.twoFAEnabled;
+        sec.innerHTML = '<p class="ipc-id-k" style="margin-top:18px">TWO-FACTOR ' + (on ? 'ON' : 'OFF') + '</p>' +
+          '<p class="orders-empty" style="margin-bottom:10px">THE ADMIN ACCOUNT CONTROLS PAYMENTS, MEMBERS AND INVENTORY. TURN ON AN AUTHENTICATOR APP (GOOGLE AUTHENTICATOR, AUTHY) SO A STOLEN PASSWORD IS NOT ENOUGH.</p>' +
+          (on
+            ? '<div class="code-line"><button type="button" class="copy-btn ghost" id="twofaDisableBtn">TURN OFF (PASSWORD + CODE)</button></div>' +
+              '<form id="twofaDisableForm" style="display:none;margin-top:12px"><input type="password" id="twofaDisablePw" placeholder="ADMIN PASSWORD" maxlength="72" style="width:100%;margin-bottom:8px" /><input type="text" id="twofaDisableCode" placeholder="6-DIGIT CODE" maxlength="6" style="width:100%;margin-bottom:8px" /><button type="submit" class="btn-o btn-sm">CONFIRM — TURN OFF</button></form>'
+            : '<div class="code-line"><button type="button" class="btn-w btn-sm" id="twofaStartBtn">SET UP TWO-FACTOR</button></div>') +
+          '<div id="twofaBody"></div>' +
+          '<p class="form-msg" id="twofaMsg" role="status" aria-live="polite"></p>';
+      } else {
+        if (secTab) secTab.style.display = 'none';
+        sec.innerHTML = '';
+      }
     }
-    host.innerHTML = html;
-    host.querySelectorAll('[data-copy]').forEach(function (b) {
-      b.addEventListener('click', function () { IPC.copyText(b.getAttribute('data-copy'), b.getAttribute('data-copy-label') || 'CODE'); });
+    [bday, ref, sec].forEach(function (h) {
+      if (!h) return;
+      h.querySelectorAll('[data-copy]').forEach(function (b) {
+        b.addEventListener('click', function () { IPC.copyText(b.getAttribute('data-copy'), b.getAttribute('data-copy-label') || 'CODE'); });
+      });
     });
     var msg = $('#twofaMsg');
     var startBtn = $('#twofaStartBtn');
@@ -5097,6 +5135,21 @@ img.tc-true{filter:none !important}
     IPC.auth.logout().then(function () { IPC.toast('LOGGED OUT — SEE YOU AT THE NEXT DROP'); location.hash = '#/'; });
   });
   $('#acAdmin').addEventListener('click', function () { location.hash = '#/admin'; });
+
+  /* account page tabs — membership (level / referral / admin security)
+     and tracker+support each collapse into ONE card with tabs, so the
+     page reads tight instead of stacking six loose cards. Delegated
+     once; a tap flips the panes inside whichever card owns the tab. */
+  document.addEventListener('click', function (ev) {
+    var tab = ev.target && ev.target.closest ? ev.target.closest('[data-actab]') : null;
+    if (!tab) return;
+    var card = tab.closest('.acct-card');
+    if (!card) return;
+    card.querySelectorAll('[data-actab]').forEach(function (t) { t.classList.toggle('active', t === tab); });
+    card.querySelectorAll('[data-acpane]').forEach(function (p) {
+      p.classList.toggle('active', p.getAttribute('data-acpane') === tab.getAttribute('data-actab'));
+    });
+  });
 
   /* ---------------- ADMIN DASHBOARD ---------------- */
   function admGuard() {
@@ -7969,7 +8022,16 @@ setTimeout(function () {
 
     $('#pane-activity').innerHTML =
       '<p class="count-chip">THE ACTIVITY RECORD — EVERY ADMIN ACTION, WHO DID IT, WHAT CHANGED, WHEN. APPEND-ONLY: NO EDIT, NO DELETE, NO EXCEPTIONS.</p>' +
-      '<div id="admActivity"><p class="adm-empty">LOADING THE RECORD…</p></div>';
+      '<details class="acct-drop" id="activityDrop">' +
+        '<summary>' +
+          '<span class="os-main">' +
+            '<span class="os-title">THE RECORD</span>' +
+            '<span class="os-sub" id="activityCount">TAP TO DROP DOWN — NOTHING GETS DELETED</span>' +
+          '</span>' +
+          '<span class="os-side"><i class="od-chev" aria-hidden="true"></i></span>' +
+        '</summary>' +
+        '<div class="acct-drop-body"><div id="admActivity"><p class="adm-empty">LOADING THE RECORD…</p></div></div>' +
+      '</details>';
   }
 
   var supFilterState = 'all';
@@ -8156,6 +8218,24 @@ setTimeout(function () {
     host.innerHTML = '<p class="adm-empty">LOADING THE RECORD…</p>';
     IPC.api('/api/admin/activity').then(function (d) {
       var rows = d.activity || [];
+      var drop = $('#activityDrop'), countLine = $('#activityCount');
+      if (drop) {
+        if (!drop.dataset.wired) {
+          drop.dataset.wired = '1';
+          try { if (localStorage.getItem('ipc_activity_open') === '1') drop.open = true; } catch (e) { /* storage off — stays collapsed */ }
+          drop.addEventListener('toggle', function () {
+            var n = Number(drop.dataset.rows || 0);
+            if (countLine) countLine.textContent = n
+              ? n + (n === 1 ? ' ENTRY' : ' ENTRIES') + ' — TAP TO ' + (drop.open ? 'CLOSE' : 'OPEN')
+              : 'THE RECORD IS EMPTY SO FAR — TAP TO CHECK AGAIN';
+            try { localStorage.setItem('ipc_activity_open', drop.open ? '1' : '0'); } catch (e) { /* ignore */ }
+          });
+        }
+        drop.dataset.rows = String(rows.length);
+      }
+      if (countLine) countLine.textContent = rows.length
+        ? rows.length + (rows.length === 1 ? ' ENTRY' : ' ENTRIES') + ' — TAP TO ' + (drop && drop.open ? 'CLOSE' : 'OPEN')
+        : 'THE RECORD IS EMPTY SO FAR — TAP TO CHECK AGAIN';
       if (!rows.length) { host.innerHTML = '<p class="adm-empty">THE RECORD IS EMPTY — IT WRITES ITSELF FROM YOUR FIRST ADMIN ACTION ON.</p>'; return; }
       host.innerHTML = '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
         '<th>WHEN</th><th>ADMIN</th><th>ACTION</th><th>ON</th><th>DETAILS</th></tr></thead><tbody>' +
@@ -8188,17 +8268,14 @@ setTimeout(function () {
     ['payment', 'PAYMENT'], ['shipping', 'SHIPPING'], ['membership', 'MEMBERSHIP'], ['other', 'SOMETHING ELSE'],
   ];
   function ensureAccountSupportDom() {
-    var drop = $('#ordersDrop');
-    if (!drop || $('#supportSection')) return;
-    drop.insertAdjacentHTML('afterend',
-      '<div class="club-card" id="supportSection" style="margin-top:18px">' +
-      '<h4>SUPPORT — TALK TO THE CLUB<span id="supUnread"></span></h4>' +
-      '<p>ORDER PROBLEM, SIZING QUESTION, PAYMENT CONCERN — OPEN A TICKET AND THE CLUB ANSWERS RIGHT HERE IN YOUR ACCOUNT.</p>' +
-      '<p class="sup-meta">CLOSED CONVERSATIONS FILE THEMSELVES OUT OF THIS LIST — THE CLUB KEEPS THE RECORD.</p>' +
-      '<div id="supList" style="margin-top:14px"></div>' +
-      /* the ticket form mirrors the contact page's form — same grid, same
-         fields, same send button. One voice across the site. */
-      '<form id="supForm" style="max-width:640px;margin-top:22px" novalidate>' +
+    var host = $('#supHost');
+    /* the ticket form now lives inside the TRACKER+SUPPORT card's SUPPORT
+       tab — build it once, then leave it alone on every later visit */
+    if (!host || $('#supForm')) return;
+    /* the ticket form mirrors the contact page's form — same grid, same
+       fields, same send button. One voice across the site. */
+    host.innerHTML =
+      '<form id="supForm" style="max-width:640px;margin-top:18px" novalidate>' +
       '<p class="cf-title">OPEN A TICKET</p>' +
       '<p class="cf-sub">HAVE A QUESTION OR RAN INTO A PROBLEM? TELL THE CLUB WHAT HAPPENED AND OUR TEAM WILL ANSWER HERE.</p>' +
       '<div class="cf-grid">' +
@@ -8209,7 +8286,19 @@ setTimeout(function () {
       '<div class="cf-full"><button type="submit" class="cf-send" id="supSend"><span class="cf-send-label">OPEN THE TICKET</span>' +
       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg></button>' +
       '<p class="form-msg" id="supMsgLine" role="status" aria-live="polite"></p></div>' +
-      '</div></form></div>');
+      '</div></form>';
+    /* orders feed the ticket's order picker — filled here where the select
+       is guaranteed to exist (the old boot-time fill raced the DOM) */
+    IPC.api('/api/orders/mine').then(function (d) {
+      var sel = $('#supOrder');
+      if (!sel) return;
+      (d.orders || []).slice(0, 20).forEach(function (o) {
+        var opt = document.createElement('option');
+        opt.value = o.reference;
+        opt.textContent = o.reference + ' — ' + new Date(o.createdAt).toLocaleDateString('en-PH') + ' — ' + fmtP(o.totalCentavos);
+        sel.appendChild(opt);
+      });
+    }).catch(function () {});
     var form = $('#supForm');
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -8280,17 +8369,8 @@ setTimeout(function () {
       .then(function (d) { IPC.toast(d.message || 'REPLY SENT'); loadAccountSupport(); })
       .catch(function (err) { send.disabled = false; IPC.toast(String(((err && err.message) || 'SEND FAILED') + '').toUpperCase()); });
   });
-  /* orders feed the ticket's order picker */
-  IPC.api('/api/orders/mine').then(function (d) {
-    var sel = $('#supOrder');
-    if (!sel) return;
-    (d.orders || []).slice(0, 20).forEach(function (o) {
-      var opt = document.createElement('option');
-      opt.value = o.reference;
-      opt.textContent = o.reference + ' — ' + new Date(o.createdAt).toLocaleDateString('en-PH') + ' — ' + fmtP(o.totalCentavos);
-      sel.appendChild(opt);
-    });
-  }).catch(function () {});
+  /* the ticket's order picker is filled inside ensureAccountSupportDom now —
+     the old boot-time fill raced the form into existence and usually missed */
 
   /* renderAccount chains the support load — every logged-in account visit refreshes it */
   if (typeof IPC.renderAccount === 'function') {
