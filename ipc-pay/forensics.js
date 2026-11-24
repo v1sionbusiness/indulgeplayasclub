@@ -27,12 +27,12 @@
         upscaled 2x into a cleaner second OCR pass so small receipt
         text actually reads.
 
-   The scan NEVER rejects a customer by itself. Its verdict feeds the
-   auto reader: a proof with a medium-or-worse forensic signal can
-   never be auto-verified — it stays UNDER VERIFICATION for a human
-   with the reasons pinned right on the admin card. A blurry or
-   re-saved screenshot can never fail a member, and an edited one
-   can never breeze past the club. ------------------------------- */
+   The scan's read IS the decision's backbone: any medium-or-worse
+   forensic signal makes the auto reader REJECT the proof on its own —
+   edited, AI-generated and reused receipts are declined automatically
+   with the reason spelled out. A re-saved screenshot is judged by
+   what the OCR cross-checks can prove, never by the noise alone, and
+   an edited one can never breeze past the club. ------------------------------- */
 
 const zlib = require("node:zlib");
 const crypto = require("node:crypto");
@@ -61,6 +61,30 @@ const EDITOR_SIGNATURES = [
   { re: /remove\.?bg|\bremini\b|cutout\.pro|bg\.jpg/i, name: "Background remover" },
   { re: /pixelab|pixel\s?lab/i, name: "PixelLab" },
   { re: /\blightx\b|\btoonme\b|\bprequel\b|\bundo\s?edit\b/i, name: "Retouch app" },
+];
+
+/* ---- AI-GENERATOR signatures. A receipt that was never taken from a
+   real wallet app is the newest scam: an image model is prompted with
+   "Maya receipt for ₱X" and the render can look perfect to the eye.
+   Image generators and content-provenance manifests leave markers in
+   the file's metadata — prompts, generator names, C2PA/JUMBF boxes,
+   IPTC "trained algorithmic media" codes. Any of these on a payment
+   proof is a hard reject on sight. Wallet apps never match. ------- */
+const AI_SIGNATURES = [
+  { re: /dall[-·.]?e|openai|chatgpt/i, name: "DALL-E / OpenAI" },
+  { re: /midjourney/i, name: "Midjourney" },
+  { re: /stable\s?diffusion|stablediffusion|comfyui|automatic1111|a1111|invokeai|kohya/i, name: "Stable Diffusion" },
+  { re: /firefly|adobe\s?generative/i, name: "Adobe Firefly" },
+  { re: /imagen|gemini|nanobanana|made\s?with\s?google\s?ai|whisk/i, name: "Google AI" },
+  { re: /grok\s?imagine/i, name: "Grok Imagine" },
+  { re: /bing\s?image\s?creator|copilot\s?image/i, name: "Bing Image Creator" },
+  { re: /leonardo(\.ai)?\b/i, name: "Leonardo AI" },
+  { re: /ideogram|recraft|runwayml|playground\s?ai|\bkrea\b|neural\.love|nightcafe|starryai|wombo/i, name: "AI art service" },
+  { re: /black\s?forest\s?labs|flux\.?1|fluxdev|fluxschnell/i, name: "FLUX" },
+  { re: /cogview|wanx|hunyuan|doubao|jimeng|qwenimage|seedream/i, name: "AI generator (CN)" },
+  { re: /trainedalgorithmicmedia|trainedalgorithmic/i, name: "IPTC trained-algorithmic-media" },
+  { re: /c2pa|contentcredentials|content\s?credentials|jumbf|synthid/i, name: "Content-provenance manifest" },
+  { re: /\bai[-\s]?generated\b|\baigc\b|\bgenerative\s?ai\b/i, name: "AI-generated marker" },
 ];
 
 /* ---- ELA calibration. A single-generation JPEG compresses evenly;
@@ -246,6 +270,15 @@ function parsePngMeta(buf) {
 function detectEditor(strings) {
   for (const s of strings || []) {
     for (const sig of EDITOR_SIGNATURES) {
+      if (sig.re.test(s)) return { name: sig.name, source: String(s).slice(0, 96) };
+    }
+  }
+  return null;
+}
+
+function detectAIGenerator(strings) {
+  for (const s of strings || []) {
+    for (const sig of AI_SIGNATURES) {
       if (sig.re.test(s)) return { name: sig.name, source: String(s).slice(0, 96) };
     }
   }
@@ -466,6 +499,8 @@ function scanProofImage(buf) {
     bytes: buf.length,
     editor: null,
     editorSource: null,
+    aiGenerator: null,
+    aiSource: null,
     ela: null,
     notes: [],
   };
@@ -480,6 +515,8 @@ function scanProofImage(buf) {
     const editor = detectEditor(meta.strings);
     if (editor) { scan.editor = editor.name; scan.editorSource = editor.source; }
     if (meta.photoshopIrb && !scan.editor) { scan.editor = "Photoshop"; scan.editorSource = "Photoshop IRB segment"; }
+    const ai = detectAIGenerator(meta.strings);
+    if (ai) { scan.aiGenerator = ai.name; scan.aiSource = ai.source; }
     if (meta.exif.software) scan.notes.push("jpeg software tag: " + meta.exif.software);
     if (meta.comment) scan.notes.push("jpeg comment: " + meta.comment.slice(0, 80));
     scan.ela = elaScanJPEG(buf);
@@ -488,6 +525,18 @@ function scanProofImage(buf) {
     scan.width = meta.width || 0; scan.height = meta.height || 0;
     const editor = detectEditor(meta.strings);
     if (editor) { scan.editor = editor.name; scan.editorSource = editor.source; }
+    const ai = detectAIGenerator(meta.strings);
+    if (ai) { scan.aiGenerator = ai.name; scan.aiSource = ai.source; }
+    /* generation-parameter chunks — Stable Diffusion / ComfyUI write the
+       literal prompt into tEXt chunks. A prompt inside a "receipt" is an
+       AI-made image no matter how clean the render looks. */
+    for (const t of meta.texts || []) {
+      const kw = String(t.keyword || "").toLowerCase();
+      if (kw === "prompt" || kw === "parameters" || kw === "workflow" || kw === "negative_prompt") {
+        if (!scan.aiGenerator) { scan.aiGenerator = "Generation-prompt metadata"; scan.aiSource = "PNG " + kw + " chunk"; }
+        break;
+      }
+    }
     if (meta.exif.software) scan.notes.push("png software tag: " + meta.exif.software);
     scan.ela = { applicable: false, verdict: "na",
       reason: "PNG is lossless — fingerprint, metadata and OCR cross-checks carry the tamper read" };
@@ -496,13 +545,16 @@ function scanProofImage(buf) {
 }
 
 /* One real receipt must never fund two orders. The fingerprint is
-   checked against every OTHER payment that ever carried an image. */
+   checked against every OTHER payment still in play or already
+   accepted — a REJECTED claim never bought anything, so its old
+   screenshot does not block (same law as the reference check). */
 async function findProofReuse(d, paymentId, hash) {
   if (!d || !hash) return "unknown";
   try {
     const twin = await d.collection("payments").findOne({
       proofHash: hash,
       _id: { $ne: paymentId },
+      status: { $in: ["paid", "under_verification"] },
     }, { projection: { status: 1, paymentReference: 1 } });
     if (!twin) return "none";
     return twin.status === "paid" ? "paid_elsewhere" : "pending_elsewhere";
@@ -524,7 +576,11 @@ function forensicSignals(scan, reuse) {
   }
   if (scan && scan.editor) {
     signals.push({ code: "editor_detected", severity: "medium",
-      label: "IMAGE CARRIES AN EDITOR SIGNATURE (" + scan.editor.toUpperCase() + ") — CROPPING IS COMMON, BUT EDITED PROOFS GET A HAND CHECK" });
+      label: "IMAGE CARRIES AN EDITOR SIGNATURE (" + scan.editor.toUpperCase() + ") — SUBMIT THE RAW SCREENSHOT STRAIGHT FROM THE WALLET APP" });
+  }
+  if (scan && scan.aiGenerator) {
+    signals.push({ code: "ai_generated", severity: "critical",
+      label: "IMAGE CARRIES AN AI-GENERATOR SIGNATURE (" + scan.aiGenerator.toUpperCase() + ") — AI-MADE RECEIPTS ARE REJECTED ON SIGHT" });
   }
   if (scan && scan.ela && scan.ela.verdict === "suspicious") {
     signals.push({ code: "ela_splice", severity: "high",
@@ -541,10 +597,10 @@ function forensicSignals(scan, reuse) {
 }
 
 module.exports = {
-  EDITOR_SIGNATURES, SEVERITY,
+  EDITOR_SIGNATURES, AI_SIGNATURES, SEVERITY,
   imageHash, sniffFormat,
   jpegDimensions, parseJpegMeta, parsePngMeta, parseTiffTags,
-  detectEditor, elaScanJPEG, preprocessForOCR,
+  detectEditor, detectAIGenerator, elaScanJPEG, preprocessForOCR,
   refMatchesOCR, extractMoneyTokens, labeledAmount, confusionFold,
   scanProofImage, findProofReuse, forensicSignals,
 };

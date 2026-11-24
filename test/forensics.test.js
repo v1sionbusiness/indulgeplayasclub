@@ -92,6 +92,35 @@ test("wallet names and phone screenshots are never editors", () => {
   assert.equal(F.detectEditor(["Snapseed 2.0"]).name, "Snapseed");
 });
 
+test("AI-generator signatures are caught, wallet names never match them", () => {
+  assert.equal(F.detectAIGenerator(["Software GCash"]), null);
+  assert.equal(F.detectAIGenerator(["Software Maya"]), null);
+  assert.equal(F.detectAIGenerator(["Screenshot, Samsung Electronics"]), null);
+  assert.equal(F.detectAIGenerator([]), null);
+  assert.equal(F.detectAIGenerator(["Software DALL-E 3"]).name, "DALL-E / OpenAI");
+  assert.equal(F.detectAIGenerator(["Software Midjourney v6"]).name, "Midjourney");
+  assert.equal(F.detectAIGenerator(["prompt Stable Diffusion checkpoint"]).name, "Stable Diffusion");
+  assert.equal(F.detectAIGenerator(["c2pa manifest JUMBF"]).name, "Content-provenance manifest");
+  assert.equal(F.detectAIGenerator(["TrainedAlgorithmicMedia"]).name, "IPTC trained-algorithmic-media");
+  assert.equal(F.detectAIGenerator(["ai-generated image"]).name, "AI-generated marker");
+});
+
+test("AI software tags and generation-prompt chunks scan as critical", () => {
+  const aiPng = F.scanProofImage(textPng("Software\0DALL-E 3 (OpenAI)"));
+  assert.equal(aiPng.aiGenerator, "DALL-E / OpenAI");
+  const aiSigs = F.forensicSignals(aiPng, "none");
+  const ai = aiSigs.find((s) => s.code === "ai_generated");
+  assert.ok(ai && ai.severity === "critical", JSON.stringify(aiSigs));
+
+  const promptPng = F.scanProofImage(textPng("parameters\0Steps: 30, Sampler: Euler a, Size: 512x512"));
+  assert.equal(promptPng.aiGenerator, "Generation-prompt metadata");
+  assert.ok(F.forensicSignals(promptPng, "none").some((s) => s.code === "ai_generated"));
+
+  const clean = F.scanProofImage(textPng(null));
+  assert.equal(clean.aiGenerator, null);
+  assert.ok(!F.forensicSignals(clean, "none").some((s) => s.code === "ai_generated"));
+});
+
 test("honest scans carry no medium-or-worse signals", () => {
   for (const buf of [textPng(null), texturedJpeg()]) {
     const scan = F.scanProofImage(buf);
@@ -160,14 +189,22 @@ test("preprocess upscales and re-encodes, and fails soft on garbage", () => {
 
 /* ---- reuse + signals ---- */
 function stubDb(rows) {
-  return { collection: () => ({ findOne: async (f) => rows.find((r) => r.proofHash === f.proofHash && String(r._id) !== String(f._id.$ne)) || null }) };
+  return { collection: () => ({ findOne: async (f) => {
+    const allowed = f.status && f.status.$in ? f.status.$in : null;
+    return rows.find((r) => r.proofHash === f.proofHash
+      && String(r._id) !== String(f._id.$ne)
+      && (!allowed || allowed.includes(r.status))) || null;
+  } }) };
 }
-test("proof reuse: none, pending elsewhere, paid elsewhere, unknown on db error", async () => {
+test("proof reuse: none, pending elsewhere, paid elsewhere, failed never blocks, unknown on db error", async () => {
   assert.equal(await F.findProofReuse(stubDb([]), "B", "h1"), "none");
   const paid = [{ _id: "A", proofHash: "h1", status: "paid" }];
   assert.equal(await F.findProofReuse(stubDb(paid), "B", "h1"), "paid_elsewhere");
   const pend = [{ _id: "A", proofHash: "h1", status: "under_verification" }];
   assert.equal(await F.findProofReuse(stubDb(pend), "B", "h1"), "pending_elsewhere");
+  /* a rejected claim never bought anything — its screenshot can't block */
+  const dead = [{ _id: "A", proofHash: "h1", status: "failed" }];
+  assert.equal(await F.findProofReuse(stubDb(dead), "B", "h1"), "none");
   const boom = { collection: () => ({ findOne: async () => { throw new Error("down"); } }) };
   assert.equal(await F.findProofReuse(boom, "B", "h1"), "unknown");
   assert.equal(await F.findProofReuse(null, "B", "h1"), "unknown");
