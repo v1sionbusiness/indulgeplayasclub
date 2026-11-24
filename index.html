@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-24 — v37 console revamp: the admin panel becomes a real back office (sidebar, KPI cards, global search, member quick actions with suspend, pagers) and the account page becomes a member dashboard with a voucher wallet — payment workflow untouched -->
+<!-- IPC BUILD 2026-11-24 — v38 console shell: the admin sidebar becomes a true slide-in drawer on tablet and mobile (hamburger, backdrop, ESC, auto-close) and every tab carries a real line icon — payment workflow untouched -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -1139,12 +1139,19 @@ img.tc-true{filter:none !important}
 .adm-tabs{display:flex;flex-direction:column;border:1px solid var(--line);border-top:0;background:var(--panel);margin:0;padding:0;gap:0;width:100%;box-sizing:border-box}
 .adm-side-label{font-family:var(--mono);font-size:8.5px;letter-spacing:.3em;color:var(--faint);text-transform:uppercase;padding:16px 20px 6px;border-top:1px solid rgba(255,255,255,.06)}
 .adm-side-label:first-child{border-top:0}
-.adm-tab{position:relative;display:block;width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;padding:12px 20px;color:var(--muted);cursor:pointer;text-transform:uppercase;transition:color .18s,background .18s,border-color .18s;flex:none}
+.adm-tab{position:relative;display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;padding:12px 18px;color:var(--muted);cursor:pointer;text-transform:uppercase;transition:color .18s,background .18s,border-color .18s;flex:none}
 .adm-tab::after{display:none}
-.adm-tab::before{content:"";display:inline-block;width:6px;height:6px;border:1px solid var(--faint);margin-right:12px;vertical-align:1px;transition:background .18s,border-color .18s}
+.adm-ico{display:inline-flex;width:15px;height:15px;flex:none;color:inherit}
+.adm-ico svg{width:100%;height:100%;display:block;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .adm-tab:hover{color:var(--text);background:rgba(255,255,255,.03)}
 .adm-tab.active{color:var(--black);background:var(--white);border-left-color:var(--white);font-weight:700}
-.adm-tab.active::before{background:var(--black);border-color:var(--black)}
+/* shell controls — hamburger in the topbar, drawer head and backdrop;
+   hidden on desktop where the sticky sidebar is always on screen */
+.adm-menu-btn{display:none;width:38px;height:38px;align-items:center;justify-content:center;border:1px solid var(--line-2);background:var(--panel);color:var(--text);cursor:pointer;flex:none;transition:background .18s,color .18s}
+.adm-menu-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.adm-menu-btn:hover{background:var(--white);color:var(--black)}
+.adm-drawer-head{display:none}
+.adm-drawer-backdrop{display:none}
 .adm-side-foot{margin-top:auto;padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:8px}
 .adm-side-foot a,.adm-side-foot button{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;text-decoration:none;background:none;border:0;padding:0;cursor:pointer;text-align:left;transition:color .18s}
 .adm-side-foot a:hover,.adm-side-foot button:hover{color:var(--text)}
@@ -1212,7 +1219,7 @@ img.tc-true{filter:none !important}
 .ipc-mem-list{border:1px solid var(--line)}
 .ipc-mem-list .mem-card{border:0;border-bottom:1px solid var(--line)}
 .ipc-mem-list .mem-card:last-child{border-bottom:0}
-.mem-head{display:grid;grid-template-columns:150px minmax(180px,1.4fr) 110px 100px 110px 84px 34px;gap:12px;align-items:center;padding:13px 16px;cursor:pointer;flex-wrap:nowrap}
+.mem-head{display:grid;grid-template-columns:150px minmax(180px,1.4fr) 110px 100px 110px 110px 84px 34px;gap:12px;align-items:center;padding:13px 16px;cursor:pointer;flex-wrap:nowrap}
 .mem-head:hover{background:rgba(255,255,255,.035)}
 .mem-head .mem-id{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--text);border:0;padding:0;white-space:nowrap}
 .mem-head .mem-who{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -1220,7 +1227,9 @@ img.tc-true{filter:none !important}
 .mem-head .mem-who small{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--faint);text-transform:lowercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mem-head .mem-col{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
 .mem-head .mem-col small{display:block;color:var(--faint);font-size:8px;margin-top:3px;letter-spacing:.12em}
-.mem-flags{display:contents}
+/* the status cell is a real grid item — pill and ADMIN chip share one
+   column, so the chevron can never be pushed onto a second row */
+.mem-flags{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .mem-stats{display:contents}
 .mem-chev{justify-self:end}
 .mem-card .mem-actions{border-top:1px dashed var(--line);padding:12px 16px 0;margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -1266,6 +1275,7 @@ img.tc-true{filter:none !important}
   .mem-head{grid-template-columns:1fr 34px;row-gap:6px}
   .mem-head .mem-id{grid-column:1}
   .mem-head .mem-who{grid-column:1}
+  .mem-head .mem-flags{grid-column:1}
   .mem-head .mem-col{display:none}
   .mem-head .mem-col.mem-col-status{display:block}
   .mem-chev{grid-column:2;grid-row:1}
@@ -1273,11 +1283,43 @@ img.tc-true{filter:none !important}
   .acct-wrap{padding:130px 18px 90px}
 }
 @media(max-width:1023px){
-  .adm-tabs{flex-direction:row;flex-wrap:wrap;overflow-x:auto}
-  .adm-side-label{display:none}
-  .adm-tab{width:auto;border-left:0;border-bottom:2px solid transparent;padding:11px 14px}
-  .adm-tab.active{border-bottom-color:var(--white)}
-  .adm-side-foot{flex-direction:row;gap:18px;margin:0 0 0 auto;padding:12px 16px}
+  /* the sidebar becomes a real drawer — a slide-in panel the hamburger in
+     the topbar opens; backdrop tap, close button, ESC and picking any tab
+     all close it, and the page scroll locks while it is open */
+  .adm-menu-btn{display:inline-flex}
+  .adm-tabs{position:fixed;top:0;left:0;bottom:0;width:min(314px,88vw);z-index:1250;flex-direction:column;flex-wrap:nowrap;overflow-y:auto;overflow-x:hidden;transform:translateX(-112%);transition:transform .3s cubic-bezier(.33,0,.2,1);border:0;border-right:1px solid var(--line);background:var(--panel);padding:0 0 10px;box-shadow:26px 0 64px rgba(0,0,0,.5);-webkit-overflow-scrolling:touch}
+  body.adm-drawer-open .adm-tabs{transform:translateX(0)}
+  .adm-drawer-head{display:flex;align-items:center;gap:10px;padding:16px 16px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+  .adm-drawer-head b{font-family:var(--display);font-size:18px;letter-spacing:.04em;color:var(--text)}
+  .adm-drawer-head small{font-family:var(--mono);font-size:8.5px;letter-spacing:.26em;color:var(--faint);text-transform:uppercase;flex:1}
+  .adm-drawer-close{display:inline-flex;width:34px;height:34px;align-items:center;justify-content:center;border:1px solid var(--line-2);background:transparent;color:var(--text);cursor:pointer;flex:none;transition:background .18s,color .18s}
+  .adm-drawer-close svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+  .adm-drawer-close:hover{background:var(--white);color:var(--black)}
+  .adm-side-label{display:block;padding:14px 18px 6px}
+  .adm-tab{width:100%;padding:12px 18px;flex:none}
+  .adm-tab.active{border-left-color:var(--white)}
+  .adm-drawer-backdrop{display:block;position:fixed;inset:0;z-index:1240;background:rgba(0,0,0,.62);opacity:0;pointer-events:none;transition:opacity .28s}
+  body.adm-drawer-open .adm-drawer-backdrop{opacity:1;pointer-events:auto}
+  body.adm-drawer-open{overflow:hidden}
+  .adm-side-foot{flex-direction:column;gap:10px;margin:auto 0 0;padding:16px 18px;position:sticky;bottom:0;background:var(--panel)}
+  .adm-topbar{gap:12px;padding:12px 16px}
+  .adm-top-live{margin-left:auto}
+}
+@media(min-width:761px) and (max-width:1180px){
+  /* tablet member rows — joined and orders step aside so the row never
+     overflows; id, who, status, tier and last login stay */
+  .mem-head{grid-template-columns:126px minmax(130px,1.3fr) 110px 100px 110px 34px}
+  .mem-head > .mem-col:nth-child(5),.mem-head > .mem-col:nth-child(7){display:none}
+}
+@media(max-width:640px){
+  /* phone admin topbar — search takes the full row, the clock steps aside,
+     and nothing pushes REFRESH ALL out of the viewport */
+  .adm-topbar{gap:10px;padding:12px 14px}
+  .adm-gsearch{flex:1 1 100%;order:6}
+  .adm-gsearch select{padding:0 10px}
+  .adm-top-live{width:100%;order:7;flex-wrap:nowrap}
+  .adm-top-clock{display:none}
+  .adm-top-who{flex:1;max-width:none}
 }
 </style>
 <link rel="canonical" href="https://indulgeplayasclub.onrender.com/" />
@@ -2660,6 +2702,9 @@ img.tc-true{filter:none !important}
     </div>
     <div id="admMain" style="display:none">
       <div class="adm-topbar" id="ipcAdmTop">
+        <button type="button" class="adm-menu-btn" id="ipcAdmMenuBtn" aria-label="OPEN ADMIN MENU" aria-expanded="false" aria-controls="ipcAdmTabs">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
         <div class="adm-top-brand"><b>IPC</b><small>CLUB CONTROL</small></div>
         <form class="adm-gsearch" id="ipcAdmGSearch" novalidate>
           <select id="ipcAdmGScope" aria-label="SEARCH SCOPE">
@@ -2676,7 +2721,13 @@ img.tc-true{filter:none !important}
         </div>
       </div>
       <div class="adm-stats" id="admStats"></div>
-      <div class="adm-tabs">
+      <div class="adm-tabs" id="ipcAdmTabs">
+        <div class="adm-drawer-head" id="ipcAdmDrawerHead">
+          <b>IPC</b><small>CLUB CONTROL</small>
+          <button type="button" class="adm-drawer-close" aria-label="CLOSE ADMIN MENU">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
         <button type="button" class="adm-tab active" data-pane="dashboard">DASHBOARD</button>
         <div class="adm-side-label" for-group="sell">SELL</div>
         <button type="button" class="adm-tab" data-pane="payments">PAYMENT QUEUE</button>
@@ -2692,6 +2743,7 @@ img.tc-true{filter:none !important}
           <a href="#/account" data-route="account">MY ACCOUNT ↗</a>
         </div>
       </div>
+      <div class="adm-drawer-backdrop" id="ipcAdmDrawerBk" aria-hidden="true"></div>
       <div class="adm-pane active" id="pane-dashboard"></div>
       <div class="adm-pane" id="pane-payments">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
@@ -3149,7 +3201,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v37-20261124-console-revamp';
+  var IPC_BUILD = 'ipc-v38-20261124-console-drawer-icons';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -8964,6 +9016,83 @@ setTimeout(function () {
   }
   } catch (err) {
     if (window.console) console.error('IPC ops init:', err);
+  }
+})();
+</script>
+
+<script id="ipc-console-shell">
+/* BLOCK 13 — CONSOLE SHELL (v38). True line icons for every admin tab —
+   sidebar on desktop, slide-in drawer on tablet and mobile — plus the
+   drawer itself: hamburger in the topbar, backdrop tap, close button,
+   ESC, and auto-close on navigation. Icons are injected here instead of
+   hand-pasted so tabs any block adds later pick them up via the
+   observer. Nothing in this block touches IPC Pay or payment panes. */
+(function () {
+  try {
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var svg = function (paths) { return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + paths + '</svg>'; };
+  var ICONS = {
+    dashboard: svg('<rect x="3.5" y="3.5" width="7" height="7"/><rect x="13.5" y="3.5" width="7" height="7"/><rect x="3.5" y="13.5" width="7" height="7"/><rect x="13.5" y="13.5" width="7" height="7"/>'),
+    payments: svg('<path d="M7 3.5h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><path d="M9.5 12l2 2 3.5-4.2"/>'),
+    allpay: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.6"/><path d="M3.5 10h17"/><path d="M7 14.5h4"/>'),
+    orders: svg('<path d="M6.2 8h11.6l.9 11.1a1.9 1.9 0 0 1-1.9 2.1H7.2a1.9 1.9 0 0 1-1.9-2.1L6.2 8z"/><path d="M9 10.2V6a3 3 0 0 1 6 0v4.2"/>'),
+    users: svg('<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 20c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><circle cx="16.8" cy="9.5" r="2.4"/><path d="M16.5 15.2c2.3.3 3.7 1.8 4.1 4.3"/>'),
+    inventory: svg('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5"/><path d="M12 12v9"/>'),
+    vouchers: svg('<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.2a2 2 0 0 0 0 3.6V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.2a2 2 0 0 0 0-3.6V8z"/><path d="M12 7.5v9" stroke-dasharray="2 2.4"/>'),
+    contacts: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.6"/><path d="M4 7.5l8 6 8-6"/>'),
+    reviews: svg('<path d="M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4L4.2 9.7l5.4-.8L12 4z"/>'),
+    streets: svg('<path d="M12 21s-6.5-5.4-6.5-10.2A6.5 6.5 0 0 1 12 4a6.5 6.5 0 0 1 6.5 6.8C18.5 15.6 12 21 12 21z"/><circle cx="12" cy="10.6" r="2.3"/>'),
+    growth: svg('<path d="M4 18.5L9.8 12l3.6 3L20 7.5"/><path d="M15.5 6.5H20v4.5"/>'),
+    analytics: svg('<path d="M5.5 20v-7"/><path d="M12 20V5"/><path d="M18.5 20v-5"/><path d="M3.5 20h17" opacity=".45"/>'),
+    support: svg('<path d="M5 12.5a7 7 0 0 1 14 0"/><rect x="3.5" y="12" width="4" height="6.5" rx="1.6"/><rect x="16.5" y="12" width="4" height="6.5" rx="1.6"/><path d="M20.5 16.5v1.6a2.6 2.6 0 0 1-2.6 2.6H14"/>'),
+    activity: svg('<path d="M3.5 12h4l2.5-6 4 12 2.5-6h4"/>')
+  };
+  function iconize() {
+    $$('.adm-tab').forEach(function (tab) {
+      var pane = tab.getAttribute && tab.getAttribute('data-pane');
+      if (!pane || tab.querySelector('.adm-ico') || !ICONS[pane]) return;
+      var wrap = document.createElement('span');
+      wrap.className = 'adm-ico';
+      wrap.setAttribute('aria-hidden', 'true');
+      wrap.innerHTML = ICONS[pane];
+      tab.insertBefore(wrap, tab.firstChild);
+    });
+  }
+  var tabsHost = $('#ipcAdmTabs');
+  if (tabsHost && 'MutationObserver' in window) {
+    new MutationObserver(iconize).observe(tabsHost, { childList: true });
+  }
+  iconize();
+
+  /* the drawer — one state class on <body>, four ways out */
+  var body = document.body;
+  var btn = $('#ipcAdmMenuBtn');
+  var bk = $('#ipcAdmDrawerBk');
+  var head = $('#ipcAdmDrawerHead');
+  function drawerOpen() { return body.classList.contains('adm-drawer-open'); }
+  function openDrawer() { body.classList.add('adm-drawer-open'); if (btn) btn.setAttribute('aria-expanded', 'true'); }
+  function closeDrawer() { body.classList.remove('adm-drawer-open'); if (btn) btn.setAttribute('aria-expanded', 'false'); }
+  if (btn) btn.addEventListener('click', function () { if (drawerOpen()) closeDrawer(); else openDrawer(); });
+  if (bk) bk.addEventListener('click', closeDrawer);
+  if (head) head.addEventListener('click', function (ev) {
+    if (ev.target.closest && ev.target.closest('.adm-drawer-close')) closeDrawer();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && drawerOpen()) closeDrawer();
+  });
+  /* picking a tab or a foot link always closes the drawer — the pane is
+     the destination, never leave the panel covering the page */
+  document.addEventListener('click', function (ev) {
+    if (!drawerOpen() || !ev.target.closest) return;
+    if (ev.target.closest('.adm-tab') || ev.target.closest('.adm-side-foot a')) closeDrawer();
+  });
+  /* crossing back to desktop never leaves the scroll locked */
+  window.addEventListener('resize', function () {
+    if (window.innerWidth >= 1024 && drawerOpen()) closeDrawer();
+  });
+  } catch (err) {
+    if (window.console) console.error('IPC console shell init:', err);
   }
 })();
 </script>
