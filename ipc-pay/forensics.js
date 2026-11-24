@@ -484,10 +484,302 @@ function labeledAmount(text) {
 }
 
 /* ---------------------------------------------------------------- */
-/* Full scan — fingerprint + metadata + editor + ELA in one call.    */
-/* Returns the sanitized shape that gets persisted on the payment    */
-/* and rendered on the admin card. Raw metadata strings never leave  */
-/* this module — only the verdict and its reasons. ------------------ */
+/* PIXEL SIGNALS — the reads that survive stripped metadata.         */
+/* ---------------------------------------------------------------- */
+/* Metadata can be wiped in one save. These three reads judge the
+   pixels themselves, so an AI render or a pasted edit stays visible
+   even when the file carries no names at all:
+
+     5. FLAT-REGION PURITY — a real app screenshot is drawn by a UI
+        engine: backgrounds are EXACTLY one color (variance ~0) across
+        large fields. Generative models cannot hold a flat field —
+        their "empty" areas carry low-amplitude texture everywhere. An
+        image with virtually no dead-flat area reads as synthetic.
+     6. JPEG-GHOST LOCALIZATION — PNG is lossless, so honest
+        screenshots carry no compression grid. Content that ever
+        passed through a JPEG (a crop of another receipt, a messenger
+        round-trip, an AI render saved as JPG) keeps ringing on the
+        8px block grid. A compact region of grid-periodic energy
+        inside a PNG is pasted content.
+     7. COPY-MOVE MAP — pasting usually drags background along. Blocks
+        duplicated elsewhere at one shared offset expose the move even
+        when every metadata read is clean. ---------------------------- */
+
+const PIXEL_MAX = OCR_PREP_MAX_PIXELS;
+const PURITY_BLOCK = 8;
+const PURITY_FLAT_STD = 0.6;      /* stdev under this = a dead-flat field */
+const PURITY_MIN_BLOCKS = 2500;   /* need a real screenshot's area to judge */
+const PURITY_SUSPECT_SHARE = 0.02;
+
+function decodePixels(buf, format) {
+  try {
+    if (format === "jpeg") {
+      const jpegjs = require("jpeg-js");
+      const img = jpegjs.decode(buf, { useTArray: true, maxMemoryUsageInMB: 512 });
+      if (!img.width || !img.height || img.width * img.height > PIXEL_MAX) return null;
+      return img;
+    }
+    if (format === "png") {
+      const { PNG } = require("pngjs");
+      const img = PNG.sync.read(buf);
+      if (!img.width || !img.height || img.width * img.height > PIXEL_MAX) return null;
+      if (!img.data || img.data.length < img.width * img.height * 4) return null;
+      return img;
+    }
+  } catch { /* hostile pixels are a note, never a crash */ }
+  return null;
+}
+
+function flatPurityScan(buf, format) {
+  const na = { applicable: false, verdict: "na", reason: "image unreadable or too small for the texture read" };
+  const img = decodePixels(buf, format);
+  if (!img) return na;
+  const { width: w, height: h, data } = img;
+  const bw = Math.floor(w / PURITY_BLOCK), bh = Math.floor(h / PURITY_BLOCK);
+  const total = bw * bh;
+  if (total < PURITY_MIN_BLOCKS) return na;
+  let flat = 0;
+  for (let by = 0; by < bh; by++) {
+    for (let bx = 0; bx < bw; bx++) {
+      let sum = 0, sum2 = 0, n = 0;
+      for (let y = by * PURITY_BLOCK; y < (by + 1) * PURITY_BLOCK; y++) {
+        for (let x = bx * PURITY_BLOCK; x < (bx + 1) * PURITY_BLOCK; x++) {
+          const q = (y * w + x) * 4;
+          const l = 0.299 * data[q] + 0.587 * data[q + 1] + 0.114 * data[q + 2];
+          sum += l; sum2 += l * l; n++;
+        }
+      }
+      const mean = sum / n;
+      const varr = Math.max(0, sum2 / n - mean * mean);
+      if (Math.sqrt(varr) < PURITY_FLAT_STD) flat++;
+    }
+  }
+  const flatShare = flat / total;
+  const verdict = flatShare < PURITY_SUSPECT_SHARE ? "suspicious" : "clean";
+  return {
+    applicable: true, verdict,
+    flatShare: round4(flatShare), flatBlocks: flat, totalBlocks: total,
+    reason: verdict === "suspicious"
+      ? "no dead-flat regions — a UI screenshot is always built on perfectly flat fields"
+      : null,
+  };
+}
+
+const GHOST_SUPER = 32;
+const GHOST_PERIOD = 1.2;         /* one phase carries >= 2.2x the average diff */
+const GHOST_MIN_INFO = 30;        /* textured superblocks needed to judge */
+const GHOST_MIN_SHARE = 0.10;
+
+/* Grid-periodicity of the gradient energy, per 32x32 superblock: JPEG
+   ringing lives on ONE 8px phase AND energizes every grid column of
+   that phase — a straight UI edge lives on one column only. Both facts
+   must hold, so honest text and table edges never read as ghosts. */
+function ghostSpreadOK(energy, base, phase) {
+  const off = ((phase - (base % 8)) % 8 + 8) % 8;
+  const js = [];
+  for (let k = 0; k < 4; k++) {
+    const j = off + k * 8;
+    if (j < energy.length) js.push(energy[j]);
+  }
+  const mx = Math.max.apply(null, js);
+  if (mx <= 0) return false;
+  return js.filter((v) => v >= 0.3 * mx).length >= 3;
+}
+
+function jpegGhostScan(buf, format) {
+  if (format !== "png") {
+    return { applicable: false, verdict: "na",
+      reason: "JPEG carries its own compression grid — the ghost read runs on PNG proofs" };
+  }
+  const img = decodePixels(buf, format);
+  if (!img || img.width < 96 || img.height < 96) {
+    return { applicable: false, verdict: "na", reason: "image too small for the ghost read" };
+  }
+  const { width: w, height: h, data } = img;
+  const gray = new Float32Array(w * h);
+  for (let p = 0, q = 0; p < w * h; p++, q += 4) {
+    gray[p] = 0.299 * data[q] + 0.587 * data[q + 1] + 0.114 * data[q + 2];
+  }
+  const sw = Math.floor(w / GHOST_SUPER), sh = Math.floor(h / GHOST_SUPER);
+  let informative = 0, ghost = 0;
+  for (let sy = 0; sy < sh; sy++) {
+    for (let sx = 0; sx < sw; sx++) {
+      const x0 = sx * GHOST_SUPER, y0 = sy * GHOST_SUPER;
+      const phH = new Float64Array(8), phHN = new Float64Array(8);
+      const phV = new Float64Array(8), phVN = new Float64Array(8);
+      const colH = new Float64Array(GHOST_SUPER);
+      const rowV = new Float64Array(GHOST_SUPER);
+      for (let y = y0 + 1; y < y0 + GHOST_SUPER; y++) {
+        for (let x = x0 + 1; x < x0 + GHOST_SUPER; x++) {
+          const dh = Math.abs(gray[y * w + x] - gray[y * w + x - 1]);
+          const dv = Math.abs(gray[y * w + x] - gray[(y - 1) * w + x]);
+          phH[x % 8] += dh; phHN[x % 8]++; colH[x - x0] += dh;
+          phV[y % 8] += dv; phVN[y % 8]++; rowV[y - y0] += dv;
+        }
+      }
+      const phaseCheck = (ph, pn, energy, base) => {
+        let total = 0, n = 0, bestP = -1, bestMean = 0;
+        for (let p = 0; p < 8; p++) {
+          total += ph[p]; n += pn[p];
+          const m = pn[p] ? ph[p] / pn[p] : 0;
+          if (m > bestMean) { bestMean = m; bestP = p; }
+        }
+        if (!n) return false;
+        const mean = total / n;
+        if (mean < 1.0) return false;   /* flat field — no grid to read */
+        if (!(bestMean / mean >= GHOST_PERIOD)) return false;
+        return ghostSpreadOK(energy, base, bestP);
+      };
+      const hit = phaseCheck(phH, phHN, colH, x0) || phaseCheck(phV, phVN, rowV, y0);
+      if (hit) informative++;
+      else {
+        /* non-ghost textured superblocks still count toward the share */
+        let anyH = 0, anyV = 0, nH = 0, nV = 0;
+        for (let p = 0; p < 8; p++) { anyH += phH[p]; nH += phHN[p]; anyV += phV[p]; nV += phVN[p]; }
+        if ((nH && anyH / nH >= 1.0) || (nV && anyV / nV >= 1.0)) informative++;
+      }
+      if (hit) ghost++;
+    }
+  }
+  if (informative < GHOST_MIN_INFO) {
+    return { applicable: true, verdict: "inconclusive", informative, ghost,
+      reason: "too little textured area for a grid read" };
+  }
+  const share = ghost / informative;
+  if (share >= GHOST_MIN_SHARE) {
+    return { applicable: true, verdict: "suspicious", informative, ghost, share: round4(share),
+      reason: "JPEG ringing on the 8px grid inside a PNG — content passed through another file" };
+  }
+  return { applicable: true, verdict: "clean", informative, ghost, share: round4(share) };
+}
+
+const CM_WORK_MAX = 480;
+const CM_BLOCK = 8;
+const CM_MIN_DIST = 12;           /* blocks between the twins */
+const CM_MIN_PAIRS = 8;
+const CM_MIN_STD = 5;             /* textured enough to fingerprint */
+
+function copyMoveScan(buf, format) {
+  const img = decodePixels(buf, format);
+  if (!img || img.width < 96 || img.height < 96) {
+    return { applicable: false, verdict: "na", reason: "image too small for the duplicate read" };
+  }
+  const w0 = img.width, h0 = img.height;
+  const scale = Math.min(1, CM_WORK_MAX / Math.max(w0, h0));
+  const w = Math.max(32, Math.round(w0 * scale)), h = Math.max(32, Math.round(h0 * scale));
+  const gray = new Float32Array(w * h);
+  const xr = w0 / w, yr = h0 / h;
+  for (let y = 0; y < h; y++) {
+    const sy0 = Math.floor(y * yr), sy1 = Math.max(sy0 + 1, Math.floor((y + 1) * yr));
+    for (let x = 0; x < w; x++) {
+      const sx0 = Math.floor(x * xr), sx1 = Math.max(sx0 + 1, Math.floor((x + 1) * xr));
+      let s = 0, n = 0;
+      for (let sy = sy0; sy < sy1 && sy < h0; sy++) {
+        for (let sx = sx0; sx < sx1 && sx < w0; sx++) {
+          const q = (sy * w0 + sx) * 4;
+          s += 0.299 * img.data[q] + 0.587 * img.data[q + 1] + 0.114 * img.data[q + 2]; n++;
+        }
+      }
+      gray[y * w + x] = n ? s / n : 0;
+    }
+  }
+  const bw = Math.floor(w / CM_BLOCK), bh = Math.floor(h / CM_BLOCK);
+  const sig = new Map();
+  for (let by = 0; by < bh; by++) {
+    for (let bx = 0; bx < bw; bx++) {
+      let sum = 0, sum2 = 0, n = 0;
+      const qsum = [0, 0, 0, 0];
+      for (let y = by * CM_BLOCK; y < (by + 1) * CM_BLOCK; y++) {
+        for (let x = bx * CM_BLOCK; x < (bx + 1) * CM_BLOCK; x++) {
+          const l = gray[y * w + x];
+          sum += l; sum2 += l * l; n++;
+          qsum[(y >= by * CM_BLOCK + 4 ? 2 : 0) + (x >= bx * CM_BLOCK + 4 ? 1 : 0)] += l;
+        }
+      }
+      const mean = sum / n;
+      const std = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+      if (std < CM_MIN_STD) continue;   /* flat blocks fingerprint nothing */
+      const qn = n / 4;
+      const key =
+        Math.min(15, Math.round(qsum[0] / qn / 16)) + "." +
+        Math.min(15, Math.round(qsum[1] / qn / 16)) + "." +
+        Math.min(15, Math.round(qsum[2] / qn / 16)) + "." +
+        Math.min(15, Math.round(qsum[3] / qn / 16)) + "." +
+        (std < 12 ? 0 : std < 24 ? 1 : 2);
+      if (!sig.has(key)) sig.set(key, []);
+      const pts = sig.get(key);
+      if (pts.length < 200) pts.push([bx, by]);
+    }
+  }
+  const offsets = new Map();
+  for (const pts of sig.values()) {
+    if (pts.length < 2) continue;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const dx = pts[j][0] - pts[i][0], dy = pts[j][1] - pts[i][1];
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < CM_MIN_DIST) continue;
+        const k = dx + "," + dy;
+        offsets.set(k, (offsets.get(k) || 0) + 1);
+      }
+    }
+  }
+  let top = 0;
+  for (const v of offsets.values()) if (v > top) top = v;
+  if (top >= CM_MIN_PAIRS) {
+    return { applicable: true, verdict: "suspicious", duplicatePairs: top,
+      reason: "the same block pattern repeats at one shared offset — content was copied and pasted" };
+  }
+  return { applicable: true, verdict: "clean", duplicatePairs: top };
+}
+
+/* ---------------------------------------------------------------- */
+/* Receipt date reader — a receipt for THIS payment was created at   */
+/* checkout. A printed date older than the order itself is a reused  */
+/* receipt, even when every pixel is untouched. --------------------- */
+/* ---------------------------------------------------------------- */
+
+const MONTHS = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, SEPT: 9, OCT: 10, NOV: 11, DEC: 12 };
+
+function validDate(y, m, d) {
+  if (!(y >= 2020 && y <= 2100) || !(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) return null;
+  return { y, m, d };
+}
+
+/* Returns { y, m, d } or null; numeric d/m/y returns BOTH parses with
+   ambiguous: true — a stale verdict needs every parse to be too old. */
+function extractReceiptDate(text) {
+  const t = String(text || "").toUpperCase();
+  let m;
+  if ((m = t.match(/\b(20\d\d)[-\/.](\d{1,2})[-\/.](\d{1,2})\b/))) {
+    return validDate(+m[1], +m[2], +m[3]);
+  }
+  if ((m = t.match(/\b([A-Z]{3,9})\.?\s+(\d{1,2}),?\s+(20\d\d)\b/))) {
+    const mo = MONTHS[m[1].slice(0, 3)];   /* NOVEMBER → NOV — receipts print full names */
+    if (mo) return validDate(+m[3], mo, +m[2]);
+  }
+  if ((m = t.match(/\b(\d{1,2})\s+([A-Z]{3,9})\.?,?\s+(20\d\d)\b/))) {
+    const mo = MONTHS[m[2].slice(0, 3)];
+    if (mo) return validDate(+m[3], mo, +m[1]);
+  }
+  if ((m = t.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d\d)\b/))) {
+    const a = validDate(+m[3], +m[1], +m[2]);
+    const b = validDate(+m[3], +m[2], +m[1]);
+    if (a && b) return { y: a.y, m: a.m, d: a.d, y2: b.y, m2: b.m, d2: b.d, ambiguous: true };
+    return a || b;
+  }
+  return null;
+}
+
+function receiptDateTs(dt) {
+  if (!dt) return NaN;
+  return Date.UTC(dt.y, dt.m - 1, dt.d);
+}
+
+/* ---------------------------------------------------------------- */
+/* Full scan — fingerprint + metadata + editor + ELA + pixel signals */
+/* in one call. Returns the sanitized shape that gets persisted on   */
+/* the payment and rendered on the admin card. Raw metadata strings  */
+/* never leave this module — only the verdict and its reasons. ------ */
 function scanProofImage(buf) {
   const hash = imageHash(buf);
   const format = sniffFormat(buf);
@@ -539,8 +831,13 @@ function scanProofImage(buf) {
     }
     if (meta.exif.software) scan.notes.push("png software tag: " + meta.exif.software);
     scan.ela = { applicable: false, verdict: "na",
-      reason: "PNG is lossless — fingerprint, metadata and OCR cross-checks carry the tamper read" };
+      reason: "PNG is lossless — the pixel signals below carry the tamper read" };
   }
+  /* the pixel signals run on BOTH formats — they judge the picture, not
+     the container, so stripped metadata changes nothing */
+  scan.purity = flatPurityScan(buf, format);
+  scan.ghost = jpegGhostScan(buf, format);
+  scan.copyMove = copyMoveScan(buf, format);
   return scan;
 }
 
@@ -591,7 +888,24 @@ function forensicSignals(scan, reuse) {
       label: "IMAGE WAS RE-COMPRESSED WHOLE — OFTEN A MESSENGER TRANSFER, NOT AN EDIT" });
   }
   if (scan && scan.ela && scan.ela.verdict === "na") {
-    signals.push({ code: "png_ela_na", severity: "info", label: "PNG PROOF — TAMPER READ RUNS ON FINGERPRINT + METADATA + OCR CROSS-CHECKS" });
+    signals.push({ code: "png_ela_na", severity: "info", label: "PNG PROOF — TAMPER READ RUNS ON FINGERPRINT + METADATA + PIXEL SIGNALS + OCR CROSS-CHECKS" });
+  }
+  if (scan && scan.purity && scan.purity.verdict === "suspicious") {
+    signals.push({ code: "ai_texture", severity: "high",
+      label: "IMAGE TEXTURE READS AS SYNTHETIC — A REAL APP SCREENSHOT IS BUILT ON PERFECTLY FLAT FIELDS AND THIS ONE HAS NONE, WHICH IS HOW AI-GENERATED IMAGES READ" });
+  }
+  if (scan && scan.ghost && scan.ghost.verdict === "suspicious") {
+    /* advisory: the grid read only proves itself on large, strongly
+       compressed pastes — honest receipts must never fail on it alone. */
+    signals.push({ code: "jpeg_ghost", severity: "low",
+      label: "PART OF THIS IMAGE CARRIES JPEG COMPRESSION GHOSTING — CONTENT MAY HAVE PASSED THROUGH ANOTHER FILE" });
+  }
+  if (scan && scan.copyMove && scan.copyMove.verdict === "suspicious") {
+    /* advisory only: honest receipts repeat UI rows, which can imitate
+       a copy-move — so this one informs the admin card, it never alone
+       rejects. The decisive reads are purity, ghost, ELA, metadata. */
+    signals.push({ code: "copy_move", severity: "low",
+      label: "LARGE PARTS OF THIS IMAGE DUPLICATE ANOTHER AREA OF IT — COPIED-AND-PASTED CONTENT POSSIBLE" });
   }
   return signals;
 }
@@ -602,5 +916,7 @@ module.exports = {
   jpegDimensions, parseJpegMeta, parsePngMeta, parseTiffTags,
   detectEditor, detectAIGenerator, elaScanJPEG, preprocessForOCR,
   refMatchesOCR, extractMoneyTokens, labeledAmount, confusionFold,
+  flatPurityScan, jpegGhostScan, copyMoveScan,
+  extractReceiptDate, receiptDateTs,
   scanProofImage, findProofReuse, forensicSignals,
 };

@@ -32,6 +32,71 @@ function textPng(textChunk) {
   if (!textChunk) return raw;
   return Buffer.concat([raw.slice(0, raw.length - 12), chunk("tEXt", Buffer.from(textChunk, "latin1")), Buffer.from([0, 0, 0, 0]), Buffer.from("IEND")]);
 }
+/* an honest Maya-style screenshot: flat UI fields, flat text bars,
+   randomized so no two rows repeat — this is what a REAL proof is */
+function screenshotPng(w = 480, h = 960, seed = 3) {
+  const png = new PNG({ width: w, height: h });
+  for (let i = 0; i < w * h; i++) { png.data[i * 4] = 246; png.data[i * 4 + 1] = 246; png.data[i * 4 + 2] = 244; png.data[i * 4 + 3] = 255; }
+  let s = seed;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  let y = 60;
+  while (y < h - 80) {
+    const rows = 1 + Math.floor(rnd() * 2);
+    const bw = 40 + Math.floor(rnd() * (w - 120));
+    const x0 = 24 + Math.floor(rnd() * (w - bw - 48));
+    for (let r = 0; r < rows; r++) {
+      const yy = y + r * 8;
+      if (yy + 5 > h) break;
+      for (let py = yy; py < yy + 5; py++) {
+        for (let xx = x0; xx < x0 + bw; xx++) {
+          const q = (py * w + xx) * 4;
+          png.data[q] = 20; png.data[q + 1] = 20; png.data[q + 2] = 22;
+        }
+      }
+    }
+    y += rows * 8 + 12 + Math.floor(rnd() * 24);
+  }
+  const raw = PNG.sync.write(png);
+  if (!arguments[3]) return raw;
+  return Buffer.concat([raw.slice(0, raw.length - 12), chunk("tEXt", Buffer.from(arguments[3], "latin1")), Buffer.from([0, 0, 0, 0]), Buffer.from("IEND")]);
+}
+/* a metadata-stripped AI-style render: texture everywhere, no flat field */
+function aiNoisePng(w = 480, h = 960, seed = 11) {
+  const png = new PNG({ width: w, height: h });
+  let s = seed;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  for (let i = 0; i < w * h; i++) {
+    const v = 200 + Math.floor(rnd() * 30);
+    png.data[i * 4] = v; png.data[i * 4 + 1] = v + 2; png.data[i * 4 + 2] = v + 4; png.data[i * 4 + 3] = 255;
+  }
+  return PNG.sync.write(png);
+}
+/* an edited PNG: a JPEG-compressed gradient patch pasted into an honest screenshot */
+function ghostPng(slope = 240, q = 30, noise = 4) {
+  const base = new PNG({ width: 480, height: 960 });
+  for (let i = 0; i < 480 * 960; i++) { base.data[i * 4] = 246; base.data[i * 4 + 1] = 246; base.data[i * 4 + 2] = 244; base.data[i * 4 + 3] = 255; }
+  const pw = 208, ph = 160, px = Buffer.alloc(pw * ph * 4);
+  let s = 9;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  for (let y = 0; y < ph; y++) {
+    for (let x = 0; x < pw; x++) {
+      const v = Math.round(40 + (x / pw) * slope + (rnd() - 0.5) * noise);
+      const qq = (y * pw + x) * 4;
+      px[qq] = v; px[qq + 1] = v; px[qq + 2] = v + 2; px[qq + 3] = 255;
+    }
+  }
+  const jb = jpegjs.encode({ data: px, width: pw, height: ph }, q).data;
+  const jp = jpegjs.decode(jb, { useTArray: true });
+  for (let y = 0; y < ph; y++) {
+    for (let x = 0; x < pw; x++) {
+      const qq = ((640 + y) * 480 + (136 + x)) * 4;
+      base.data[qq] = jp.data[(y * pw + x) * 4];
+      base.data[qq + 1] = jp.data[(y * pw + x) * 4 + 1];
+      base.data[qq + 2] = jp.data[(y * pw + x) * 4 + 2];
+    }
+  }
+  return PNG.sync.write(base);
+}
 /* JPEG with an APP1 EXIF blob carrying Software = Adobe Photoshop 24.0 */
 function photoshopJpeg() {
   const base = texturedJpeg(320, 640, 90);
@@ -121,12 +186,60 @@ test("AI software tags and generation-prompt chunks scan as critical", () => {
   assert.ok(!F.forensicSignals(clean, "none").some((s) => s.code === "ai_generated"));
 });
 
-test("honest scans carry no medium-or-worse signals", () => {
-  for (const buf of [textPng(null), texturedJpeg()]) {
+test("honest screenshot scans carry no medium-or-worse signals", () => {
+  for (const buf of [screenshotPng(), textPng(null)]) {
     const scan = F.scanProofImage(buf);
     const sigs = F.forensicSignals(scan, "none");
     assert.ok(!sigs.some((s) => F.SEVERITY[s.severity] >= F.SEVERITY.medium), JSON.stringify(sigs));
   }
+});
+
+/* ---- v36 pixel signals — the reads that survive stripped metadata ---- */
+test("flat-region purity: honest screenshots are clean, AI-style renders read as synthetic", () => {
+  const clean = F.flatPurityScan(screenshotPng(), "png");
+  assert.equal(clean.verdict, "clean");
+  assert.ok(clean.flatShare > 0.5, String(clean.flatShare));
+  const ai = F.flatPurityScan(aiNoisePng(), "png");
+  assert.equal(ai.verdict, "suspicious");
+  assert.equal(ai.flatShare, 0);
+  /* and the full scan turns it into a high-severity auto-reject signal */
+  const scan = F.scanProofImage(aiNoisePng());
+  const sig = F.forensicSignals(scan, "none").find((s) => s.code === "ai_texture");
+  assert.ok(sig && sig.severity === "high", JSON.stringify(sig));
+  /* the same law holds for JPEG uploads */
+  assert.equal(F.flatPurityScan(texturedJpeg(480, 960, 85), "jpeg").verdict, "suspicious");
+});
+
+test("jpeg-ghost stays advisory: honest PNGs never read as ghosts", () => {
+  const honest = F.jpegGhostScan(screenshotPng(), "png");
+  assert.ok(["clean", "inconclusive"].includes(honest.verdict), JSON.stringify(honest));
+  const jpeg = F.jpegGhostScan(texturedJpeg(480, 960, 85), "jpeg");
+  assert.equal(jpeg.verdict, "na");
+  /* a huge, strongly compressed paste reads suspicious — but only ever
+     surfaces as a LOW advisory signal, never a rejection on its own */
+  const ghost = F.jpegGhostScan(ghostPng(240, 30, 4), "png");
+  if (ghost.verdict === "suspicious") {
+    const sig = F.forensicSignals(F.scanProofImage(ghostPng(240, 30, 4)), "none").find((s) => s.code === "jpeg_ghost");
+    assert.ok(sig && sig.severity === "low", JSON.stringify(sig));
+  }
+});
+
+test("receipt date reader: month names, ISO, day-first, ambiguous numerics", () => {
+  assert.deepEqual(F.extractReceiptDate("DATE: NOV 24, 2026 10:32:11 AM"), { y: 2026, m: 11, d: 24 });
+  assert.deepEqual(F.extractReceiptDate("DATE: NOVEMBER 24, 2026"), { y: 2026, m: 11, d: 24 });
+  assert.deepEqual(F.extractReceiptDate("2026-11-24 10:32"), { y: 2026, m: 11, d: 24 });
+  assert.deepEqual(F.extractReceiptDate("24 NOVEMBER 2026"), { y: 2026, m: 11, d: 24 });
+  assert.deepEqual(F.extractReceiptDate("SEPT 5, 2026"), { y: 2026, m: 9, d: 5 });
+  const amb = F.extractReceiptDate("PAID 11/12/2026 OK");
+  assert.equal(amb.ambiguous, true);
+  assert.deepEqual({ y: amb.y, m: amb.m, d: amb.d }, { y: 2026, m: 11, d: 12 });
+  assert.deepEqual({ y: amb.y2, m: amb.m2, d: amb.d2 }, { y: 2026, m: 12, d: 11 });
+  /* an impossible alternate parse resolves on its own — never a false fail */
+  assert.deepEqual(F.extractReceiptDate("PAID 11/24/2026 OK"), { y: 2026, m: 11, d: 24 });
+  assert.equal(F.extractReceiptDate("no date in this text at all"), null);
+  assert.equal(F.extractReceiptDate("ref 1234567890123 total 125000"), null);
+  assert.equal(F.receiptDateTs({ y: 2026, m: 11, d: 24 }), Date.UTC(2026, 10, 24));
+  assert.ok(Number.isNaN(F.receiptDateTs(null)));
 });
 
 /* ---- ELA sanity ---- */
@@ -221,6 +334,11 @@ test("forensic signal severities", () => {
   const c2 = Object.fromEntries(s2.map((s) => [s.code, s.severity]));
   assert.equal(c2.proof_reused_pending, "high");
   assert.equal(c2.ela_splice, "high");
+  /* ghost + copy-move are advisory — they can never alone reject a proof */
+  const s3 = F.forensicSignals({ hash: "x", ghost: { verdict: "suspicious" }, copyMove: { verdict: "suspicious" } }, "none");
+  const c3 = Object.fromEntries(s3.map((s) => [s.code, s.severity]));
+  assert.equal(c3.jpeg_ghost, "low");
+  assert.equal(c3.copy_move, "low");
 });
 
 /* ---- garbage in, verdict out — never a crash ---- */

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-24 — v34 pay forensics: the auto reader now fingerprints proofs, flags edited screenshots, reads labeled amounts, and never overrides the club -->
+<!-- IPC BUILD 2026-11-24 — v36 machine verdict: IPC Pay decides every proof on its own — no admin approve/reject, no reader switch; pixel signals catch AI-made and pasted edits even with metadata stripped -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -1813,7 +1813,7 @@ img.tc-true{filter:none !important}
 
     <div class="terms-block reveal-sm">
       <h3>03 — PAYMENT VERIFICATION</h3>
-      <p>IPC Pay reads every screenshot before a human ever needs to. Submitting your reference number and screenshot moves your payment to UNDER VERIFICATION — the machine then reads the receipt and gives its own verdict: matching receipts confirm themselves to PAID, while edited, AI-made, reused or mismatched proofs are rejected to FAILED automatically, with the exact reason shown on your payment page. Only claims without a screenshot and reads the machine can't process go to a club admin.</p>
+      <p>IPC Pay reads every screenshot before a human ever needs to. Submitting your reference number and screenshot moves your payment to UNDER VERIFICATION — the machine then reads the receipt and gives its own verdict: matching receipts confirm themselves to PAID, while edited, AI-made, reused or mismatched proofs are rejected to FAILED automatically, with the exact reason shown on your payment page. A claim without the screenshot cannot be verified at all, and no read is ever handed to a human — the machine either verifies or rejects with the reason.</p>
       <ul>
         <li>If a payment is marked FAILED, that payment reference is closed. Check your transaction details and start a fresh checkout from the items returned to your bag. Two payment rejections within ten minutes temporarily pause new payment requests for five minutes; contact the club if you believe a rejection was made in error.</li>
         <li>Every verification decision is recorded with the admin who made it and when.</li>
@@ -2103,7 +2103,7 @@ img.tc-true{filter:none !important}
           <span class="pill p-paid"><i></i>PAID</span>
           <span class="pill p-failed"><i></i>FAILED</span>
         </div>
-        <p class="pay-note">MEETUP ORDERS CAN STILL BE SETTLED WITH GCASH OR CASH IN PERSON — IPC PAY IS FOR ONLINE ORDERS. PROOF UPLOADS NEVER AUTO-APPROVE A PAYMENT; A CLUB ADMIN VERIFIES EVERY ONE. QUESTIONS ABOUT A PAYMENT? DM <a href="https://www.instagram.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer" style="text-decoration:underline">@INDULGEPLAYASCLUB</a>.</p>
+        <p class="pay-note">MEETUP ORDERS CAN STILL BE SETTLED WITH GCASH OR CASH IN PERSON — IPC PAY IS FOR ONLINE ORDERS. IPC PAY READS EVERY PROOF AND GIVES ITS OWN VERDICT — CLEAN RECEIPTS CONFIRM AUTOMATICALLY; EDITED, AI-MADE OR MISMATCHED ONES ARE REJECTED WITH THE REASON. QUESTIONS ABOUT A PAYMENT? DM <a href="https://www.instagram.com/indulgeplayasclub" target="_blank" rel="noopener noreferrer" style="text-decoration:underline">@INDULGEPLAYASCLUB</a>.</p>
       </div>
     </div>
     <div class="methods">
@@ -2175,7 +2175,7 @@ img.tc-true{filter:none !important}
               <input class="inp" id="refNo" type="text" maxlength="40" placeholder="E.G. 9021 4567 8823" autocomplete="off" />
             </div>
             <div class="field">
-              <label for="proofFile">PAYMENT SCREENSHOT (OPTIONAL — JPG / PNG, 5MB MAX)</label>
+              <label for="proofFile">PAYMENT SCREENSHOT (REQUIRED — ORIGINAL MAYA SCREENSHOT, JPG / PNG, 5MB MAX)</label>
               <div class="proof-row">
                 <input class="inp" id="proofFile" type="file" accept="image/jpeg,image/jpg,image/png" style="padding:11px" />
               </div>
@@ -2184,11 +2184,7 @@ img.tc-true{filter:none !important}
             <button type="submit" class="btn-w" id="refSubmit">SUBMIT PAYMENT PROOF</button>
             <p class="form-msg" id="refMsg" role="status" aria-live="polite"></p>
           </form>
-          <div class="demo-row" id="demoRow" style="display:none">
-            <p class="demo-k">TESTING THE FLOW? COMPLETE THIS SAMPLE PAYMENT WITHOUT REAL MONEY — IT MOVES THE ORDER TO UNDER VERIFICATION SO THE CLUB ADMIN DASHBOARD HAS SOMETHING TO VERIFY.</p>
-            <button type="button" class="btn-o" id="demoPay">DEMO — COMPLETE SAMPLE PAYMENT</button>
-          </div>
-          <p class="pay-note">UPLOADING PROOF MOVES YOUR PAYMENT TO UNDER VERIFICATION — IPC PAY READS THE RECEIPT AND GIVES ITS OWN VERDICT: CLEAN RECEIPTS CONFIRM THEMSELVES; EDITED, AI-MADE, REUSED OR MISMATCHED ONES ARE REJECTED AUTOMATICALLY WITH THE REASON. REFERENCE-ONLY CLAIMS (NO SCREENSHOT) ARE REVIEWED BY A CLUB ADMIN. PAID BY MEETUP OR ALREADY SENT? DM @INDULGEPLAYASCLUB AND WE'LL SORT IT.</p>
+          <p class="pay-note">UPLOADING PROOF MOVES YOUR PAYMENT TO UNDER VERIFICATION — IPC PAY READS THE RECEIPT AND GIVES ITS OWN VERDICT: CLEAN RECEIPTS CONFIRM THEMSELVES; EDITED, AI-MADE, REUSED OR MISMATCHED ONES ARE REJECTED AUTOMATICALLY WITH THE REASON. A CLAIM WITHOUT THE SCREENSHOT CANNOT BE VERIFIED — THE ORIGINAL MAYA SCREENSHOT IS REQUIRED. PAID BY MEETUP OR ALREADY SENT? DM @INDULGEPLAYASCLUB AND WE'LL SORT IT.</p>
         </div>
       </div>
     </div>
@@ -2941,7 +2937,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v35-20261124-pay-verdict';
+  var IPC_BUILD = 'ipc-v36-20261124-machine-verdict';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -4501,8 +4497,6 @@ img.tc-true{filter:none !important}
     var headline = $('#poHeadline');
     var copy = $('#poStatusCopy');
     var form = $('#refForm');
-    var demoRow = $('#demoRow');
-    if (demoRow) demoRow.style.display = (pay.status === 'pending' && IPC.auth.user && IPC.auth.user.role === 'admin') ? 'flex' : 'none';
     if (pay.status === 'paid') {
       IPC.clearPendingBag();
       IPC.trackPaidOnce(pay.paymentReference, pay.amountCentavos);
@@ -4706,11 +4700,15 @@ img.tc-true{filter:none !important}
     }
     var fileInput = $('#proofFile');
     var file = fileInput && fileInput.files && fileInput.files[0];
+    if (!file) {
+      show('THE MAYA SCREENSHOT IS REQUIRED — IPC PAY VERIFIES THE RECEIPT IMAGE ITSELF, NOT JUST THE REFERENCE NUMBER.', false);
+      return;
+    }
     var submitBody = function (proofDataUrl) {
       var btn = $('#refSubmit');
       btn.disabled = true;
       btn.textContent = 'SUBMITTING…';
-      var body = { reference: poState.ref, refNo: refNo, proofDataUrl: proofDataUrl || undefined };
+      var body = { reference: poState.ref, refNo: refNo, proofDataUrl: proofDataUrl };
       if (!IPC.auth.user && IPC.guestRef.tokenForPay()) body.guestToken = IPC.guestRef.tokenForPay();
       IPC.api('/api/payments/proof', {
         method: 'POST',
@@ -4736,31 +4734,7 @@ img.tc-true{filter:none !important}
       reader.onload = function () { submitBody(String(reader.result)); };
       reader.onerror = function () { show('COULDN\u2019T READ THAT IMAGE — TRY ANOTHER SCREENSHOT.', false); };
       reader.readAsDataURL(file);
-    } else {
-      submitBody(null);
     }
-  });
-  var demoBtn = $('#demoPay');
-  if (demoBtn) demoBtn.addEventListener('click', function () {
-    if (!poState.ref || !IPC.auth.user || IPC.auth.user.role !== 'admin') return;
-    var refNo = 'IPC-DEMO-' + String(Math.floor(100000 + Math.random() * 900000));
-    var inp = $('#refNo');
-    if (inp) inp.value = refNo;
-    var btn = $('#refSubmit');
-    var msg = $('#refMsg');
-    var show = function (t, ok) { if (msg) { msg.textContent = t; msg.className = 'form-msg show ' + (ok ? 'ok' : 'err'); } };
-    if (btn) { btn.disabled = true; btn.textContent = 'SUBMITTING…'; }
-    show('SENDING THE SAMPLE PROOF — ' + refNo, true);
-    IPC.api('/api/payments/proof', { method: 'POST', body: { reference: poState.ref, refNo: refNo } })
-      .then(function () {
-        if (btn) { btn.disabled = false; btn.textContent = 'SUBMIT PAYMENT PROOF'; }
-        show('SAMPLE PAYMENT SUBMITTED — ' + refNo + ' IS NOW UNDER VERIFICATION. OPEN THE ADMIN DASHBOARD TO APPROVE OR REJECT IT.', true);
-        setTimeout(function () { loadPay(poState.ref); }, 600);
-      })
-      .catch(function (err) {
-        if (btn) { btn.disabled = false; btn.textContent = 'SUBMIT PAYMENT PROOF'; }
-        show((err.message || 'DEMO FAILED — TRY AGAIN.').toUpperCase(), false);
-      });
   });
   var proofInput = $('#proofFile');
   if (proofInput) proofInput.addEventListener('change', function () {
@@ -4861,9 +4835,9 @@ img.tc-true{filter:none !important}
     return by;
   };
   /* IPC PAY READ — the machine's verdict card on a proof. The machine
-     decides: clean reads approve themselves, decisive bad evidence is
-     rejected with the reason spelled out. Only broken machine reads
-     still land in the club's hands. */
+     decides every proof: clean reads approve themselves, decisive bad
+     evidence is rejected with the reason spelled out. The card is
+     read-only — no admin approve/reject exists. */
   IPC.fxHTML = function (p) {
     var a = p.autoRead;
     if (!a) {
@@ -4878,7 +4852,7 @@ img.tc-true{filter:none !important}
     var cls = a.pass ? ' fx-pass' : (a.verdict === 'AUTO_REJECTED' ? ' fx-flagged' : ' fx-review');
     var verdict = a.pass ? 'IPC PAY READ — CLEAN, AUTO-APPROVED'
       : (a.verdict === 'AUTO_REJECTED' ? 'IPC PAY READ — REJECTED AUTOMATICALLY'
-      : 'IPC PAY READ — MACHINE COULDN\u2019T FINISH — CLUB REVIEWS THIS ONE');
+      : 'IPC PAY READ — READ INCOMPLETE — RESUBMIT THE SCREENSHOT');
     var check = function (ok, word) { return '<b>' + (ok ? word + ' ✓' : word + ' ✗') + '</b>'; };
     var gates = check(a.mayaOk, 'MAYA MARKER') + ' — ' + check(a.refOk, 'REFERENCE' + (a.refFuzzy ? ' (OCR-FOLDED)' : '')) + ' — ' + check(a.amountOk, 'AMOUNT');
     if (a.amountReadCentavos && !a.amountOk) {
@@ -4890,6 +4864,9 @@ img.tc-true{filter:none !important}
     if (f.editor) meta.push('EDITOR SIGNATURE: ' + f.editor.toUpperCase());
     if (f.aiGenerator) meta.push('AI GENERATOR SIGNATURE: ' + String(f.aiGenerator).toUpperCase());
     if (f.ela && f.ela.verdict) meta.push('SPLICE SCAN: ' + f.ela.verdict.toUpperCase() + (f.ela.ratio ? ' (RATIO ' + f.ela.ratio + ')' : ''));
+    if (f.purity && f.purity.verdict) meta.push('TEXTURE SCAN: ' + f.purity.verdict.toUpperCase() + (f.purity.flatShare != null ? ' (FLAT ' + Math.round(f.purity.flatShare * 100) + '%)' : ''));
+    if (f.ghost && f.ghost.verdict && f.ghost.verdict !== 'na') meta.push('JPEG-GHOST SCAN: ' + f.ghost.verdict.toUpperCase() + (f.ghost.share != null ? ' (' + Math.round(f.ghost.share * 100) + '%)' : ''));
+    if (f.copyMove && f.copyMove.verdict && f.copyMove.verdict !== 'na') meta.push('DUPLICATE-REGION SCAN: ' + f.copyMove.verdict.toUpperCase() + (f.copyMove.duplicatePairs ? ' (' + f.copyMove.duplicatePairs + ' PAIRS)' : ''));
     if (f.reuse) meta.push('FINGERPRINT ' + (f.hashShort || '…') + (f.reuse === 'paid_elsewhere' ? ' — ALREADY PAID ANOTHER ORDER' : f.reuse === 'pending_elsewhere' ? ' — ON ANOTHER OPEN ORDER' : ' — UNIQUE'));
     if (a.ocrPasses) meta.push('OCR PASSES: ' + a.ocrPasses + (a.prepPass ? ' (CLEANED COPY)' : ''));
     var reasonLine = (!a.pass && a.verdict === 'AUTO_REJECTED' && a.reason)
@@ -4921,15 +4898,7 @@ img.tc-true{filter:none !important}
           return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + '</span><span>' + IPC.fmtP(it.priceCentavos * it.qty) + '</span></p>';
         }).join('') + '</div>' +
         IPC.fxHTML(p) +
-        (decided ? '' :
-          (p.autoRead && p.autoRead.verdict !== 'NEEDS_REVIEW' ? '' :
-            '<div class="pc-actions">' +
-              '<button type="button" class="btn-w btn-sm" data-decide="approve" data-pay="' + IPC.esc(p.paymentReference) + '">APPROVE — MARK PAID</button>' +
-              '<button type="button" class="btn-o btn-sm" data-decide="reject" data-pay="' + IPC.esc(p.paymentReference) + '">REJECT — MARK FAILED</button>' +
-              (p.autoRead
-                ? '<p class="pc-meta">THE MACHINE COULDN\u2019T FINISH ITS READ — YOUR CALL DECIDES THIS ONE.</p>'
-                : '<p class="pc-meta">IPC PAY IS STILL READING — ITS VERDICT WILL DECIDE IT. STEP IN ONLY IF YOU JUDGE IT FIRST.</p>') +
-            '</div>')) +
+        (decided ? '' : '<p class="pc-meta">IPC PAY DECIDES EVERY PROOF — NO ADMIN TAP IS NEEDED OR POSSIBLE.</p>') +
       '</div>' +
     '</div>';
   }
@@ -5241,7 +5210,7 @@ img.tc-true{filter:none !important}
         statTile(IPC.fmtP(o.paidRevenueCentavos), 'VERIFIED REVENUE') +
         statTile((o.activeVouchers || 0) + ' LIVE · ' + (o.voucherRedemptions || 0) + ' USED', 'VOUCHERS') +
         '<div class="stat-tile stat-bars" style="grid-column:1/-1"><p class="stat-k">VERIFIED REVENUE — LAST 7 DAYS</p>' + IPC.dailyBars(o.dailyRevenue) + '</div>' +
-        '<div class="stat-tile ipc-auto-tile' + (o.autoVerify === false ? ' off' : '') + '" id="ipcAutoTile" role="button" tabindex="0" title="IPC PAY AUTO READER — TAP TO SWITCH"><p class="stat-n">' + (o.autoVerify === false ? 'MANUAL' : 'AUTO-READER') + '</p><p class="stat-k">PAYMENT READER — TAP TO SWITCH</p></div>';
+        '<div class="stat-tile"><p class="stat-n">AUTO-READER</p><p class="stat-k">IPC PAY DECIDES EVERY PROOF — NO MANUAL STEP</p></div>';
     }).catch(function (err) {
       $('#admStats').innerHTML = '<div class="stat-tile" style="grid-column:1/-1"><p class="stat-k">' + IPC.esc((err.message || 'OVERVIEW FAILED').toUpperCase()) + '</p></div>';
     });
@@ -5251,7 +5220,7 @@ img.tc-true{filter:none !important}
     host.innerHTML = '<p class="adm-empty">LOADING THE QUEUE…</p>';
     IPC.api('/api/admin/payments').then(function (d) {
       var list = d.payments || [];
-      $('#admPayCount').textContent = list.length + ' PAYMENT' + (list.length === 1 ? '' : 'S') + ' WAITING ON THE CLUB';
+      $('#admPayCount').textContent = list.length + ' PAYMENT' + (list.length === 1 ? '' : 'S') + ' IN THE QUEUE — THE MACHINE DECIDES EACH ONE';
       if (list.length === 0) {
         host.innerHTML = '<p class="adm-empty">QUEUE IS CLEAN — NOTHING WAITING ON VERIFICATION</p>';
         return;
@@ -5698,30 +5667,6 @@ img.tc-true{filter:none !important}
       $('#lightbox').classList.remove('open');
       return;
     }
-    var btn = ev.target.closest ? ev.target.closest('[data-decide]') : null;
-    if (!btn) return;
-    var action = btn.getAttribute('data-decide');
-    var pay = btn.getAttribute('data-pay');
-    var approving = action === 'approve';
-    IPC.confirm({
-      title: approving ? 'MARK THIS PAYMENT PAID' : 'REJECT THIS PAYMENT',
-      body: 'PAYMENT ' + pay + '\n\nTHIS DECISION IS RECORDED UNDER YOUR ADMIN ACCOUNT — WHO DECIDED, WHAT CHANGED, WHEN. IT CANNOT BE EDITED AFTERWARDS, ONLY OVERTURNED BY A NEW DECISION.',
-      confirmLabel: approving ? 'MARK PAID' : 'REJECT PAYMENT',
-      danger: !approving,
-    }).then(function (ok) {
-      if (!ok) return;
-      btn.disabled = true;
-      IPC.api('/api/admin/decision', { method: 'POST', body: { paymentId: pay, action: action } })
-        .then(function (d) {
-          IPC.toast(d.message || 'DECISION SAVED');
-          loadOverview();
-          loadAdminPayments();
-        })
-        .catch(function (err) {
-          btn.disabled = false;
-          IPC.toast((err.message || 'DECISION FAILED').toUpperCase());
-        });
-    });
   });
 
   /* ---------------- THE HASH ROUTER ---------------- */
@@ -6794,21 +6739,6 @@ setTimeout(function () {
         stage.disabled = false;
         IPC.toast(apiMsg(err, 'TRACKING UPDATE FAILED'));
       });
-      return;
-    }
-    var autoTile = ev.target.closest ? ev.target.closest('#ipcAutoTile') : null;
-    if (autoTile) {
-      var isOff = autoTile.classList.contains('off');
-      autoTile.style.opacity = '.4';
-      IPC.api('/api/admin/settings', { method: 'POST', body: { autoVerify: isOff } })
-        .then(function (d) {
-          IPC.toast(d.message || 'AUTO READER SWITCHED');
-          if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
-        })
-        .catch(function (err) {
-          autoTile.style.opacity = '';
-          IPC.toast(apiMsg(err, 'COULD NOT SWITCH THE AUTO READER'));
-        });
       return;
     }
     var rm = ev.target.closest ? ev.target.closest('[data-remove-member]') : null;
