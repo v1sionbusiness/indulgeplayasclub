@@ -120,6 +120,9 @@ function initDatabase() {
       .then((d) => ensureIndexes(d))
       .then((d) => seedAdmin(d))
       .then((d) => seedVouchers(d))
+      /* after the seeds — the admin account the boot just created also
+         deserves its permanent ID, along with every legacy member */
+      .then((d) => backfillMemberIds(d))
       .then((d) => d);
   }
   return initPromise;
@@ -140,6 +143,10 @@ async function ensureIndexes(d) {
     ["voucherRedemptions", { code: 1, userId: 1 }, { unique: true }],
     ["voucherRedemptions", { code: 1, phone: 1 }, { unique: true }],
     ["voucherRedemptions", { orderReference: 1 }, { unique: true }],
+    /* member IDs — unique forever. Sparse during the migration window so
+       legacy accounts without an ID yet don't collide on null; the boot
+       backfill then hands every member their permanent ID. */
+    ["users", { memberId: 1 }, { unique: true, sparse: true }],
     /* v25 — activity log, support tickets, product visibility */
     ["activityLogs", { createdAt: -1 }, {}],
     ["activityLogs", { action: 1, createdAt: -1 }, {}],
@@ -249,9 +256,9 @@ function findUserById(id) {
   return connect().then((d) => d.collection("users").findOne({ _id: key }));
 }
 
-function insertUser({ email, name, password, role, phone, birthMonth }) {
+async function insertUser({ email, name, password, role, phone, birthMonth }) {
   const { salt, hash } = hashPassword(password);
-  const doc = {
+  const base = {
     email: String(email).toLowerCase(),
     name: String(name),
     ...(phone ? { phone: String(phone) } : {}),
@@ -262,7 +269,97 @@ function insertUser({ email, name, password, role, phone, birthMonth }) {
     role: role === "admin" ? "admin" : "customer",
     createdAt: new Date(),
   };
-  return connect().then((d) => d.collection("users").insertOne(doc)).then(() => doc);
+  const d = await connect();
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const doc = { ...base, memberId: generateMemberId(), memberIdAt: new Date() };
+    try {
+      await d.collection("users").insertOne(doc);
+      return doc;
+    } catch (err) {
+      /* memberId collision (astronomically rare) → roll a fresh ID and try
+         again. Any OTHER duplicate key — email, phone — belongs to the
+         register caller, which answers with a proper 409. */
+      if (err && err.code === 11000 && String(err.message || "").includes("memberId")) continue;
+      throw err;
+    }
+  }
+  throw new Error("COULD NOT ISSUE A UNIQUE MEMBER ID — TRY AGAIN.");
+}
+
+/* ---------------------------------------------------------------- */
+/* MEMBER IDs — the club's permanent customer number.               */
+/* "PLAYA" + exactly 8 characters from a 32-symbol alphabet with    */
+/* the look-alikes (O, 0, I, 1) left out, so an ID reads clean out  */
+/* loud and in print. Cryptographically random (node:crypto) —      */
+/* never sequential, never derived from dates, phones or names.     */
+/* 256 % 32 === 0, so byte % 32 is perfectly unbiased.              */
+/* 32^8 ≈ 1.1 trillion combinations. The unique index on users.     */
+/* memberId is the final arbiter — a collision is redrawn, never    */
+/* shared. Issued ONCE: login, profile edits and password changes   */
+/* never touch it, and no endpoint accepts one from the client.     */
+/* ---------------------------------------------------------------- */
+
+const MEMBER_ID_PREFIX = "PLAYA";
+const MEMBER_ID_RE = /^PLAYA[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/;
+
+function generateMemberId() {
+  const bytes = crypto.randomBytes(8);
+  let id = MEMBER_ID_PREFIX;
+  for (let i = 0; i < 8; i++) id += REF_ALPHABET[bytes[i] % REF_ALPHABET.length];
+  return id;
+}
+
+/* Give ONE user their permanent ID. Safe to call repeatedly — a member
+   who already has one just gets it echoed back. The unique index decides
+   races: a lost update (someone else claimed the ID microseconds first)
+   surfaces as E11000 and the draw is redone. */
+async function ensureMemberId(d, user) {
+  if (!user || !user._id) return null;
+  if (user.memberId && MEMBER_ID_RE.test(user.memberId)) return user.memberId;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const id = generateMemberId();
+    try {
+      const r = await d.collection("users").updateOne(
+        { _id: user._id, $or: [{ memberId: { $exists: false } }, { memberId: null }, { memberId: "" }] },
+        { $set: { memberId: id, memberIdAt: new Date() } }
+      );
+      if (r.modifiedCount === 1) return id;
+      /* filter missed — the member got an ID between reads; echo it */
+      const fresh = await d.collection("users")
+        .findOne({ _id: user._id }, { projection: { memberId: 1 } });
+      return (fresh && fresh.memberId) || null;
+    } catch (err) {
+      if (err && err.code === 11000 && String(err.message || "").includes("memberId")) continue;
+      throw err;
+    }
+  }
+  return null;
+}
+
+/* Boot-time migration — every existing account gets its permanent ID.
+   Idempotent: members who already have one are never touched, customer
+   records / orders / vouchers stay exactly as they are. */
+async function backfillMemberIds(d) {
+  try {
+    const missing = await d.collection("users")
+      .find(
+        { $or: [{ memberId: { $exists: false } }, { memberId: null }, { memberId: "" }] },
+        { projection: { _id: 1 } }
+      )
+      .limit(2000)
+      .toArray();
+    let done = 0;
+    for (const u of missing) {
+      try { if (await ensureMemberId(d, u)) done++; } catch (err) {
+        console.log("[ipc-pay] member ID backfill miss:", err.message);
+      }
+    }
+    if (done) console.log("[ipc-pay] member IDs issued to " + done + " existing member(s).");
+    return done;
+  } catch (err) {
+    console.log("[ipc-pay] member ID backfill skipped:", err.message);
+    return 0;
+  }
 }
 
 /* ---------------------------------------------------------------- */
@@ -345,6 +442,8 @@ function seedAdmin(d) {
         return users.insertOne({
           email,
           name,
+          memberId: generateMemberId(),
+          memberIdAt: new Date(),
           salt,
           hash,
           role: "admin",
@@ -425,5 +524,9 @@ module.exports = {
   findUserById,
   insertUser,
   nextReference,
+  generateMemberId,
+  ensureMemberId,
+  backfillMemberIds,
+  MEMBER_ID_RE,
   MONGO_NOT_CONFIGURED: "MONGO_NOT_CONFIGURED",
 };

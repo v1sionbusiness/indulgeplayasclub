@@ -50,7 +50,8 @@
  *   GET  /api/admin/overview       → (Bearer admin)
  *   GET  /api/admin/payments       → (Bearer admin) verification queue
  *   GET  /api/admin/orders         → (Bearer admin)
- *   GET  /api/admin/users          → (Bearer admin)
+ *   GET  /api/admin/users          → (Bearer admin) ?q= search, ?status= filter
+ *   GET  /api/admin/member         → (Bearer admin) ?email= full member record
  *   POST /api/admin/decision       → (Bearer admin) { paymentId, action }
  *
  * The club email address is set ONCE in the EmailJS template ("To Email"),
@@ -414,7 +415,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v31-20261124-audit";
+const BUILD_STAMP = "ipc-v32-20261124-members";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -896,7 +897,12 @@ function bearerToken(req) {
 }
 
 function publicUser(u) {
-  return { id: String(u._id), email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt };
+  return { id: String(u._id), email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt, memberId: u.memberId || null };
+}
+
+/** Escape a raw admin search term before it goes into a $regex. */
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /* Membership levels — computed from VERIFIED payments only. */
@@ -1373,7 +1379,20 @@ async function route(req, res) {
     if (p === "/api/auth/me") {
       const found = await userFromReq(req).catch(() => null);
       if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
-      const user = publicUser(found.user);
+      /* belt-and-braces member ID: the boot backfill issues IDs to every
+         account, but if this one slipped through ( Atlas hiccup at boot,
+         account created mid-backfill), the first /me call mints it now.
+         The ID never changes after this moment. */
+      let doc = found.user;
+      if (!doc.memberId) {
+        try {
+          const { connect, ensureMemberId } = require("./ipc-pay/mongo");
+          const d0 = await connect();
+          const minted = await ensureMemberId(d0, doc);
+          if (minted) doc = { ...doc, memberId: minted };
+        } catch { /* member ID never blocks the profile */ }
+      }
+      const user = publicUser(doc);
       try {
         const { connect } = require("./ipc-pay/mongo");
         const d = await connect();
@@ -1617,6 +1636,7 @@ async function route(req, res) {
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
         p === "/api/admin/orders" || p === "/api/admin/users" ||
+        p === "/api/admin/member" ||
         p === "/api/admin/vouchers" || p === "/api/admin/inquiries" ||
         p === "/api/admin/inventory" || p === "/api/admin/products") {
       const found = await userFromReq(req).catch(() => null);
@@ -1843,37 +1863,154 @@ async function route(req, res) {
             orders: ords.map((o) => orderView(o, byOrder.get(o.reference))),
           });
         }
-        /* /api/admin/users — with per-member join + order stats */
-        const [us, paidAgg, allAgg] = await Promise.all([
-          d.collection("users")
-            .find({}, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1, status: 1, removedAt: 1 } })
-            .sort({ createdAt: -1 }).limit(500).toArray(),
-          d.collection("orders").aggregate([
-            { $match: { status: "paid" } },
-            { $group: { _id: "$email", paidOrders: { $sum: 1 }, spent: { $sum: "$totalCentavos" } } },
-          ]).toArray(),
-          d.collection("orders").aggregate([
-            { $group: { _id: "$email", orders: { $sum: 1 }, last: { $max: "$createdAt" } } },
-          ]).toArray(),
-        ]);
-        const paidByEmail = new Map(paidAgg.map((x) => [x._id, x]));
-        const allByEmail = new Map(allAgg.map((x) => [x._id, x]));
-        return send(res, 200, {
-          ok: true,
-          users: us.map((u) => {
-            const paid = paidByEmail.get(u.email) || {};
-            const all = allByEmail.get(u.email) || {};
-            return {
-              email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
-              status: u.status || "active", removedAt: u.removedAt || null,
-              tier: tierForPaid(paid.spent || 0),
-              orders: all.orders || 0,
-              paidOrders: paid.paidOrders || 0,
-              spentCentavos: paid.spent || 0,
-              lastOrderAt: all.last || null,
-            };
-          }),
-        });
+        /* /api/admin/users — the member roster with search + status filter.
+           ?q= matches Member ID (with or without the PLAYA prefix), name,
+           email and the digits of a mobile number. ?status= narrows to
+           "active" or "removed" — the two states the accounts system
+           actually carries. Both filters run in the DATABASE, so a big
+           roster stays fast and the admin sees real records, not a
+           client-side trick. */
+        if (p === "/api/admin/users") {
+          const q = new URL(req.url, "http://ipc.local").searchParams.get("q") || "";
+          const status = (new URL(req.url, "http://ipc.local").searchParams.get("status") || "all").toLowerCase();
+          const filter = {};
+          if (status === "active" || status === "removed") filter.status = status;
+          const term = String(q).trim().slice(0, 80);
+          if (term) {
+            const rx = new RegExp(escapeRegex(term), "i");
+            const or = [{ name: rx }, { email: rx }, { memberId: rx }];
+            /* Member ID lookup without the prefix — "K7M9XQ42" finds
+               PLAYAK7M9XQ42; a bare "PLAYA" search still matches the prefix */
+            const bare = term.replace(/^PLAYA/i, "");
+            if (bare && /^[A-Z0-9]{1,8}$/i.test(bare)) or.push({ memberId: new RegExp(escapeRegex(bare), "i") });
+            /* mobile: stored normalized (+639…), so search the digits only */
+            const digits = term.replace(/\D/g, "");
+            if (digits.length >= 7) or.push({ phone: new RegExp(escapeRegex(digits), "i") });
+            filter.$or = or;
+          }
+          const [us, totalMembers, paidAgg, allAgg] = await Promise.all([
+            d.collection("users")
+              .find(filter, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1, updatedAt: 1, status: 1, removedAt: 1, memberId: 1, memberIdAt: 1, twoFAEnabled: 1, passwordChangedAt: 1, birthMonth: 1 } })
+              .sort({ createdAt: -1 }).limit(500).toArray(),
+            d.collection("users").countDocuments({}),
+            d.collection("orders").aggregate([
+              { $match: { status: "paid" } },
+              { $group: { _id: "$email", paidOrders: { $sum: 1 }, spent: { $sum: "$totalCentavos" } } },
+            ]).toArray(),
+            d.collection("orders").aggregate([
+              { $group: { _id: "$email", orders: { $sum: 1 }, last: { $max: "$createdAt" } } },
+            ]).toArray(),
+          ]);
+          const paidByEmail = new Map(paidAgg.map((x) => [x._id, x]));
+          const allByEmail = new Map(allAgg.map((x) => [x._id, x]));
+          return send(res, 200, {
+            ok: true,
+            counts: { returned: us.length, totalMembers },
+            users: us.map((u) => {
+              const paid = paidByEmail.get(u.email) || {};
+              const all = allByEmail.get(u.email) || {};
+              return {
+                memberId: u.memberId || null, memberIdAt: u.memberIdAt || null,
+                email: u.email, name: u.name, phone: u.phone || "", role: u.role, createdAt: u.createdAt,
+                updatedAt: u.updatedAt || null, status: u.status || "active", removedAt: u.removedAt || null,
+                twoFAEnabled: !!u.twoFAEnabled, passwordChangedAt: u.passwordChangedAt || null,
+                birthMonth: u.birthMonth || null,
+                tier: tierForPaid(paid.spent || 0),
+                orders: all.orders || 0,
+                paidOrders: paid.paidOrders || 0,
+                spentCentavos: paid.spent || 0,
+                lastOrderAt: all.last || null,
+              };
+            }),
+          });
+        }
+
+        /* /api/admin/member — the full record for ONE member, for the
+           expandable Members-tab profile. Everything comes straight from
+           the database; sections the member has no records in come back
+           empty and the UI says so honestly. Admin-only (the gate above). */
+        if (p === "/api/admin/member") {
+          const email = String(new URL(req.url, "http://ipc.local").searchParams.get("email") || "").trim().toLowerCase().slice(0, 120);
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+          }
+          const u = await d.collection("users").findOne({ email });
+          if (!u) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+          const [orders, signIns, activity, redemptions, tickets] = await Promise.all([
+            d.collection("orders").find({ $or: [{ email }, { userId: u._id }] })
+              .sort({ createdAt: -1 }).limit(25).toArray(),
+            d.collection("sessions").find({ userId: u._id })
+              .sort({ createdAt: -1 }).limit(12).toArray(),
+            d.collection("activityLogs").find({ $or: [{ actorEmail: email }, { targetType: "member", targetId: email }] })
+              .sort({ createdAt: -1 }).limit(20).toArray(),
+            d.collection("voucherRedemptions").find({ $or: [{ userId: u._id }, { phone: u.phone || "___none___" }] })
+              .sort({ createdAt: -1 }).limit(20).toArray(),
+            d.collection("supportTickets").find({ email })
+              .sort({ createdAt: -1 }).limit(10).toArray(),
+          ]);
+          const refs = orders.map((o) => o.reference);
+          const pays = refs.length
+            ? await d.collection("payments").find({ orderReference: { $in: refs } })
+              .sort({ createdAt: -1 }).limit(25).toArray()
+            : [];
+          const payByOrder = new Map(pays.map((x) => [x.orderReference, x]));
+          return send(res, 200, {
+            ok: true,
+            member: {
+              memberId: u.memberId || null, memberIdAt: u.memberIdAt || null,
+              name: u.name, email: u.email, phone: u.phone || "",
+              role: u.role, status: u.status || "active",
+              createdAt: u.createdAt, updatedAt: u.updatedAt || null,
+              removedAt: u.removedAt || null, removedBy: u.removedBy || null,
+              removalReason: u.removalReason || null,
+              twoFAEnabled: !!u.twoFAEnabled,
+              passwordChangedAt: u.passwordChangedAt || null,
+              passwordResetBy: u.passwordResetBy || null,
+              birthMonth: u.birthMonth || null,
+              referralCode: u.referralCode || null, referralCount: u.referralCount || 0,
+            },
+            orders: orders.map((o) => ({
+              reference: o.reference,
+              createdAt: o.createdAt,
+              status: o.status,
+              guest: !!o.guest,
+              itemCount: (o.items || []).reduce((n, it) => n + (it.qty || 0), 0),
+              items: (o.items || []).slice(0, 6).map((it) => ({ name: it.name, size: it.size, color: it.color || "", qty: it.qty, priceCentavos: it.priceCentavos })),
+              subtotalCentavos: o.subtotalCentavos,
+              discountCentavos: o.discountCentavos || 0,
+              voucherCode: o.voucherCode || null,
+              shippingCentavos: o.shippingCentavos,
+              totalCentavos: o.totalCentavos,
+              city: o.city || "", province: o.province || "",
+              paymentStatus: payByOrder.get(o.reference) ? payByOrder.get(o.reference).status : null,
+            })),
+            payments: pays.map((x) => ({
+              paymentReference: x.paymentReference,
+              orderReference: x.orderReference,
+              status: x.status,
+              method: x.method || "qr",
+              amountCentavos: x.amountCentavos,
+              refNo: x.refNo || null,
+              proofPresent: !!x.proofDataUrl,
+              createdAt: x.createdAt,
+              verifiedAt: x.verifiedAt || null,
+              reviewedBy: x.reviewedBy || null,
+            })),
+            vouchers: redemptions.map((r) => ({
+              code: r.code, orderReference: r.orderReference, createdAt: r.createdAt,
+            })),
+            signIns: signIns.map((s) => ({ createdAt: s.createdAt, expiresAt: s.expiresAt })),
+            activity: activity.map((a) => ({
+              action: a.action, targetType: a.targetType, targetId: a.targetId,
+              targetLabel: a.targetLabel, details: a.details, createdAt: a.createdAt,
+            })),
+            tickets: tickets.map((t) => ({
+              ref: t.ref || t.id, subject: t.subject, status: t.status,
+              createdAt: t.createdAt, updatedAt: t.updatedAt,
+            })),
+          });
+        }
+
       } catch (err) {
         return mongoError(res, err, "admin query failed");
       }    }
