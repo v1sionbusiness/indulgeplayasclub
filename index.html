@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-24 — v36 machine verdict: IPC Pay decides every proof on its own — no admin approve/reject, no reader switch; pixel signals catch AI-made and pasted edits even with metadata stripped -->
+<!-- IPC BUILD 2026-11-24 — v37 console revamp: the admin panel becomes a real back office (sidebar, KPI cards, global search, member quick actions with suspend, pagers) and the account page becomes a member dashboard with a voucher wallet — payment workflow untouched -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -1106,6 +1106,179 @@ img.tc-true{filter:none !important}
 /* checkout shipping note */
 .co-ship-note{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase;margin-top:10px;line-height:1.9}
 @media(max-width:640px){.ipc-update-chip{left:14px;right:14px;bottom:14px;justify-content:space-between}.ipc-update-chip .uc-text{display:none}}
+</style>
+<style id="ipc-console-css">
+/* ================================================================
+   IPC CONSOLE — the admin shell + account dashboard revamp.
+   A real back-office layout: sidebar navigation, KPI cards, a
+   global search bar, member rows that open into full records with
+   quick actions, and pagers the database backs. Monochrome, same
+   brand voice, additive to the system above.
+   ================================================================ */
+
+/* ---------- ADMIN SHELL LAYOUT ---------- */
+#admMain{display:none}
+#admMain.ipc-on{display:flex;flex-wrap:wrap;max-width:1240px;margin:0 auto;align-items:stretch}
+.adm-topbar{width:100%;display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);background:var(--panel);padding:14px 20px;box-sizing:border-box}
+.adm-top-brand{display:flex;align-items:baseline;gap:12px;white-space:nowrap}
+.adm-top-brand b{font-family:var(--display);font-size:19px;letter-spacing:.04em;color:var(--text)}
+.adm-top-brand small{font-family:var(--mono);font-size:9px;letter-spacing:.26em;color:var(--faint);text-transform:uppercase}
+.adm-gsearch{display:flex;gap:0;flex:1 1 320px;min-width:0;border:1px solid var(--line-2);background:var(--bg)}
+.adm-gsearch select{border:0;border-right:1px solid var(--line-2);background:var(--panel);color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.16em;padding:0 12px;cursor:pointer;outline:none}
+.adm-gsearch input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-family:var(--mono);font-size:11px;letter-spacing:.1em;padding:12px 14px;outline:none;text-transform:uppercase}
+.adm-gsearch input::placeholder{color:var(--faint);text-transform:uppercase}
+.adm-gsearch button{border:0;border-left:1px solid var(--line-2);background:var(--panel);color:var(--text);font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.18em;padding:0 16px;cursor:pointer;text-transform:uppercase;transition:background .18s,color .18s}
+.adm-gsearch button:hover{background:var(--white);color:var(--black)}
+.adm-top-live{display:flex;align-items:center;gap:14px;margin-left:auto;white-space:nowrap}
+.adm-top-who{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.adm-top-clock{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.adm-top-clock::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--white);animation:blink 1.6s infinite}
+.adm-topbar .btn-o{white-space:nowrap}
+
+/* ---------- SIDEBAR ---------- */
+.adm-tabs{display:flex;flex-direction:column;border:1px solid var(--line);border-top:0;background:var(--panel);margin:0;padding:0;gap:0;width:100%;box-sizing:border-box}
+.adm-side-label{font-family:var(--mono);font-size:8.5px;letter-spacing:.3em;color:var(--faint);text-transform:uppercase;padding:16px 20px 6px;border-top:1px solid rgba(255,255,255,.06)}
+.adm-side-label:first-child{border-top:0}
+.adm-tab{position:relative;display:block;width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;padding:12px 20px;color:var(--muted);cursor:pointer;text-transform:uppercase;transition:color .18s,background .18s,border-color .18s;flex:none}
+.adm-tab::after{display:none}
+.adm-tab::before{content:"";display:inline-block;width:6px;height:6px;border:1px solid var(--faint);margin-right:12px;vertical-align:1px;transition:background .18s,border-color .18s}
+.adm-tab:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.adm-tab.active{color:var(--black);background:var(--white);border-left-color:var(--white);font-weight:700}
+.adm-tab.active::before{background:var(--black);border-color:var(--black)}
+.adm-side-foot{margin-top:auto;padding:16px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:8px}
+.adm-side-foot a,.adm-side-foot button{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;text-decoration:none;background:none;border:0;padding:0;cursor:pointer;text-align:left;transition:color .18s}
+.adm-side-foot a:hover,.adm-side-foot button:hover{color:var(--text)}
+/* sidebar order — operations first, community and insight after,
+   whichever script appended the tab */
+.adm-tab[data-pane="dashboard"]{order:1}
+.adm-side-label[for-group="sell"]{order:2}
+.adm-tab[data-pane="payments"]{order:3}
+.adm-tab[data-pane="allpay"]{order:4}
+.adm-tab[data-pane="orders"]{order:5}
+.adm-tab[data-pane="users"]{order:6}
+.adm-side-label[for-group="shop"]{order:7}
+.adm-tab[data-pane="inventory"]{order:8}
+.adm-tab[data-pane="vouchers"]{order:9}
+.adm-side-label[for-group="club"]{order:10}
+.adm-tab[data-pane="support"]{order:11}
+.adm-tab[data-pane="contacts"]{order:12}
+.adm-side-label[for-group="community"]{order:13}
+.adm-tab[data-pane="reviews"]{order:14}
+.adm-tab[data-pane="streets"]{order:15}
+.adm-tab[data-pane="growth"]{order:16}
+.adm-side-label[for-group="insight"]{order:17}
+.adm-tab[data-pane="analytics"]{order:18}
+.adm-tab[data-pane="activity"]{order:19}
+.adm-side-foot{order:30}
+
+/* ---------- CONTENT COLUMN — flex rows: topbar, editorial line, stats,
+   then sidebar (236px) beside the visible pane. display:none panes take
+   no room, so exactly one content column sits beside the sidebar. ---------- */
+@media(min-width:1024px){
+  #admMain.ipc-on .adm-tabs{width:236px;flex:none;position:sticky;top:84px;align-self:flex-start;max-height:calc(100vh - 110px);overflow-y:auto;border-top:1px solid var(--line)}
+  #admMain.ipc-on > *:not(.adm-tabs):not(.adm-topbar):not(.adm-stats):not(.adm-editorial){flex:1 1 0;min-width:0;border-left:0}
+}
+.adm-pane{display:none;margin-top:0;padding:26px 0 40px;border:0}
+.adm-pane.active{display:block}
+#v-admin .adm-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-top:0;margin-top:0;width:100%}
+#admMain.ipc-on .adm-editorial{width:100%}
+.stat-tile{background:var(--panel);padding:20px 20px 18px;position:relative;transition:background .2s}
+.stat-tile:hover{background:var(--panel-2)}
+.stat-tile .stat-n{font-family:var(--display);font-size:clamp(20px,2.4vw,27px);line-height:1.05;color:var(--text);letter-spacing:.01em}
+.stat-tile .stat-k{font-family:var(--mono);font-size:8.5px;letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-top:8px}
+.stat-tile .stat-delta{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;padding:3px 7px;border:1px solid var(--line-2);color:var(--muted)}
+.stat-tile .stat-delta.up{color:var(--text);border-color:var(--text)}
+.stat-tile .stat-delta.down{color:var(--faint)}
+.stat-bars{grid-column:1/-1}
+
+/* ---------- DASHBOARD PANE ---------- */
+.ipc-dash-hello{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.ipc-dash-hello h3{font-family:var(--display);font-size:clamp(22px,3.4vw,32px);line-height:1.05;text-transform:uppercase;color:var(--text)}
+.ipc-dash-hello p{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;margin-top:10px}
+.ipc-dash-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:860px){.ipc-dash-cards{grid-template-columns:1fr 1fr}}
+.ipc-dash-card{border:1px solid var(--line);background:var(--panel);padding:18px;cursor:pointer;transition:border-color .2s,background .2s;text-align:left;font:inherit;color:inherit}
+.ipc-dash-card:hover{border-color:var(--text);background:var(--panel-2)}
+.ipc-dash-card .dc-k{font-family:var(--mono);font-size:8.5px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase}
+.ipc-dash-card .dc-n{font-family:var(--display);font-size:24px;color:var(--text);margin-top:8px}
+.ipc-dash-card .dc-sub{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;color:var(--muted);margin-top:6px;text-transform:uppercase}
+.ipc-dash-alert{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.04);padding:14px 18px;margin-top:14px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--text);text-transform:uppercase;display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap}
+.ipc-dash-feed{margin-top:26px;border:1px solid var(--line);background:var(--panel);padding:18px}
+.ipc-dash-feed h4{font-family:var(--mono);font-size:10px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase;margin-bottom:12px}
+.ipc-dash-feed .mem-line span:first-child{color:var(--muted)}
+
+/* ---------- MEMBER ROWS (concept layout) ---------- */
+.mem-card{border:1px solid var(--line);background:var(--panel);margin-bottom:0}
+.ipc-mem-list{border:1px solid var(--line)}
+.ipc-mem-list .mem-card{border:0;border-bottom:1px solid var(--line)}
+.ipc-mem-list .mem-card:last-child{border-bottom:0}
+.mem-head{display:grid;grid-template-columns:150px minmax(180px,1.4fr) 110px 100px 110px 84px 34px;gap:12px;align-items:center;padding:13px 16px;cursor:pointer;flex-wrap:nowrap}
+.mem-head:hover{background:rgba(255,255,255,.035)}
+.mem-head .mem-id{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--text);border:0;padding:0;white-space:nowrap}
+.mem-head .mem-who{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mem-head .mem-who b{font-size:13.5px;letter-spacing:.04em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mem-head .mem-who small{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--faint);text-transform:lowercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mem-head .mem-col{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+.mem-head .mem-col small{display:block;color:var(--faint);font-size:8px;margin-top:3px;letter-spacing:.12em}
+.mem-flags{display:contents}
+.mem-stats{display:contents}
+.mem-chev{justify-self:end}
+.mem-card .mem-actions{border-top:1px dashed var(--line);padding:12px 16px 0;margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mem-card:not(.open) .mem-actions{display:none}
+.ipc-mem-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.ipc-mem-quick .btn-o,.ipc-mem-quick .btn-w{font-size:9.5px}
+.ipc-removed-row .mem-head{opacity:.5}
+.mem-kicker{font-family:var(--mono);font-size:8.5px;letter-spacing:.26em;color:var(--faint);text-transform:uppercase;margin:0 0 10px}
+/* status pills */
+.pill.p-suspended{border-color:rgba(255,190,80,.5);color:#ffcf8a}
+.pill.p-removed{border-color:rgba(255,110,110,.45);color:#ff9d9d}
+/* pager */
+.ipc-pager{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px}
+.ipc-pager .pg-info{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+.ipc-pager button{font-family:var(--mono);font-size:9px;letter-spacing:.18em;padding:9px 14px;border:1px solid var(--line-2);background:transparent;color:var(--muted);cursor:pointer;text-transform:uppercase}
+.ipc-pager button:hover:not(:disabled){background:var(--white);color:var(--black)}
+.ipc-pager button:disabled{opacity:.35;cursor:default}
+/* orders toolbar */
+.ipc-ord-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin:0 0 16px}
+.ipc-ord-tools input[type=text]{flex:1 1 240px;min-width:0;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:12px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;outline:none}
+.ipc-ord-tools input[type=text]:focus{border-color:var(--text)}
+.ipc-ord-tools select{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:12px 14px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;outline:none}
+
+/* ---------- ACCOUNT DASHBOARD ---------- */
+.acct-wrap{max-width:1180px;margin:0 auto;padding:150px 32px 110px}
+.acct-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:30px}
+@media(max-width:860px){.acct-stats{grid-template-columns:repeat(2,1fr)}}
+.acct-stats .stat-tile{padding:20px}
+/* member voucher wallet */
+.ipc-wallet-card{border:1px solid var(--line-2);background:var(--panel);padding:16px 18px;margin-bottom:10px;transition:border-color .2s,opacity .2s}
+.ipc-wallet-card:hover{border-color:var(--text)}
+.ipc-wallet-card.off{opacity:.5}
+.ipc-wallet-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.ipc-wallet-code{font-family:var(--mono);font-size:14px;letter-spacing:.16em;color:var(--text)}
+.ipc-wallet-meta{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:8px;line-height:1.8}
+.ipc-wallet-label{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin-top:6px;line-height:1.8}
+#ipcIdCard{background:linear-gradient(135deg,#101010,#000 60%);border:1px solid var(--line-2);position:relative;overflow:hidden}
+#ipcIdCard::after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border:1px solid rgba(255,255,255,.09);border-radius:50%}
+.ipc-id-value{font-family:var(--mono);font-size:clamp(20px,3vw,26px);letter-spacing:.18em;color:var(--white)}
+.acct-card h3{display:flex;align-items:center;gap:10px}
+.acct-card h3::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.08)}
+@media(max-width:760px){
+  .mem-head{grid-template-columns:1fr 34px;row-gap:6px}
+  .mem-head .mem-id{grid-column:1}
+  .mem-head .mem-who{grid-column:1}
+  .mem-head .mem-col{display:none}
+  .mem-head .mem-col.mem-col-status{display:block}
+  .mem-chev{grid-column:2;grid-row:1}
+  #v-admin .adm-stats{grid-template-columns:repeat(2,1fr)}
+  .acct-wrap{padding:130px 18px 90px}
+}
+@media(max-width:1023px){
+  .adm-tabs{flex-direction:row;flex-wrap:wrap;overflow-x:auto}
+  .adm-side-label{display:none}
+  .adm-tab{width:auto;border-left:0;border-bottom:2px solid transparent;padding:11px 14px}
+  .adm-tab.active{border-bottom-color:var(--white)}
+  .adm-side-foot{flex-direction:row;gap:18px;margin:0 0 0 auto;padding:12px 16px}
+}
 </style>
 <link rel="canonical" href="https://indulgeplayasclub.onrender.com/" />
 <meta property="og:site_name" content="INDULGE PLAYAS CLUB" />
@@ -2367,6 +2540,7 @@ img.tc-true{filter:none !important}
     <div id="acctMain" style="display:none">
       <p class="kicker reveal-sm">MY ACCOUNT</p>
       <h2 class="acct-title reveal" id="acctHello">—</h2>
+      <div class="acct-stats" id="acctStats"></div>
       <div class="acct-grid">
         <div class="acct-card ipc-id-card" id="ipcIdCard">
           <div class="ipc-id-top">
@@ -2412,6 +2586,7 @@ img.tc-true{filter:none !important}
           <div class="mem-tabs">
             <button type="button" class="mem-tab active" data-actab="level">LEVEL UP</button>
             <button type="button" class="mem-tab" data-actab="referral">REFERRAL</button>
+            <button type="button" class="mem-tab" data-actab="vouchers">VOUCHERS</button>
             <button type="button" class="mem-tab" data-actab="security" id="secTab" style="display:none">ADMIN SECURITY</button>
           </div>
           <div class="mem-pane active" data-acpane="level">
@@ -2420,6 +2595,9 @@ img.tc-true{filter:none !important}
           </div>
           <div class="mem-pane" data-acpane="referral">
             <div id="clubReferral"><p class="orders-empty">YOUR REFERRAL CODE SHOWS UP HERE ONCE THE CLUB ISSUES IT.</p></div>
+          </div>
+          <div class="mem-pane" data-acpane="vouchers">
+            <div id="clubWallet"><p class="orders-empty">LOADING YOUR VOUCHERS…</p></div>
           </div>
           <div class="mem-pane" data-acpane="security">
             <div id="clubTwofa"><p class="orders-empty">ADMIN ONLY — THIS TAB APPEARS FOR CLUB ADMIN ACCOUNTS.</p></div>
@@ -2476,23 +2654,46 @@ img.tc-true{filter:none !important}
       <h2 class="acct-title reveal">Admins only<span class="dim">.</span></h2>
       <div class="auth-gate">
         <h3>This area is for club admins.</h3>
-        <p>LOG IN WITH THE ADMIN ACCOUNT TO VERIFY IPC PAY PAYMENTS</p>
+        <p>LOG IN WITH THE ADMIN ACCOUNT TO RUN THE CLUB — PAYMENTS, MEMBERS, ORDERS AND THE SHOP</p>
         <a href="#/login" class="btn-w" data-route="login">LOG IN AS ADMIN</a>
       </div>
     </div>
     <div id="admMain" style="display:none">
-      <p class="kicker reveal-sm">IPC ADMIN</p>
-      <h2 class="acct-title reveal">Club control<span class="dim">.</span></h2>
+      <div class="adm-topbar" id="ipcAdmTop">
+        <div class="adm-top-brand"><b>IPC</b><small>CLUB CONTROL</small></div>
+        <form class="adm-gsearch" id="ipcAdmGSearch" novalidate>
+          <select id="ipcAdmGScope" aria-label="SEARCH SCOPE">
+            <option value="members">MEMBERS</option>
+            <option value="orders">ORDERS</option>
+          </select>
+          <input id="ipcAdmGInput" type="text" placeholder="SEARCH — MEMBER ID, NAME, EMAIL OR ORDER #" maxlength="80" autocomplete="off" aria-label="GLOBAL ADMIN SEARCH" />
+          <button type="submit">SEARCH</button>
+        </form>
+        <div class="adm-top-live">
+          <span class="adm-top-clock" id="ipcAdmClock">— LIVE</span>
+          <span class="adm-top-who" id="ipcAdmWho"></span>
+          <button type="button" class="btn-o btn-sm" id="ipcAdmRefreshAll">REFRESH ALL</button>
+        </div>
+      </div>
       <div class="adm-stats" id="admStats"></div>
       <div class="adm-tabs">
-        <button type="button" class="adm-tab active" data-pane="payments">QUEUE</button>
+        <button type="button" class="adm-tab active" data-pane="dashboard">DASHBOARD</button>
+        <div class="adm-side-label" for-group="sell">SELL</div>
+        <button type="button" class="adm-tab" data-pane="payments">PAYMENT QUEUE</button>
         <button type="button" class="adm-tab" data-pane="allpay">ALL PAYMENTS</button>
         <button type="button" class="adm-tab" data-pane="orders">ORDERS</button>
         <button type="button" class="adm-tab" data-pane="users">MEMBERS</button>
-        <button type="button" class="adm-tab" data-pane="inventory">INVENTORY</button>
+        <div class="adm-side-label" for-group="shop">SHOP</div>
+        <button type="button" class="adm-tab" data-pane="inventory">PRODUCTS</button>
+        <div class="adm-side-label" for-group="club">CLUB</div>
         <button type="button" class="adm-tab" data-pane="contacts">CONTACTS</button>
+        <div class="adm-side-foot">
+          <a href="#/shop" data-route="shop">OPEN THE SITE ↗</a>
+          <a href="#/account" data-route="account">MY ACCOUNT ↗</a>
+        </div>
       </div>
-      <div class="adm-pane active" id="pane-payments">
+      <div class="adm-pane active" id="pane-dashboard"></div>
+      <div class="adm-pane" id="pane-payments">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
           <p class="count-chip" id="admPayCount">—</p>
           <button type="button" class="btn-o btn-sm" id="admRefresh">REFRESH</button>
@@ -2504,6 +2705,16 @@ img.tc-true{filter:none !important}
         <div id="admAll" style="margin-top:18px"></div>
       </div>
       <div class="adm-pane" id="pane-orders">
+        <div class="ipc-ord-tools" id="ipcOrdTools">
+          <input type="text" id="ipcOrdSearch" placeholder="SEARCH — ORDER #, BUYER, EMAIL, MOBILE, CITY OR TRACKING" maxlength="80" autocomplete="off" aria-label="SEARCH ORDERS" />
+          <select id="ipcOrdSort" aria-label="SORT ORDERS">
+            <option value="newest">NEWEST FIRST</option>
+            <option value="oldest">OLDEST FIRST</option>
+            <option value="total_desc">BIGGEST TOTAL</option>
+            <option value="total_asc">SMALLEST TOTAL</option>
+          </select>
+          <button type="button" class="btn-o btn-sm" id="ipcOrdClear" style="display:none">CLEAR</button>
+        </div>
         <div id="admOrders"></div>
       </div>
       <div class="adm-pane" id="pane-users">
@@ -2522,6 +2733,7 @@ img.tc-true{filter:none !important}
           <select id="ipcMemStatus" aria-label="FILTER MEMBERS BY STATUS">
             <option value="all">ALL MEMBERS</option>
             <option value="active">ACTIVE</option>
+            <option value="suspended">SUSPENDED</option>
             <option value="removed">REMOVED</option>
           </select>
           <button type="button" class="btn-o btn-sm" id="ipcMemClear" style="display:none">CLEAR</button>
@@ -2937,7 +3149,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v36-20261124-machine-verdict';
+  var IPC_BUILD = 'ipc-v37-20261124-console-revamp';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -3227,7 +3439,10 @@ img.tc-true{filter:none !important}
     awaiting_payment: { label: 'PENDING', cls: 'p-pending' },
     under_verification: { label: 'UNDER VERIFICATION', cls: 'p-under' },
     paid: { label: 'PAID', cls: 'p-paid' },
-    failed: { label: 'FAILED', cls: 'p-failed' }
+    failed: { label: 'FAILED', cls: 'p-failed' },
+    active: { label: 'ACTIVE', cls: 'p-paid' },
+    suspended: { label: 'SUSPENDED', cls: 'p-suspended' },
+    removed: { label: 'REMOVED', cls: 'p-removed' }
   };
   IPC.pill = function (s) {
     var st = IPC.STATUS[s] || { label: String(s || '—').toUpperCase(), cls: 'p-pending' };
@@ -5071,10 +5286,71 @@ img.tc-true{filter:none !important}
       }).catch(function () { /* the card keeps whatever login already had */ });
     })();
     var mbody = $('#ipcMemberBody');
+    /* ACCOUNT DASHBOARD — the stat strip the member sees first. Every
+       tile fills from its own real fetch; nothing is estimated. */
+    var stats = $('#acctStats');
+    if (stats) {
+      stats.innerHTML =
+        '<div class="stat-tile"><p class="stat-n" id="asOrders">—</p><p class="stat-k">ORDERS PLACED</p></div>' +
+        '<div class="stat-tile"><p class="stat-n" id="asSpent">—</p><p class="stat-k">LIFETIME PAID</p></div>' +
+        '<div class="stat-tile"><p class="stat-n" id="asVouchers">—</p><p class="stat-k">VOUCHERS IN WALLET</p></div>' +
+        '<div class="stat-tile"><p class="stat-n" id="asTier">—</p><p class="stat-k">CLUB TIER</p></div>';
+    }
+    /* MEMBER WALLET — every voucher the club issued to this member with an
+       honest state, plus the redemption trail. Straight from the database. */
+    IPC.renderClubWallet = function () {
+      var host = $('#clubWallet');
+      if (!host) return;
+      host.innerHTML = '<p class="orders-empty">LOADING YOUR VOUCHERS…</p>';
+      IPC.api('/api/vouchers/mine').then(function (d) {
+        var vs = d.vouchers || [];
+        var reds = d.redemptions || [];
+        var ready = vs.filter(function (v) { return v.state === 'available'; }).length;
+        var vTile = $('#asVouchers');
+        if (vTile) vTile.textContent = String(ready);
+        if (!vs.length) {
+          host.innerHTML = '<p class="orders-empty">NO VOUCHERS IN YOUR WALLET YET — CLUB OFFERS, BIRTHDAY VOUCHERS AND REFERRAL CREDITS ALL LAND HERE.</p>';
+        } else {
+          host.innerHTML = vs.map(function (v) {
+            var stateCls = { available: 'p-paid', used: 'p-under', expired: 'p-failed', paused: 'p-pending' }[v.state] || 'p-pending';
+            var stateLbl = { available: 'READY TO USE', used: 'USED', expired: 'EXPIRED', paused: 'PAUSED' }[v.state] || v.state.toUpperCase();
+            var offer = v.type === 'percent' ? v.value + '% OFF' : IPC.fmtP(v.value) + ' OFF';
+            var conds = [];
+            if (v.minSubtotalCentavos > 0) conds.push('MIN SPEND ' + IPC.fmtP(v.minSubtotalCentavos));
+            if (v.products && v.products.length) conds.push('SELECTED PIECES ONLY');
+            if (v.maxUses > 0) conds.push(v.maxUses === 1 ? 'ONE-TIME USE' : 'UP TO ' + v.maxUses + ' USES');
+            if (v.expiresAt) conds.push('EXPIRES ' + fmtDate(v.expiresAt));
+            var usable = v.state === 'available';
+            return '<div class="ipc-wallet-card' + (usable ? '' : ' off') + '">' +
+              '<div class="ipc-wallet-top"><b class="ipc-wallet-code">' + IPC.esc(v.code) + '</b>' +
+              '<span class="pill ' + stateCls + '"><i></i>' + stateLbl + '</span></div>' +
+              '<p class="ipc-wallet-meta">' + IPC.esc(v.source) + ' · ' + offer +
+              (conds.length ? ' · ' + IPC.esc(conds.join(' · ')) : '') + '</p>' +
+              (v.label && v.label !== v.code ? '<p class="ipc-wallet-label">' + IPC.esc(v.label) + '</p>' : '') +
+              (usable && v.products && v.products.length ? '<p class="ipc-wallet-label">COVERS: ' + IPC.esc(v.products.join(', ')) + '</p>' : '') +
+              '</div>';
+          }).join('') +
+          (reds.length
+            ? '<p class="mem-subk" style="margin-top:18px">REDEMPTION HISTORY</p>' +
+              reds.map(function (r) {
+                return '<div class="mem-line"><span><b style="letter-spacing:.1em">' + IPC.esc(r.label || r.code) + '</b>' +
+                  (r.orderReference ? '<small> ON ORDER ' + IPC.esc(r.orderReference) + '</small>' : '') + '</span>' +
+                  '<small>' + fmtDate(r.at) + '</small></div>';
+              }).join('')
+            : '<p class="orders-empty" style="margin-top:14px">NO REDEMPTIONS YET — YOUR FIRST CLAIM SHOWS UP HERE.</p>');
+        }
+      }).catch(function (err) {
+        host.innerHTML = '<p class="orders-empty">' + IPC.esc(((err && err.message) || 'COULD NOT LOAD YOUR VOUCHERS').toUpperCase()) + ' — TRY A REFRESH.</p>';
+      });
+    };
+    IPC.renderClubWallet();
     if (mbody) {
       mbody.innerHTML = '<p class="orders-empty">CHECKING YOUR LEVEL…</p>';
       IPC.api('/api/auth/me').then(function (d) {
         var m = d.user && d.user.membership;
+        var spentTile = $('#asSpent'), tierTile = $('#asTier');
+        if (m && spentTile) spentTile.textContent = IPC.fmtP(m.spentCentavos);
+        if (m && tierTile) tierTile.textContent = String(m.tier || 'ROOKIE').toUpperCase();
         if (!m) { mbody.innerHTML = '<p class="orders-empty">MEMBERSHIP UNAVAILABLE RIGHT NOW — TRY A REFRESH.</p>'; return; }
         var cur = IPC_TIERS.filter(function (x) { return x.key === m.tier; })[0] || IPC_TIERS[0];
         var pct = m.nextTier ? Math.max(0, Math.min(100, Math.round(100 * (m.spentCentavos - cur.min) / Math.max(1, m.nextTier.minPaidCentavos - cur.min)))) : 100;
@@ -5108,6 +5384,8 @@ img.tc-true{filter:none !important}
     }
     IPC.api('/api/orders/mine').then(function (d) {
       var orders = d.orders || [];
+      var ordTile = $('#asOrders');
+      if (ordTile) ordTile.textContent = String(orders.length);
       if (orders.length === 0) {
         list.innerHTML = '';
         $('#ordersEmpty').style.display = 'block';
@@ -5192,29 +5470,106 @@ img.tc-true{filter:none !important}
   function admGuard() {
     var ok = Boolean(IPC.auth.user && IPC.auth.user.role === 'admin');
     $('#admGate').style.display = ok ? 'none' : 'block';
-    $('#admMain').style.display = ok ? 'block' : 'none';
+    $('#admMain').classList.toggle('ipc-on', ok);
+    $('#admMain').style.display = ok ? 'flex' : 'none';
+    if (ok) {
+      var u = IPC.auth.user;
+      var who = $('#ipcAdmWho');
+      if (who) who.textContent = (u.email || '') + ' — ' + (u.role || '').toUpperCase();
+    }
     return ok;
   }
-  function statTile(n, k) {
-    return '<div class="stat-tile"><p class="stat-n">' + n + '</p><p class="stat-k">' + IPC.esc(k) + '</p></div>';
+  /* delta chip on a stat card — null delta means no honest comparison yet */
+  function statDelta(pct) {
+    if (pct == null) return '';
+    var dir = pct > 0 ? 'up' : (pct < 0 ? 'down' : '');
+    return '<span class="stat-delta ' + dir + '">' + (pct > 0 ? '+' : '') + pct + '% / 7D</span>';
   }
   function loadOverview() {
     IPC.api('/api/admin/overview').then(function (d) {
       var o = d.overview;
       IPC.__ipcRootAdmin = o.rootAdmin || '';
+      IPC.__ipcOverview = o;
       $('#admStats').innerHTML =
-        statTile(o.users, 'MEMBERS') +
-        statTile(o.orders, 'ORDERS') +
-        statTile(o.paymentsUnderVerification, 'UNDER VERIFICATION') +
-        statTile(IPC.fmtP(o.underVerificationCentavos || 0), 'PENDING VALUE') +
-        statTile(IPC.fmtP(o.paidRevenueCentavos), 'VERIFIED REVENUE') +
-        statTile((o.activeVouchers || 0) + ' LIVE · ' + (o.voucherRedemptions || 0) + ' USED', 'VOUCHERS') +
-        '<div class="stat-tile stat-bars" style="grid-column:1/-1"><p class="stat-k">VERIFIED REVENUE — LAST 7 DAYS</p>' + IPC.dailyBars(o.dailyRevenue) + '</div>' +
-        '<div class="stat-tile"><p class="stat-n">AUTO-READER</p><p class="stat-k">IPC PAY DECIDES EVERY PROOF — NO MANUAL STEP</p></div>';
+        '<div class="stat-tile">' + statDelta(o.membersDeltaPct) +
+          '<p class="stat-n">' + (o.users || 0) + '</p><p class="stat-k">MEMBERS TOTAL</p>' +
+          '<p class="stat-k" style="color:var(--muted)">' + (o.activeMembers || 0) + ' ACTIVE' + (o.suspendedMembers ? ' · ' + o.suspendedMembers + ' PAUSED' : '') + '</p></div>' +
+        '<div class="stat-tile">' + statDelta(o.ordersDeltaPct) +
+          '<p class="stat-n">' + (o.orders || 0) + '</p><p class="stat-k">ORDERS TOTAL</p>' +
+          '<p class="stat-k" style="color:var(--muted)">' + (o.piecesSold || 0) + ' PIECES SOLD</p></div>' +
+        '<div class="stat-tile">' + statDelta(o.vouchersDeltaPct) +
+          '<p class="stat-n">' + (o.voucherRedemptions || 0) + '</p><p class="stat-k">VOUCHER CLAIMS</p>' +
+          '<p class="stat-k" style="color:var(--muted)">' + (o.activeVouchers || 0) + ' LIVE OFFERS</p></div>' +
+        '<div class="stat-tile">' +
+          '<p class="stat-n">' + (o.avgRating != null ? o.avgRating + ' / 5' : '—') + '</p><p class="stat-k">AVG PIECE RATING</p>' +
+          '<p class="stat-k" style="color:var(--muted)">' + (o.ratingCount || 0) + ' VERIFIED REVIEWS</p></div>' +
+        '<div class="stat-tile">' +
+          '<p class="stat-n">' + IPC.fmtP(o.paidRevenueCentavos) + '</p><p class="stat-k">VERIFIED REVENUE</p>' +
+          '<p class="stat-k" style="color:var(--muted)">' + (o.paymentsPaid || 0) + ' PAID PAYMENTS</p></div>' +
+        '<div class="stat-tile">' +
+          '<p class="stat-n">' + (o.paymentsUnderVerification || 0) + '</p><p class="stat-k">UNDER VERIFICATION</p>' +
+          '<p class="stat-k" style="color:var(--muted)">' + IPC.fmtP(o.underVerificationCentavos || 0) + ' WAITING</p></div>' +
+        '<div class="stat-tile stat-bars" style="grid-column:1/-1"><p class="stat-k">VERIFIED REVENUE — LAST 7 DAYS</p>' + IPC.dailyBars(o.dailyRevenue) + '</div>';
+      /* the dashboard reads the cached overview for its alert rows — repaint
+         it once the numbers land so the alerts are never a refresh behind */
+      if (typeof loadDashboard === 'function') loadDashboard();
     }).catch(function (err) {
       $('#admStats').innerHTML = '<div class="stat-tile" style="grid-column:1/-1"><p class="stat-k">' + IPC.esc((err.message || 'OVERVIEW FAILED').toUpperCase()) + '</p></div>';
     });
   }
+  /* DASHBOARD — the landing pane: what the club looks like right now,
+     shortcut cards into every section, and the latest admin actions */
+  function loadDashboard() {
+    var pane = $('#pane-dashboard');
+    if (!pane) return;
+    var u = IPC.auth.user || {};
+    var o = IPC.__ipcOverview || {};
+    var today = new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    var cards = [
+      ['MEMBERS', 'users', 'ROSTER · SEARCH · ACTIONS'],
+      ['ORDERS', 'orders', 'SEARCH · SORT · FULFILLMENT'],
+      ['PRODUCTS', 'inventory', 'ADD · EDIT · VISIBILITY'],
+      ['VOUCHERS', 'vouchers', 'CREATE · EDIT · PAUSE'],
+      ['SUPPORT', 'support', 'TICKETS · REPLIES'],
+      ['ANALYTICS', 'analytics', 'SALES · FUNNEL · BEST SELLERS'],
+    ];
+    pane.innerHTML =
+      '<div class="ipc-dash-hello"><div><h3>Good day, ' + IPC.esc((u.name || u.email || 'ADMIN').split(' ')[0]) + '<span class="dim">.</span></h3>' +
+      '<p>' + IPC.esc(today.toUpperCase()) + ' — THE CLUB RUNS ON REAL RECORDS, NOTHING HERE IS SAMPLED</p></div>' +
+      '<p class="count-chip">' + (o.users || 0) + ' MEMBERS · ' + (o.orders || 0) + ' ORDERS · ' + IPC.fmtP(o.paidRevenueCentavos || 0) + ' VERIFIED</p></div>' +
+      '<div class="ipc-dash-cards">' + cards.map(function (c) {
+        return '<button type="button" class="ipc-dash-card" data-dash-go="' + c[1] + '"><p class="dc-k">' + c[0] + '</p><p class="dc-n">OPEN</p><p class="dc-sub">' + c[2] + '</p></button>';
+      }).join('') + '</div>' +
+      ((o.paymentsUnderVerification || 0) > 0
+        ? '<div class="ipc-dash-alert"><span>' + o.paymentsUnderVerification + ' PAYMENT' + (o.paymentsUnderVerification === 1 ? '' : 'S') + ' UNDER VERIFICATION — ' + IPC.fmtP(o.underVerificationCentavos || 0) + ' WAITING ON THE MACHINE</span><button type="button" class="btn-o btn-sm" data-dash-go="payments">OPEN THE QUEUE</button></div>'
+        : '') +
+      ((o.suspendedMembers || 0) > 0
+        ? '<div class="ipc-dash-alert"><span>' + o.suspendedMembers + ' MEMBER ACCOUNT' + (o.suspendedMembers === 1 ? ' IS' : 'S ARE') + ' SUSPENDED RIGHT NOW</span><button type="button" class="btn-o btn-sm" data-dash-go="users">OPEN MEMBERS</button></div>'
+        : '') +
+      '<div class="ipc-dash-feed"><h4>THE LATEST ON THE RECORD — WHO DID WHAT, WHEN</h4><div id="ipcDashFeed"><p class="adm-empty">LOADING THE RECORD…</p></div></div>';
+    IPC.api('/api/admin/activity').then(function (d) {
+      var rows = (d.activity || []).slice(0, 6);
+      var host = $('#ipcDashFeed');
+      if (!host) return;
+      host.innerHTML = rows.length
+        ? rows.map(function (a) {
+            return '<div class="mem-line"><span>' + IPC.esc(a.targetLabel || a.targetId || a.action) +
+              '<small style="display:block;margin-top:3px">' + IPC.esc(a.details || a.action) + ' — ' + IPC.esc(a.actorEmail || '') + '</small></span>' +
+              '<small>' + fmtDate(a.createdAt) + '</small></div>';
+          }).join('')
+        : '<p class="mem-empty">NO ADMIN ACTIONS ON RECORD YET — THE LOG WRITES ITSELF FROM YOUR FIRST MOVE.</p>';
+    }).catch(function () {
+      var host = $('#ipcDashFeed');
+      if (host) host.innerHTML = '<p class="mem-empty">THE RECORD IS UNREACHABLE RIGHT NOW.</p>';
+    });
+  }
+  /* dashboard shortcut cards jump straight into a section */
+  document.addEventListener('click', function (ev) {
+    var go = ev.target.closest ? ev.target.closest('[data-dash-go]') : null;
+    if (!go) return;
+    var tab = document.querySelector('.adm-tab[data-pane="' + go.getAttribute('data-dash-go') + '"]');
+    if (tab) tab.click();
+  });
   function loadAdminPayments() {
     var host = $('#admPayments');
     host.innerHTML = '<p class="adm-empty">LOADING THE QUEUE…</p>';
@@ -5251,9 +5606,35 @@ img.tc-true{filter:none !important}
   function loadAdminOrders() {
     var host = $('#admOrders');
     host.innerHTML = '<p class="adm-empty">LOADING ORDERS…</p>';
-    IPC.api('/api/admin/orders').then(function (d) {
+    /* toolbar wiring once — search, sort and clear all re-read the database */
+    var sIn = $('#ipcOrdSearch'), sSel = $('#ipcOrdSort'), cBtn = $('#ipcOrdClear');
+    if (sIn && !sIn.dataset.wired) {
+      sIn.dataset.wired = '1';
+      var runOrd = function () { IPC.__ordQ = (sIn.value || '').trim(); IPC.__ordPage = 1; loadAdminOrders(); };
+      sIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); runOrd(); } });
+      if (sSel) sSel.addEventListener('change', function () { IPC.__ordSort = sSel.value || 'newest'; IPC.__ordPage = 1; loadAdminOrders(); });
+      if (cBtn) cBtn.addEventListener('click', function () {
+        sIn.value = ''; IPC.__ordQ = ''; IPC.__ordSort = 'newest'; IPC.__ordPage = 1;
+        if (sSel) sSel.value = 'newest';
+        loadAdminOrders();
+      });
+    }
+    if (sIn && document.activeElement !== sIn && sIn.value.trim() !== (IPC.__ordQ || '')) sIn.value = IPC.__ordQ || '';
+    if (sSel && sSel.value !== (IPC.__ordSort || 'newest')) sSel.value = IPC.__ordSort || 'newest';
+    if (cBtn) cBtn.style.display = (IPC.__ordQ || (IPC.__ordSort && IPC.__ordSort !== 'newest')) ? 'inline-flex' : 'none';
+    var qs = [];
+    if (IPC.__ordQ) qs.push('q=' + encodeURIComponent(IPC.__ordQ));
+    if (IPC.__ordSort && IPC.__ordSort !== 'newest') qs.push('sort=' + encodeURIComponent(IPC.__ordSort));
+    qs.push('page=' + (IPC.__ordPage || 1));
+    qs.push('pageSize=50');
+    IPC.api('/api/admin/orders' + (qs.length ? '?' + qs.join('&') : '')).then(function (d) {
       var list = d.orders || [];
-      if (list.length === 0) { host.innerHTML = '<p class="adm-empty">NO ORDERS YET</p>'; return; }
+      var total = d.total != null ? d.total : list.length;
+      var pages = d.pages || 1, page = d.page || 1;
+      if (list.length === 0) {
+        host.innerHTML = '<p class="adm-empty">' + (IPC.__ordQ ? 'NO ORDERS MATCH "' + IPC.esc(IPC.__ordQ) + '" — CHECK THE NUMBER OR NAME AND TRY AGAIN.' : 'NO ORDERS YET') + '</p>';
+        return;
+      }
       /* delivery-stage filter — PENDING = tracking not opened yet (payment
          not accepted); everything else rides the order's tracking stage
          (processing / packed / shipped / delivered / cancelled). The
@@ -5274,13 +5655,20 @@ img.tc-true{filter:none !important}
         }).join('') + '</div>';
       var shown = cur === 'all' ? list : list.filter(function (o) { return stageOf(o) === cur; });
       var curLabel = FILTERS.filter(function (f) { return f[0] === cur; })[0][1];
+      var qNote = IPC.__ordQ ? ' · SEARCH "' + IPC.esc(IPC.__ordQ) + '"' : '';
       var head = '<p class="count-chip" style="margin-bottom:14px">' + (cur === 'all'
-        ? list.length + ' ORDERS — TAP ANY ROW FOR THE FULL BREAKDOWN'
-        : shown.length + ' OF ' + list.length + ' ORDERS — DELIVERY ' + curLabel) + '</p>';
+        ? list.length + ' OF ' + total + ' ORDERS ON THIS PAGE — TAP ANY ROW FOR THE FULL BREAKDOWN' + qNote
+        : shown.length + ' OF ' + list.length + ' ORDERS — DELIVERY ' + curLabel + qNote) + '</p>';
       if (shown.length === 0) {
         host.innerHTML = chips + head + '<p class="adm-empty">NOTHING IN ' + curLabel + ' RIGHT NOW — TAP ANOTHER STAGE OR ALL</p>';
         return;
       }
+      var ordPager = (pages > 1 || IPC.__ordQ)
+        ? '<div class="ipc-pager">' +
+          '<button type="button" data-ord-page="prev"' + (page <= 1 ? ' disabled' : '') + '>◄ PREV</button>' +
+          '<span class="pg-info">PAGE ' + page + ' OF ' + pages + ' — ' + total + ' ORDERS ON RECORD</span>' +
+          '<button type="button" data-ord-page="next"' + (page >= pages ? ' disabled' : '') + '>NEXT ►</button></div>'
+        : '';
       host.innerHTML = chips + head + '<div style="overflow-x:auto"><table class="adm-table"><thead><tr>' +
         '<th>ORDER</th><th>BUYER</th><th>DELIVER TO</th><th>PIECES</th><th>TOTAL</th><th>PAYMENT</th><th>STATUS</th><th>TRACKING</th><th>PLACED</th></tr></thead><tbody>' +
       shown.map(function (o, i) {
@@ -5328,11 +5716,19 @@ img.tc-true{filter:none !important}
             '<td>' + (IPC.trackCellHTML ? IPC.trackCellHTML(o) : '') + '</td>' +
             '<td>' + fmtDate(o.createdAt) + '</td></tr>' +
             '<tr class="adm-order-detail" id="admDet' + i + '" style="display:none"><td colspan="9">' + detail + (IPC.fulfilHTML ? IPC.fulfilHTML(o) : '') + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
+        }).join('') + '</tbody></table></div>' + ordPager;
     }).catch(function (err) {
       host.innerHTML = '<p class="adm-empty">' + IPC.esc((err.message || 'ORDERS FAILED').toUpperCase()) + '</p>';
     });
   }
+  /* orders pager clicks — the database holds the page, this just asks */
+  document.addEventListener('click', function (ev) {
+    var pg = ev.target.closest ? ev.target.closest('[data-ord-page]') : null;
+    if (!pg || pg.disabled) return;
+    if (pg.getAttribute('data-ord-page') === 'prev' && (IPC.__ordPage || 1) > 1) IPC.__ordPage = (IPC.__ordPage || 1) - 1;
+    if (pg.getAttribute('data-ord-page') === 'next') IPC.__ordPage = (IPC.__ordPage || 1) + 1;
+    loadAdminOrders();
+  });
   /* delivery-stage filter chips (delegated — survives table re-renders) */
   if (!document.__ipcTrackFilter) {
     document.addEventListener('click', function (ev) {
@@ -5378,6 +5774,8 @@ img.tc-true{filter:none !important}
      everything updates in place. ---------- */
   IPC.__memQ = '';
   IPC.__memStatus = 'all';
+  IPC.__memPage = 1;
+  IPC.__memCounts = {};
   IPC.__memDetail = {};   /* expanded record cache — invalidated by actions */
   IPC.__memOpen = {};     /* which cards the admin left open */
 
@@ -5385,33 +5783,61 @@ img.tc-true{filter:none !important}
 
   function memCardHTML(u) {
     var removed = u.status === 'removed';
+    var suspended = u.status === 'suspended';
     var isSelf = IPC.auth.user && IPC.auth.user.email === u.email;
     var isRoot = IPC.__ipcRootAdmin && u.email === IPC.__ipcRootAdmin;
     var removable = !removed && !isSelf && !isRoot;
     var mid = u.memberId || 'PENDING';
-    return '<div class="mem-card' + (IPC.__memOpen[u.email] ? ' open' : '') + '" data-memcard="' + IPC.esc(u.email) + '">' +
+    return '<div class="mem-card' + (IPC.__memOpen[u.email] ? ' open' : '') + (removed ? ' ipc-removed-row' : '') + '" data-memcard="' + IPC.esc(u.email) + '">' +
       '<div class="mem-head" data-mem-toggle="' + IPC.esc(u.email) + '" role="button" tabindex="0" aria-expanded="' + (IPC.__memOpen[u.email] ? 'true' : 'false') + '">' +
         '<span class="mem-id">' + IPC.esc(mid) + '</span>' +
         '<span class="mem-who"><b>' + IPC.esc(u.name || u.email) + '</b><small>' + IPC.esc(u.email) + '</small></span>' +
-        '<span class="mem-flags">' +
-          (u.role === 'admin' ? '<span class="admin-flag">ADMIN</span>' : '') +
-          (removed ? '<span class="ipc-removed-flag">REMOVED</span>' : '') +
-        '</span>' +
-        '<span class="mem-stats">' +
-          '<span>' + (removed ? '—' : ipcTierBadge(u.tier || 'ROOKIE')) + '</span>' +
-          '<span>' + (u.orders || 0) + (u.orders === 1 ? ' ORDER' : ' ORDERS') + '</span>' +
-          '<span>JOINED ' + fmtDate(u.createdAt) + '</span>' +
-        '</span>' +
+        '<span class="mem-flags">' + memPill(u.status || 'active') + (u.role === 'admin' ? ' <span class="admin-flag">ADMIN</span>' : '') + '</span>' +
+        '<span class="mem-col mem-col-tier">' + (removed ? '—' : (u.tier || 'ROOKIE')) + '<small>TIER</small></span>' +
+        '<span class="mem-col">JOINED ' + fmtDate(u.createdAt) + '</span>' +
+        '<span class="mem-col">' + (u.lastLoginAt ? 'IN ' + fmtDate(u.lastLoginAt) : 'NO SIGN-IN YET') + '<small>LAST LOGIN</small></span>' +
+        '<span class="mem-col">' + (u.orders || 0) + ' ORDERS' + '<small>' + (u.paidOrders ? u.paidOrders + ' PAID' : 'NO PAID YET') + '</small></span>' +
         '<i class="mem-chev" aria-hidden="true"></i>' +
       '</div>' +
       '<div class="mem-actions">' + (removed
-        ? '<small class="ipc-removed-note">REMOVED ' + (u.removedAt ? fmtDate(u.removedAt) : '') + '</small> <button type="button" class="btn-o btn-sm ipc-restore-btn" data-restore-member="' + IPC.esc(u.email) + '">RESTORE</button>'
-        : '<div class="ipc-member-actions">' +
-          (removable ? '<button type="button" class="btn-o btn-sm ipc-remove-btn" data-remove-member="' + IPC.esc(u.email) + '">REMOVE</button>' : '') +
-          '<button type="button" class="btn-o btn-sm" data-pw-member="' + IPC.esc(u.email) + '" title="Set a fresh sign-in word for a member who forgot theirs">RESET PW</button>' +
-          '</div>') + '</div>' +
+        ? '<small class="ipc-removed-note">REMOVED ' + (u.removedAt ? fmtDate(u.removedAt) : '') + ' BY ' + IPC.esc(u.removedBy || '—') + '</small> <button type="button" class="btn-o btn-sm ipc-restore-btn" data-restore-member="' + IPC.esc(u.email) + '">RESTORE</button>'
+        : '') + '</div>' +
       '<div class="mem-body" style="display:none"></div>' +
     '</div>';
+  }
+
+  /* QUICK ACTIONS — the concept's action row inside an open member record.
+     Root-admin and self accounts are protected: the club owner can never
+     be demoted, paused or removed, and you cannot pause yourself. */
+  function memQuickHTML(m) {
+    var email = m.email || '';
+    var isSelf = IPC.auth.user && IPC.auth.user.email === email;
+    var isRoot = IPC.__ipcRootAdmin && email === IPC.__ipcRootAdmin;
+    var removed = m.status === 'removed';
+    var suspended = m.status === 'suspended';
+    if (removed) {
+      return '<div class="ipc-mem-quick"><button type="button" class="btn-w btn-sm" data-restore-member="' + IPC.esc(email) + '">RESTORE ACCOUNT</button>' +
+        '<span class="ipc-removed-note">REMOVED ACCOUNTS KEEP THEIR ORDERS AND PAYMENTS ON RECORD FOREVER.</span></div>';
+    }
+    var btns = '';
+    if (!isSelf) {
+      btns += m.role === 'admin'
+        ? '<button type="button" class="btn-o btn-sm" data-admin-revoke="' + IPC.esc(email) + '">REMOVE ADMIN</button>'
+        : '<button type="button" class="btn-o btn-sm" data-admin-grant="' + IPC.esc(email) + '">MAKE ADMIN</button>';
+    }
+    if (!isSelf && !isRoot) {
+      btns += suspended
+        ? '<button type="button" class="btn-o btn-sm" data-unsuspend-member="' + IPC.esc(email) + '">UNSUSPEND</button>'
+        : '<button type="button" class="btn-o btn-sm" data-suspend-member="' + IPC.esc(email) + '">SUSPEND ACCOUNT</button>';
+    }
+    if (!isSelf && !isRoot) {
+      btns += '<button type="button" class="btn-o btn-sm ipc-remove-btn" data-remove-member="' + IPC.esc(email) + '">REMOVE ACCOUNT</button>';
+    }
+    btns += '<button type="button" class="btn-o btn-sm" data-pw-member="' + IPC.esc(email) + '" title="Set a fresh sign-in word for a member who forgot theirs">RESET PASSWORD</button>';
+    var note = isRoot
+      ? '<span class="ipc-removed-note">CLUB OWNER — THIS ACCOUNT IS PROTECTED AGAINST PAUSE, REMOVAL AND DEMOTION.</span>'
+      : (isSelf ? '<span class="ipc-removed-note">THIS IS YOU — PAUSE AND REMOVAL ARE OFF FOR THE ACCOUNT YOU ARE LOGGED INTO.</span>' : '');
+    return '<div class="ipc-mem-quick">' + btns + (note ? '<span class="ipc-removed-note">' + note + '</span>' : '') + '</div>';
   }
 
   function memKV(k, v) {
@@ -5421,13 +5847,12 @@ img.tc-true{filter:none !important}
   function memPaneHTML(key, d) {
     var m = d.member || {};
     if (key === 'overview') {
-      var lastLogin = (d.signIns && d.signIns[0] && d.signIns[0].createdAt) ? fmtDate(d.signIns[0].createdAt) : '';
       return memKV('FULL NAME', IPC.esc(m.name || '—')) +
         memKV('MEMBER ID', '<b style="letter-spacing:.12em">' + IPC.esc(m.memberId || 'PENDING') + '</b>') +
         memKV('EMAIL', IPC.esc(m.email || '—')) +
         memKV('ACCOUNT STATUS', memPill(m.status || 'active')) +
         memKV('REGISTERED', fmtDate(m.createdAt)) +
-        memKV('LAST SIGN-IN', lastLogin ? lastLogin : '<small style="font-family:var(--mono);letter-spacing:.1em">NONE ON RECORD — SIGN-INS SHOW FOR 30 DAYS</small>') +
+        memKV('LAST LOGIN', m.lastLoginAt ? fmtDate(m.lastLoginAt) : '<small style="font-family:var(--mono);letter-spacing:.1em">NONE ON RECORD</small>') +
         memKV('TWO-FACTOR', m.twoFAEnabled ? '<span style="letter-spacing:.14em">ARMED — AUTHENTICATOR ON</span>' : '<span style="letter-spacing:.14em">OFF — PASSWORD ONLY</span>');
     }
     if (key === 'activity') {
@@ -5492,6 +5917,13 @@ img.tc-true{filter:none !important}
         memKV('REMOVED BY', IPC.esc(m.removedBy || '—')) +
         memKV('REASON', IPC.esc(m.removalReason || '—'))
       : '';
+    var suspendedBlock = m.status === 'suspended'
+      ? '<p class="mem-subk">SUSPENSION RECORD</p>' +
+        memKV('SUSPENDED AT', fmtDate(m.suspendedAt)) +
+        memKV('SUSPENDED BY', IPC.esc(m.suspendedBy || '—')) +
+        memKV('REASON', IPC.esc(m.suspensionReason || '—')) +
+        memKV('SIGN-IN', 'PAUSED — UNSUSPEND FROM THE QUICK ACTIONS ABOVE')
+      : '';
     var pwBlock = m.passwordChangedAt
       ? memKV('PASSWORD CHANGED', fmtDate(m.passwordChangedAt) + (m.passwordResetBy ? ' <small style="font-family:var(--mono)">BY ' + IPC.esc(m.passwordResetBy) + '</small>' : ''))
       : '';
@@ -5501,6 +5933,7 @@ img.tc-true{filter:none !important}
       pwBlock +
       memKV('MEMBER ID ISSUED', fmtDate(m.memberIdAt)) +
       memKV('PROFILE UPDATED', fmtDate(m.updatedAt)) +
+      suspendedBlock +
       removedBlock;
   }
 
@@ -5510,6 +5943,8 @@ img.tc-true{filter:none !important}
     var body = card.querySelector('.mem-body');
     if (!body) return;
     body.innerHTML =
+      memQuickHTML(d.member || {}) +
+      '<p class="mem-kicker">FULL RECORD — EVERY TAB IS THE REAL DATABASE RECORD</p>' +
       '<div class="mem-tabs">' + MEM_TABS.map(function (t, i) {
         return '<button type="button" class="mem-tab' + (i === 0 ? ' active' : '') + '" data-memtab="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div>' +
@@ -5583,14 +6018,15 @@ img.tc-true{filter:none !important}
     var countEl = $('#ipcMemCount'), clearBtn = $('#ipcMemClear'), searchBtn = $('#ipcMemSearchBtn');
     if (search && !search.dataset.wired) {
       search.dataset.wired = '1';
-      var runSearch = function () { IPC.__memQ = (search.value || '').trim(); loadAdminUsers(); };
+      var runSearch = function () { IPC.__memQ = (search.value || '').trim(); IPC.__memPage = 1; loadAdminUsers(); };
       if (searchBtn) searchBtn.addEventListener('click', runSearch);
       search.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } });
-      if (statusSel) statusSel.addEventListener('change', function () { IPC.__memStatus = statusSel.value || 'all'; loadAdminUsers(); });
+      if (statusSel) statusSel.addEventListener('change', function () { IPC.__memStatus = statusSel.value || 'all'; IPC.__memPage = 1; loadAdminUsers(); });
       if (clearBtn) clearBtn.addEventListener('click', function () {
         search.value = ''; IPC.__memQ = '';
         if (statusSel) statusSel.value = 'all';
         IPC.__memStatus = 'all';
+        IPC.__memPage = 1;
         loadAdminUsers();
       });
     }
@@ -5601,13 +6037,16 @@ img.tc-true{filter:none !important}
     var qs = [];
     if (IPC.__memQ) qs.push('q=' + encodeURIComponent(IPC.__memQ));
     if (IPC.__memStatus && IPC.__memStatus !== 'all') qs.push('status=' + encodeURIComponent(IPC.__memStatus));
+    qs.push('page=' + (IPC.__memPage || 1));
+    qs.push('pageSize=25');
     host.innerHTML = '<p class="adm-empty">LOADING MEMBERS…</p>';
     IPC.api('/api/admin/users' + (qs.length ? '?' + qs.join('&') : '')).then(function (d) {
       var list = d.users || [];
       var counts = d.counts || {};
+      IPC.__memCounts = counts;
       if (countEl) {
         countEl.textContent = list.length
-          ? counts.returned + ' OF ' + counts.totalMembers + ' MEMBERS ON RECORD' + (filtered ? ' — FILTERED VIEW' : '')
+          ? (filtered ? 'FILTERED VIEW — ' : '') + counts.total + ' MATCH' + (counts.total === 1 ? '' : 'ES') + ' OF ' + counts.totalMembers + ' MEMBERS ON RECORD'
           : 'NO MEMBERS IN THIS VIEW';
       }
       if (list.length === 0) {
@@ -5616,9 +6055,17 @@ img.tc-true{filter:none !important}
           : 'NO MEMBERS YET') + '</p>';
         return;
       }
-      host.innerHTML = '<div class="ipc-emergency"><b>EMERGENCY USE ONLY</b> — REMOVING A MEMBER IS NOT RECOMMENDED AND EXISTS HERE ONLY FOR WORST-CASE SITUATIONS: HIJACKED ACCOUNTS, FRAUD, TROLLING. REMOVAL KILLS THEIR SESSIONS AND BLOCKS RE-JOINING; THEIR ORDERS AND PAYMENTS STAY ON RECORD FOREVER. REMOVED BY MISTAKE? HIT RESTORE ON THEIR ROW TO LET THEM BACK IN.</div>' +
-        list.map(function (u) { return memCardHTML(u); }).join('') +
-        '<p class="ipc-mem-count" style="margin-top:16px">TAP A MEMBER TO OPEN THEIR FULL RECORD — OVERVIEW, ACTIVITY, ORDERS, PAYMENTS, VOUCHERS AND ACCOUNT DETAILS.</p>';
+      /* pager — the database pages, the buttons just ask for a page */
+      var pages = counts.pages || 1, page = counts.page || 1;
+      var pager = pages > 1
+        ? '<div class="ipc-pager" id="ipcMemPager">' +
+          '<button type="button" data-mem-page="prev"' + (page <= 1 ? ' disabled' : '') + '>◄ PREV</button>' +
+          '<span class="pg-info">PAGE ' + page + ' OF ' + pages + ' — ' + counts.total + ' MEMBERS · SHOWING 25 PER PAGE</span>' +
+          '<button type="button" data-mem-page="next"' + (page >= pages ? ' disabled' : '') + '>NEXT ►</button></div>'
+        : '<div class="ipc-pager"><span class="pg-info">' + counts.total + ' MEMBER' + (counts.total === 1 ? '' : 'S') + ' — ONE PAGE, ALL ON RECORD</span></div>';
+      host.innerHTML = '<div class="ipc-emergency"><b>EMERGENCY USE ONLY</b> — REMOVING A MEMBER IS NOT RECOMMENDED AND EXISTS HERE ONLY FOR WORST-CASE SITUATIONS: HIJACKED ACCOUNTS, FRAUD, TROLLING. REMOVAL KILLS THEIR SESSIONS AND BLOCKS RE-JOINING; THEIR ORDERS AND PAYMENTS STAY ON RECORD FOREVER. REMOVED BY MISTAKE? HIT RESTORE ON THEIR ROW TO LET THEM BACK IN. SUSPEND IS THE REVERSIBLE STEP — A PAUSED MEMBER KEEPS EVERYTHING AND SIGNS BACK IN WHEN LIFTED.</div>' +
+        '<div class="ipc-mem-list">' + list.map(function (u) { return memCardHTML(u); }).join('') + '</div>' + pager +
+        '<p class="ipc-mem-count" style="margin-top:16px">TAP A MEMBER TO OPEN THEIR FULL RECORD — QUICK ACTIONS, OVERVIEW, ACTIVITY, ORDERS, PAYMENTS, VOUCHERS AND ACCOUNT DETAILS.</p>';
       /* re-open the cards the admin had expanded before the refresh */
       list.forEach(function (u) {
         if (IPC.__memOpen[u.email]) {
@@ -5634,10 +6081,28 @@ img.tc-true{filter:none !important}
         ' <button type="button" class="btn-o btn-sm" data-mem-list-retry style="margin-left:10px">RETRY</button></p>';
     });
   }
+  /* member pager clicks — one state field, one reload */
+  document.addEventListener('click', function (ev) {
+    var pg = ev.target.closest ? ev.target.closest('[data-mem-page]') : null;
+    if (!pg || pg.disabled) return;
+    var dir = pg.getAttribute('data-mem-page');
+    var counts = IPC.__memCounts || {};
+    if (dir === 'prev' && (IPC.__memPage || 1) > 1) IPC.__memPage = (IPC.__memPage || 1) - 1;
+    if (dir === 'next' && (IPC.__memPage || 1) < (counts.pages || 1)) IPC.__memPage = (IPC.__memPage || 1) + 1;
+    loadAdminUsers();
+  });
   IPC.renderAdmin = function () {
     if (!admGuard()) return;
     loadOverview();
-    loadAdminPayments();
+    loadDashboard();
+    /* refresh whichever pane the admin is looking at — the queue keeps
+       its live feel, the roster and orders re-read the database */
+    var active = document.querySelector('.adm-tab.active');
+    var pane = active ? active.getAttribute('data-pane') : 'dashboard';
+    if (pane === 'payments') loadAdminPayments();
+    if (pane === 'allpay') loadAdminAll();
+    if (pane === 'orders') loadAdminOrders();
+    if (pane === 'users') loadAdminUsers();
   };
   $$('.adm-tab').forEach(function (tab) {
     tab.addEventListener('click', function () {
@@ -5646,6 +6111,7 @@ img.tc-true{filter:none !important}
       var pane = tab.getAttribute('data-pane');
       $$('.adm-pane').forEach(function (p) { p.classList.remove('active'); });
       $('#pane-' + pane).classList.add('active');
+      if (pane === 'dashboard') loadDashboard();
       if (pane === 'orders') loadAdminOrders();
       if (pane === 'users') loadAdminUsers();
       if (pane === 'payments') loadAdminPayments();
@@ -5656,6 +6122,31 @@ img.tc-true{filter:none !important}
     loadOverview(); loadAdminPayments(); loadAdminAll();
     IPC.toast('QUEUE REFRESHED');
   });
+  /* GLOBAL SEARCH — one bar, two scopes. Members: the roster jumps in with
+     the query applied. Orders: the order book does the same. Enter does the
+     work; the scope select picks the table. */
+  var gForm = $('#ipcAdmGSearch');
+  if (gForm && !gForm.dataset.wired) {
+    gForm.dataset.wired = '1';
+    gForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var q = ($('#ipcAdmGInput').value || '').trim();
+      var scope = ($('#ipcAdmGScope') || {}).value || 'members';
+      if (!q) { IPC.toast('TYPE SOMETHING TO SEARCH — MEMBER ID, NAME, EMAIL OR ORDER #'); return; }
+      if (scope === 'orders') {
+        IPC.__ordQ = q; IPC.__ordPage = 1;
+        var ot = document.querySelector('.adm-tab[data-pane="orders"]');
+        if (ot) ot.click(); else loadAdminOrders();
+      } else {
+        IPC.__memQ = q; IPC.__memPage = 1;
+        var st = $('#ipcMemStatus'); if (st) st.value = 'all';
+        IPC.__memStatus = 'all';
+        var ut = document.querySelector('.adm-tab[data-pane="users"]');
+        if (ut) ut.click(); else loadAdminUsers();
+      }
+      IPC.toast('SEARCHING ' + scope.toUpperCase() + ' FOR "' + q.toUpperCase() + '"');
+    });
+  }
   document.addEventListener('click', function (ev) {
     var thumb = ev.target.closest ? ev.target.closest('[data-proof]') : null;
     if (thumb) {
@@ -6163,12 +6654,7 @@ setTimeout(function () {
     '#v-admin #admMain{position:relative}',
     '#v-admin .adm-editorial{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:1px solid var(--line-2);padding-bottom:24px;margin-bottom:8px}',
     '#v-admin .adm-editorial-note{font-family:var(--mono);font-size:10px;line-height:1.9;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;max-width:330px}',
-    '#v-admin .adm-stats{margin-top:28px}',
-    '#v-admin .stat-tile{min-height:120px;display:flex;flex-direction:column;justify-content:space-between}',
-    '#v-admin .adm-tabs{width:100%;border:0;border-bottom:1px solid var(--line-2);gap:6px;margin-top:32px}',
-    '#v-admin .adm-tab{border:1px solid transparent;padding:13px 16px}',
-    '#v-admin .adm-tab.active{background:var(--white);color:var(--black)}',
-    '#v-admin .adm-pane{margin-top:26px}',
+    '#v-admin .adm-pane{margin-top:0}',
     '#v-admin .pay-card{border-radius:0;box-shadow:0 14px 40px rgba(0,0,0,.12)}',
     '#v-admin .adm-table th{white-space:nowrap}',
     '.ipc-voucher-layout{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(0,1.4fr);gap:24px;align-items:start}',
@@ -6198,7 +6684,7 @@ setTimeout(function () {
     '.ipc-discount-row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.1em}',
     '.ipc-discount-row b{color:var(--text)}',
     '.ipc-phone-note{font-family:var(--mono);font-size:9px;line-height:1.8;letter-spacing:.12em;color:var(--faint);margin-top:12px}',
-    '@media(max-width:760px){.ipc-voucher-layout{grid-template-columns:1fr}.ipc-voucher-form{grid-template-columns:1fr}.ipc-voucher-form .full{grid-column:auto}.ipc-voucher-row{grid-template-columns:1fr}.ipc-voucher-actions{justify-content:flex-start}.ipc-voucher-entry{flex-direction:column}.ipc-voucher-entry button{width:100%}#v-admin .adm-tab{flex:1 1 auto}}'
+    '@media(max-width:760px){.ipc-voucher-layout{grid-template-columns:1fr}.ipc-voucher-form{grid-template-columns:1fr}.ipc-voucher-form .full{grid-column:auto}.ipc-voucher-row{grid-template-columns:1fr}.ipc-voucher-actions{justify-content:flex-start}.ipc-voucher-entry{flex-direction:column}.ipc-voucher-entry button{width:100%}}'
   ].join('');
   document.head.appendChild(style);
 
@@ -6309,7 +6795,7 @@ setTimeout(function () {
   if (admMain && adminTabs && usersPane && !$('#pane-vouchers')) {
     var intro = document.createElement('div');
     intro.className = 'adm-editorial';
-    intro.innerHTML = '<div><p class="kicker">THE BACK OFFICE / IPC</p><p class="ipc-voucher-k" style="margin:8px 0 0">OPERATIONS · ORDERS · MEMBERS · OFFERS</p></div><p class="adm-editorial-note">A CLEAR VIEW OF THE CLUB. EVERY PAYMENT IS REVIEWED BY A HUMAN.</p>';
+    intro.innerHTML = '<div><p class="kicker">THE BACK OFFICE / IPC</p><p class="ipc-voucher-k" style="margin:8px 0 0">OPERATIONS · ORDERS · MEMBERS · OFFERS</p></div><p class="adm-editorial-note">A CLEAR VIEW OF THE CLUB — REAL RECORDS ONLY. IPC PAY DECIDES EVERY PROOF ON ITS OWN.</p>';
     admMain.insertBefore(intro, $('#admStats'));
     var tab = document.createElement('button');
     tab.type = 'button';
@@ -6441,21 +6927,15 @@ setTimeout(function () {
   ].join('');
   document.head.appendChild(style);
 
-  /* toolbar: LIVE clock + last refresh + REFRESH ALL */
+  /* LIVE clock + REFRESH ALL live in the static topbar now — this block
+     only wires them (the bar itself is part of the admin shell markup) */
   var admMain = $('#admMain');
-  if (admMain && !$('#ipcAdmToolbar')) {
-    var bar = document.createElement('div');
-    bar.className = 'ipc-adm-toolbar';
-    bar.id = 'ipcAdmToolbar';
-    bar.innerHTML = '<p class="ipc-adm-clock" id="ipcAdmClock">— LIVE</p>' +
-      '<p class="ipc-adm-note" id="ipcAdmRefreshNote">DATA REFRESHED —</p>' +
-      '<button type="button" class="btn-o btn-sm" id="ipcAdmRefreshAll">REFRESH ALL</button>';
-    var stats = $('#admStats');
-    if (stats) stats.insertAdjacentElement('afterend', bar);
+  if (admMain && !admMain.dataset.ipcTopWired) {
+    admMain.dataset.ipcTopWired = '1';
     var clock = $('#ipcAdmClock');
     if (clock) {
       var tick = function () {
-        clock.textContent = 'CLUB CONTROL — ' + new Date().toLocaleTimeString('en-PH', { hour12: false }) + ' PHT — LIVE';
+        clock.textContent = new Date().toLocaleTimeString('en-PH', { hour12: false }) + ' PHT — LIVE';
       };
       tick();
       setInterval(tick, 1000);
@@ -6790,6 +7270,109 @@ setTimeout(function () {
           .catch(function (err) {
             rs.disabled = false;
             IPC.toast(apiMsg(err, 'RESTORE FAILED'));
+          });
+      });
+    }
+    /* SUSPEND — the reversible pause: sessions die, sign-in is refused,
+       and the record stays. One confirm, one POST, immediate effect. */
+    var sp = ev.target.closest ? ev.target.closest('[data-suspend-member]') : null;
+    if (sp) {
+      var spEmail = sp.getAttribute('data-suspend-member');
+      IPC.confirm({
+        title: 'SUSPEND ' + spEmail.toUpperCase() + '?',
+        body: 'THE PAUSE IS REVERSIBLE: THEIR SESSIONS SIGN OUT AND SIGN-IN IS REFUSED UNTIL YOU LIFT IT. ORDERS, PAYMENTS, VOUCHERS AND THE MEMBER ID ALL STAY ON RECORD.',
+        confirmLabel: 'SUSPEND ACCOUNT',
+        danger: true,
+      }).then(function (ok) {
+        if (!ok) return;
+        sp.disabled = true;
+        IPC.api('/api/admin/members/suspend', { method: 'POST', body: { email: spEmail } })
+          .then(function (d) {
+            IPC.toast(d.message || 'MEMBER SUSPENDED');
+            delete IPC.__memDetail[spEmail];
+            if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+            var ut = document.querySelector('.adm-tab[data-pane="users"]');
+            if (ut && ut.classList.contains('active')) ut.click();
+          })
+          .catch(function (err) {
+            sp.disabled = false;
+            IPC.toast(apiMsg(err, 'SUSPEND FAILED'));
+          });
+      });
+    }
+    var us = ev.target.closest ? ev.target.closest('[data-unsuspend-member]') : null;
+    if (us) {
+      var usEmail = us.getAttribute('data-unsuspend-member');
+      IPC.confirm({
+        title: 'LIFT THE SUSPENSION ON ' + usEmail.toUpperCase() + '?',
+        body: 'THE ACCOUNT GOES STRAIGHT BACK TO ACTIVE — THEY SIGN IN AND ORDER AGAIN RIGHT AWAY.',
+        confirmLabel: 'LIFT SUSPENSION',
+      }).then(function (ok) {
+        if (!ok) return;
+        us.disabled = true;
+        IPC.api('/api/admin/members/unsuspend', { method: 'POST', body: { email: usEmail } })
+          .then(function (d) {
+            IPC.toast(d.message || 'SUSPENSION LIFTED');
+            delete IPC.__memDetail[usEmail];
+            if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+            var ut = document.querySelector('.adm-tab[data-pane="users"]');
+            if (ut && ut.classList.contains('active')) ut.click();
+          })
+          .catch(function (err) {
+            us.disabled = false;
+            IPC.toast(apiMsg(err, 'UNSUSPEND FAILED'));
+          });
+      });
+    }
+    /* ROLE — make admin / remove admin from the member card itself.
+       The server owns the rule: root and developer accounts can never
+       be demoted, and only a signed-in admin can change a role. */
+    var ag = ev.target.closest ? ev.target.closest('[data-admin-grant]') : null;
+    if (ag) {
+      var agEmail = ag.getAttribute('data-admin-grant');
+      IPC.confirm({
+        title: 'MAKE ' + agEmail.toUpperCase() + ' A CLUB ADMIN?',
+        body: 'ADMINS SEE EVERY PAYMENT, MEMBER RECORD AND PRODUCT CONTROL. THE ACTIVITY LOG RECORDS WHO GRANTED IT AND WHEN.',
+        confirmLabel: 'MAKE ADMIN',
+      }).then(function (ok) {
+        if (!ok) return;
+        ag.disabled = true;
+        IPC.api('/api/admin/role', { method: 'POST', body: { email: agEmail, role: 'admin' } })
+          .then(function (d) {
+            IPC.toast(d.message || 'ADMIN GRANTED');
+            delete IPC.__memDetail[agEmail];
+            if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+            var ut = document.querySelector('.adm-tab[data-pane="users"]');
+            if (ut && ut.classList.contains('active')) ut.click();
+          })
+          .catch(function (err) {
+            ag.disabled = false;
+            IPC.toast(apiMsg(err, 'ROLE CHANGE FAILED'));
+          });
+      });
+    }
+    var ar = ev.target.closest ? ev.target.closest('[data-admin-revoke]') : null;
+    if (ar) {
+      var arEmail = ar.getAttribute('data-admin-revoke');
+      IPC.confirm({
+        title: 'REMOVE ADMIN FROM ' + arEmail.toUpperCase() + '?',
+        body: 'THEY GO BACK TO A REGULAR MEMBER — THE PAYMENT QUEUE, MEMBER RECORDS AND PRODUCT CONTROLS CLOSE FOR THEM.',
+        confirmLabel: 'REMOVE ADMIN',
+        danger: true,
+      }).then(function (ok) {
+        if (!ok) return;
+        ar.disabled = true;
+        IPC.api('/api/admin/role', { method: 'POST', body: { email: arEmail, role: 'customer' } })
+          .then(function (d) {
+            IPC.toast(d.message || 'ADMIN REMOVED');
+            delete IPC.__memDetail[arEmail];
+            if (typeof IPC.renderAdmin === 'function') IPC.renderAdmin();
+            var ut = document.querySelector('.adm-tab[data-pane="users"]');
+            if (ut && ut.classList.contains('active')) ut.click();
+          })
+          .catch(function (err) {
+            ar.disabled = false;
+            IPC.toast(apiMsg(err, 'ROLE CHANGE FAILED'));
           });
       });
     }

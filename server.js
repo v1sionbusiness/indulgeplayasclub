@@ -421,7 +421,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v36-20261124-machine-verdict";
+const BUILD_STAMP = "ipc-v37-20261124-console-revamp";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -941,7 +941,9 @@ async function userFromReq(req) {
   const session = await findSession(token);
   if (!session) return null;
   const user = await findUserById(session.userId);
-  if (!user || user.status === "removed") return null;
+  /* removed and suspended members lose every authenticated route —
+     the club's pause button works the moment it is pressed */
+  if (!user || user.status === "removed" || user.status === "suspended") return null;
   return { user, token };
 }
 
@@ -1890,6 +1892,7 @@ async function route(req, res) {
     if (p === "/api/admin/analytics") return handleAdminAnalytics(req, res);
     if (p === "/api/admin/support") return handleAdminSupport(req, res);
     if (p === "/api/support/mine") return handleSupportMine(req, res);
+    if (p === "/api/vouchers/mine") return handleMyVouchers(req, res);
 
     /* ---------------- admin GETs ---------------- */
     if (p === "/api/admin/overview" || p === "/api/admin/payments" ||
@@ -1907,9 +1910,37 @@ async function route(req, res) {
         const d = await connect();
         if (p === "/api/admin/vouchers") {
           const vouchers = await d.collection("vouchers")
-            .find({}, { projection: { code: 1, label: 1, type: 1, value: 1, minSubtotalCentavos: 1, maxUses: 1, uses: 1, active: 1, firstOrderOnly: 1, startsAt: 1, expiresAt: 1, createdAt: 1 } })
+            .find({}, { projection: { code: 1, label: 1, type: 1, value: 1, minSubtotalCentavos: 1, maxUses: 1, uses: 1, active: 1, firstOrderOnly: 1, startsAt: 1, expiresAt: 1, createdAt: 1, kind: 1, ownerEmail: 1, products: 1, updatedBy: 1, updatedAt: 1 } })
             .sort({ createdAt: -1 }).limit(200).toArray();
-          return send(res, 200, { ok: true, vouchers });
+          /* redemption trail per voucher — the register shows who used what,
+             when, against which order, so "redemption tracking" is real */
+          const codes = vouchers.map((v) => v.code);
+          const redeemRows = codes.length
+            ? await d.collection("voucherRedemptions")
+              .find({ code: { $in: codes } }).sort({ createdAt: -1 }).limit(800).toArray()
+            : [];
+          const byCode = {};
+          redeemRows.forEach((r) => {
+            if (!byCode[r.code]) byCode[r.code] = [];
+            if (byCode[r.code].length < 5) {
+              byCode[r.code].push({ orderReference: r.orderReference || null, at: r.createdAt });
+            }
+          });
+          return send(res, 200, {
+            ok: true,
+            vouchers: vouchers.map((v) => ({
+              code: v.code, label: v.label || "", type: v.type, value: v.value,
+              minSubtotalCentavos: v.minSubtotalCentavos || 0,
+              maxUses: v.maxUses || 0, uses: v.uses || 0,
+              active: !!v.active, firstOrderOnly: v.firstOrderOnly !== false,
+              startsAt: v.startsAt || null, expiresAt: v.expiresAt || null,
+              createdAt: v.createdAt, updatedAt: v.updatedAt || null,
+              kind: v.kind || "club", ownerEmail: v.ownerEmail || null,
+              products: Array.isArray(v.products) ? v.products : [],
+              updatedBy: v.updatedBy || null,
+              recentRedemptions: byCode[v.code] || [],
+            })),
+          });
         }
         if (p === "/api/admin/inquiries") {
           const rows = await d.collection("inquiries").find({})
@@ -2043,7 +2074,13 @@ async function route(req, res) {
           return send(res, 200, { ok: true, inventory, archived: archivedRows, archivedCount: archivedRows.length });
         }
         if (p === "/api/admin/overview") {
-          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions, trackAgg, dailyRevenue] = await Promise.all([
+          const weekAgo = new Date(Date.now() - 7 * 86400000);
+          const twoWeeksAgo = new Date(Date.now() - 14 * 86400000);
+          /* honest week-over-week delta — no history means null, never a fake number */
+          const prevVoucherClaims7dSafe = (prev, cur) =>
+            prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
+          const [users, orders, payments, paidAgg, underAgg, activeVouchers, voucherRedemptions, trackAgg, dailyRevenue, productRows, soldUnitsAgg, visRows, metaRows,
+            activeMembers, suspendedMembers, newMembers7d, prevMembers7d, newOrders7d, prevOrders7d, ratingAgg, voucherClaims7d, voucherClaimsPrev7d] = await Promise.all([
             d.collection("users").countDocuments(),
             d.collection("orders").countDocuments(),
             d.collection("payments").aggregate([
@@ -2064,7 +2101,40 @@ async function route(req, res) {
               { $group: { _id: "$tracking.status", n: { $sum: 1 } } },
             ]).toArray(),
             dailyPaidRevenue(d),
+            /* catalog health — pieces live, pulled, archived and sold */
+            d.collection("products").find({}, { projection: { active: 1 } }).limit(1000).toArray(),
+            d.collection("orders").aggregate([
+              { $match: { status: "paid" } },
+              { $unwind: "$items" },
+              { $group: { _id: null, units: { $sum: "$items.qty" } } },
+            ]).toArray(),
+            d.collection("productVisibility").find({}).limit(1000).toArray(),
+            d.collection("productMeta").find({}, { projection: { id: 1, archived: 1 } }).limit(1000).toArray(),
+            /* member health — usable members (not paused, not removed).
+               Accounts minted before the status field exist too, so the
+               filter excludes the bad states instead of matching one. */
+            d.collection("users").countDocuments({ status: { $nin: ["removed", "suspended"] } }),
+            d.collection("users").countDocuments({ status: "suspended" }),
+            /* the week-over-week deltas the stat cards show — real counts,
+               never invented: no history means an honest null */
+            d.collection("users").countDocuments({ createdAt: { $gte: weekAgo } }),
+            d.collection("users").countDocuments({ createdAt: { $gte: twoWeeksAgo, $lt: weekAgo } }),
+            d.collection("orders").countDocuments({ createdAt: { $gte: weekAgo } }),
+            d.collection("orders").countDocuments({ createdAt: { $gte: twoWeeksAgo, $lt: weekAgo } }),
+            /* average piece rating from verified-buyer reviews on record */
+            d.collection("reviews").aggregate([
+              { $match: { status: "approved" } },
+              { $group: { _id: null, avg: { $avg: "$rating" }, n: { $sum: 1 } } },
+            ]).toArray(),
+            d.collection("voucherRedemptions").countDocuments({ createdAt: { $gte: weekAgo } }),
+            d.collection("voucherRedemptions").countDocuments({ createdAt: { $gte: twoWeeksAgo, $lt: weekAgo } }),
           ]);
+          const customLive = productRows.filter((r) => r.active !== false).length;
+          const customPulled = productRows.length - customLive;
+          const bakedArchived = metaRows.filter((r) =>
+            r.archived === true && PRODUCTS.some((bp) => bp.id === r.id)).length;
+          const piecesSold = (soldUnitsAgg[0] && soldUnitsAgg[0].units) || 0;
+          const hiddenProducts = visRows.filter((r) => isFullyHidden(r)).length;
           const trackingStages = {};
           trackAgg.forEach((s) => { trackingStages[s._id] = s.n; });
           const payStatus = {};
@@ -2074,6 +2144,13 @@ async function route(req, res) {
             overview: {
               users,
               orders,
+              activeMembers,
+              suspendedMembers,
+              membersDeltaPct: prevMembers7d > 0 ? Math.round(((newMembers7d - prevMembers7d) / prevMembers7d) * 100) : null,
+              ordersDeltaPct: prevOrders7d > 0 ? Math.round(((newOrders7d - prevOrders7d) / prevOrders7d) * 100) : null,
+              vouchersDeltaPct: prevVoucherClaims7dSafe(voucherClaimsPrev7d, voucherClaims7d),
+              avgRating: (ratingAgg[0] && Number.isFinite(ratingAgg[0].avg)) ? Math.round(ratingAgg[0].avg * 10) / 10 : null,
+              ratingCount: (ratingAgg[0] && ratingAgg[0].n) || 0,
               paymentsPending: payStatus.pending || 0,
               paymentsUnderVerification: payStatus.under_verification || 0,
               paymentsPaid: payStatus.paid || 0,
@@ -2084,6 +2161,11 @@ async function route(req, res) {
               voucherRedemptions,
               tracking: trackingStages,
               dailyRevenue,
+              productsLive: customLive + PRODUCTS.length - bakedArchived,
+              productsPulled: customPulled,
+              productsArchived: bakedArchived,
+              productsHidden: hiddenProducts,
+              piecesSold,
               rootAdmin: (process.env.ADMIN_EMAIL || "").trim().toLowerCase(),
             },
           });
@@ -2108,8 +2190,38 @@ async function route(req, res) {
           });
         }
         if (p === "/api/admin/orders") {
+          /* ?q= searches order number, buyer, email, mobile, city and the
+             tracking number. ?sort= picks the order of the table.
+             ?page/?pageSize paginate — the database does the work so the
+             tab stays fast when the club's order book grows. */
+          const sp = new URL(req.url, "http://ipc.local").searchParams;
+          const q = String(sp.get("q") || "").trim().slice(0, 80);
+          const sortKey = String(sp.get("sort") || "newest");
+          const sortMap = {
+            newest: { createdAt: -1 },
+            oldest: { createdAt: 1 },
+            total_desc: { totalCentavos: -1 },
+            total_asc: { totalCentavos: 1 },
+          };
+          const page = Math.max(1, Math.min(500, Math.floor(Number(sp.get("page")) || 1)));
+          const pageSize = Math.max(1, Math.min(100, Math.floor(Number(sp.get("pageSize")) || 50)));
+          const filter = {};
+          if (q) {
+            const rx = new RegExp(escapeRegex(q), "i");
+            filter.$or = [
+              { reference: rx }, { email: rx }, { customerName: rx },
+              { phone: rx }, { city: rx }, { province: rx },
+              { addressLine: rx }, { barangay: rx },
+              { "tracking.number": rx },
+            ];
+          }
+          const total = await d.collection("orders").countDocuments(filter);
           const ords = await d.collection("orders")
-            .find().sort({ createdAt: -1 }).limit(200).toArray();
+            .find(filter)
+            .sort(sortMap[sortKey] || { createdAt: -1 })
+            .skip((page - 1) * pageSize)
+            .limit(pageSize)
+            .toArray();
           const pays = await d.collection("payments")
             .find({ orderReference: { $in: ords.map((o) => o.reference) } })
             .toArray();
@@ -2117,6 +2229,10 @@ async function route(req, res) {
           return send(res, 200, {
             ok: true,
             orders: ords.map((o) => orderView(o, byOrder.get(o.reference))),
+            total,
+            page,
+            pageSize,
+            pages: Math.max(1, Math.ceil(total / pageSize)),
           });
         }
         /* /api/admin/users — the member roster with search + status filter.
@@ -2127,10 +2243,13 @@ async function route(req, res) {
            roster stays fast and the admin sees real records, not a
            client-side trick. */
         if (p === "/api/admin/users") {
-          const q = new URL(req.url, "http://ipc.local").searchParams.get("q") || "";
-          const status = (new URL(req.url, "http://ipc.local").searchParams.get("status") || "all").toLowerCase();
+          const sp = new URL(req.url, "http://ipc.local").searchParams;
+          const q = sp.get("q") || "";
+          const status = (sp.get("status") || "all").toLowerCase();
+          const page = Math.max(1, Math.min(500, Math.floor(Number(sp.get("page")) || 1)));
+          const pageSize = Math.max(1, Math.min(500, Math.floor(Number(sp.get("pageSize")) || 500)));
           const filter = {};
-          if (status === "active" || status === "removed") filter.status = status;
+          if (status === "active" || status === "removed" || status === "suspended") filter.status = status;
           const term = String(q).trim().slice(0, 80);
           if (term) {
             const rx = new RegExp(escapeRegex(term), "i");
@@ -2144,11 +2263,15 @@ async function route(req, res) {
             if (digits.length >= 7) or.push({ phone: new RegExp(escapeRegex(digits), "i") });
             filter.$or = or;
           }
-          const [us, totalMembers, paidAgg, allAgg] = await Promise.all([
+          const [us, totalMembers, matching, paidAgg, allAgg] = await Promise.all([
             d.collection("users")
-              .find(filter, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1, updatedAt: 1, status: 1, removedAt: 1, memberId: 1, memberIdAt: 1, twoFAEnabled: 1, passwordChangedAt: 1, birthMonth: 1 } })
-              .sort({ createdAt: -1 }).limit(500).toArray(),
+              .find(filter, { projection: { email: 1, name: 1, phone: 1, role: 1, createdAt: 1, updatedAt: 1, status: 1, removedAt: 1, memberId: 1, memberIdAt: 1, twoFAEnabled: 1, passwordChangedAt: 1, birthMonth: 1, lastLoginAt: 1 } })
+              .sort({ createdAt: -1 })
+              .skip((page - 1) * pageSize)
+              .limit(pageSize)
+              .toArray(),
             d.collection("users").countDocuments({}),
+            d.collection("users").countDocuments(filter),
             d.collection("orders").aggregate([
               { $match: { status: "paid" } },
               { $group: { _id: "$email", paidOrders: { $sum: 1 }, spent: { $sum: "$totalCentavos" } } },
@@ -2161,7 +2284,14 @@ async function route(req, res) {
           const allByEmail = new Map(allAgg.map((x) => [x._id, x]));
           return send(res, 200, {
             ok: true,
-            counts: { returned: us.length, totalMembers },
+            counts: {
+              returned: us.length,
+              totalMembers,
+              total: matching,
+              page,
+              pageSize,
+              pages: Math.max(1, Math.ceil(matching / pageSize)),
+            },
             users: us.map((u) => {
               const paid = paidByEmail.get(u.email) || {};
               const all = allByEmail.get(u.email) || {};
@@ -2171,6 +2301,7 @@ async function route(req, res) {
                 updatedAt: u.updatedAt || null, status: u.status || "active", removedAt: u.removedAt || null,
                 twoFAEnabled: !!u.twoFAEnabled, passwordChangedAt: u.passwordChangedAt || null,
                 birthMonth: u.birthMonth || null,
+                lastLoginAt: u.lastLoginAt || null,
                 tier: tierForPaid(paid.spent || 0),
                 orders: all.orders || 0,
                 paidOrders: paid.paidOrders || 0,
@@ -2217,8 +2348,11 @@ async function route(req, res) {
               name: u.name, email: u.email, phone: u.phone || "",
               role: u.role, status: u.status || "active",
               createdAt: u.createdAt, updatedAt: u.updatedAt || null,
+              lastLoginAt: u.lastLoginAt || null,
               removedAt: u.removedAt || null, removedBy: u.removedBy || null,
               removalReason: u.removalReason || null,
+              suspendedAt: u.suspendedAt || null, suspendedBy: u.suspendedBy || null,
+              suspensionReason: u.suspensionReason || null,
               twoFAEnabled: !!u.twoFAEnabled,
               passwordChangedAt: u.passwordChangedAt || null,
               passwordResetBy: u.passwordResetBy || null,
@@ -2312,6 +2446,7 @@ async function route(req, res) {
     return handleValidateVoucher(req, res);
   }
   if (p === "/api/admin/vouchers") return handleAdminVoucherCreate(req, res);
+  if (p === "/api/admin/vouchers/update") return handleAdminVoucherUpdate(req, res);
   if (p === "/api/admin/vouchers/toggle") return handleAdminVoucherToggle(req, res);
 
   /* --- orders: 20KB — rate limited against scripted order spam --- */
@@ -2337,6 +2472,8 @@ async function route(req, res) {
   if (p === "/api/admin/tracking") return handleAdminTracking(req, res);
   if (p === "/api/admin/members/remove") return handleMemberRemove(req, res);
   if (p === "/api/admin/members/restore") return handleMemberRestore(req, res);
+  if (p === "/api/admin/members/suspend") return handleMemberSuspend(req, res);
+  if (p === "/api/admin/members/unsuspend") return handleMemberUnsuspend(req, res);
   if (p === "/api/admin/members/password") return handleAdminMemberPassword(req, res);
   if (p === "/api/ipc-pay/maya-webhook") return handleMayaWebhook(req, res);
 
@@ -2596,6 +2733,10 @@ async function handleAuth(req, res, ip, p) {
         return fail(res, 403, "account_removed",
           "THIS ACCOUNT WAS REMOVED BY THE CLUB AND CANNOT RE-JOIN. MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
       }
+      if (existing && existing.status === "suspended") {
+        return fail(res, 403, "account_suspended",
+          "THIS ACCOUNT IS SUSPENDED BY THE CLUB RIGHT NOW — LOG IN INSTEAD, OR MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
+      }
       if (existing) {
         return fail(res, 409, "email_taken", "EMAIL ALREADY REGISTERED — LOG IN INSTEAD.");
       }
@@ -2607,6 +2748,12 @@ async function handleAuth(req, res, ip, p) {
       }
       const user = await insertUser({ email, name, password, phone, role: "customer", birthMonth });
       const token = await createSession(user);
+      /* durable last-login stamp — the members tab reads this even after
+         the 30-day session window has scrolled the sessions away */
+      try {
+        const d2 = await connect();
+        await d2.collection("users").updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+      } catch { /* the login still proceeds */ }
       return send(res, 200, { ok: true, token, user: publicUser(user) });
     }
 
@@ -2630,6 +2777,10 @@ async function handleAuth(req, res, ip, p) {
         return fail(res, 403, "account_removed",
           "THIS ACCOUNT WAS REMOVED BY THE CLUB. MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
       }
+      if (user.status === "suspended") {
+        return fail(res, 403, "account_suspended",
+          "THIS ACCOUNT IS SUSPENDED BY THE CLUB RIGHT NOW. MESSAGE @INDULGEPLAYASCLUB IF YOU THINK THIS IS A MISTAKE.");
+      }
       /* admin two-factor: password alone never issues a session */
       if (user.twoFAEnabled && user.twoFASecret) {
         const challenge = crypto.randomBytes(24).toString("hex");
@@ -2649,6 +2800,13 @@ async function handleAuth(req, res, ip, p) {
           message: "ENTER THE 6-DIGIT CODE FROM YOUR AUTHENTICATOR APP." });
       }
       const token = await createSession(user);
+      /* durable last-login stamp for the members tab (survives the 30-day
+         session window) */
+      try {
+        const { connect } = require("./ipc-pay/mongo");
+        const d2 = await connect();
+        await d2.collection("users").updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+      } catch { /* the login still proceeds */ }
       return send(res, 200, { ok: true, token, user: publicUser(user) });
     }
 
@@ -2669,23 +2827,56 @@ async function handleAuth(req, res, ip, p) {
 /* VOUCHERS — server-side validation and one-per-customer redemption */
 /* --------------------------------------------------------------- */
 
-function subtotalFromCart(rawItems) {
+/* Voucher bag resolution — same catalog law as checkout. Club-added pieces
+   live in Atlas, so the resolver reads the database for anything the
+   baked-in shelf doesn't know: a bag carrying a custom piece can use a
+   voucher instead of dying on "UNKNOWN PRODUCT". */
+async function voucherBagLines(rawItems) {
   if (!Array.isArray(rawItems) || rawItems.length < 1 || rawItems.length > 30) {
     throw new Error("YOUR BAG IS EMPTY OR HAS TOO MANY ITEMS.");
   }
-  let subtotal = 0;
+  let db = null;
+  const lines = [];
   for (const raw of rawItems) {
-    const product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+    let product = PRODUCTS.find((x) => x.id === String(raw.productId ?? ""));
+    if (product) {
+      try {
+        if (!db) {
+          const { connect } = require("./ipc-pay/mongo");
+          db = await connect();
+        }
+        product = applyBakedMeta(product, (await productMetaMap(db))[product.id]);
+      } catch { /* baked defaults stay the price of record */ }
+    } else {
+      try {
+        if (!db) {
+          const { connect } = require("./ipc-pay/mongo");
+          db = await connect();
+        }
+        const doc = await db.collection("products")
+          .findOne({ id: String(raw.productId ?? ""), active: { $ne: false } });
+        if (doc) {
+          product = {
+            id: doc.id, name: doc.name, priceCentavos: doc.priceCentavos,
+            sizes: doc.sizes || ["OS"], colors: doc.colors || [],
+          };
+        }
+      } catch { /* falls through to the unknown-product error */ }
+    }
     if (!product) throw new Error("UNKNOWN PRODUCT IN YOUR BAG — REFRESH AND TRY AGAIN.");
     const size = String(raw.size ?? "").trim();
     const color = String(raw.color ?? "").trim();
     const qty = Math.floor(Number(raw.qty ?? 0));
-    if (!product.sizes.includes(size) || !product.colors.includes(color) ||        !Number.isFinite(qty) || qty < 1 || qty > 99) {
+    if (!product.sizes.includes(size) || !product.colors.includes(color) ||
+        !Number.isFinite(qty) || qty < 1 || qty > 99) {
       throw new Error("CHECK YOUR PRODUCT OPTIONS AND QUANTITIES BEFORE APPLYING A VOUCHER.");
     }
-    subtotal += product.priceCentavos * qty;
+    lines.push({
+      productId: product.id, name: product.name, size, color, qty,
+      priceCentavos: product.priceCentavos,
+    });
   }
-  return subtotal;
+  return lines;
 }
 
 async function linkAccountPhone(d, user, rawPhone) {
@@ -2709,7 +2900,7 @@ async function linkAccountPhone(d, user, rawPhone) {
   return phone;
 }
 
-async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos) {
+async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos, bagLines) {
   const code = normalizeVoucherCode(codeInput);
   const voucher = await d.collection("vouchers").findOne({ code });
   if (!voucher || !voucher.active) throw new Error("THAT VOUCHER IS NOT ACTIVE OR DOES NOT EXIST.");
@@ -2737,7 +2928,22 @@ async function resolveVoucher(d, codeInput, user, phone, subtotalCentavos) {
     });
     if (priorOrder) throw new Error("THIS OFFER IS RESERVED FOR YOUR FIRST IPC ORDER.");
   }
-  const discountCentavos = calculateVoucherDiscount(subtotalCentavos, voucher);
+  /* eligible-products vouchers cut their discount from the covered pieces
+     only — the club can scope an offer to one drop without touching the
+     rest of the bag. The minimum spend still judges the WHOLE bag, but
+     the money off comes out of the covered pieces alone, so a fixed
+     voucher can never eat more than the pieces it covers. */
+  let discountBase = subtotalCentavos;
+  const eligible = Array.isArray(voucher.products) ? voucher.products.filter(Boolean) : null;
+  if (eligible && eligible.length) {
+    const covered = (Array.isArray(bagLines) ? bagLines : [])
+      .filter((l) => eligible.indexOf(l.productId) !== -1);
+    discountBase = covered.reduce((s, l) => s + (Number(l.priceCentavos) || 0) * (Number(l.qty) || 0), 0);
+    if (discountBase <= 0) {
+      throw new Error("THIS VOUCHER ONLY COVERS SELECTED PIECES — ADD ONE OF THEM TO YOUR BAG TO USE IT.");
+    }
+  }
+  const discountCentavos = calculateVoucherDiscount(discountBase, voucher);
   if (discountCentavos <= 0) throw new Error("THIS VOUCHER DOES NOT APPLY TO YOUR CURRENT BAG.");
   /* shipping is priced from the delivery address at order time — the
      voucher check here judges the pieces alone */
@@ -2757,8 +2963,9 @@ async function handleValidateVoucher(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     const phone = await linkAccountPhone(d, found.user, body.phone);
-    const subtotalCentavos = subtotalFromCart(body.items);
-    const result = await resolveVoucher(d, body.code, found.user, phone, subtotalCentavos);
+    const bagLines = await voucherBagLines(body.items);
+    const subtotalCentavos = bagLines.reduce((s, l) => s + l.priceCentavos * l.qty, 0);
+    const result = await resolveVoucher(d, body.code, found.user, phone, subtotalCentavos, bagLines);
     /* with the member's city + province in, the estimate carries the real
        zone rate; before that, shipping stays out of the math */
     const ship = body.city
@@ -2777,6 +2984,82 @@ async function handleValidateVoucher(req, res) {
     });
   } catch (err) {
     return fail(res, 422, "voucher_invalid", err.message || "VOUCHER COULD NOT BE APPLIED.");
+  }
+}
+
+/* MY VOUCHERS — the member's wallet. Everything the club issued to them
+   (their share code, referral credits, birthday vouchers), plus their own
+   redemption history — straight from the database, with an honest state
+   per voucher: READY, USED, EXPIRED or PAUSED. The account page renders
+   it; nothing here is invented. */
+async function handleMyVouchers(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO SEE YOUR VOUCHERS.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const u = found.user;
+    const ownedFilter = u.referralCode
+      ? { $or: [{ ownerEmail: u.email }, { code: u.referralCode, kind: "referral" }] }
+      : { ownerEmail: u.email };
+    const [owned, redeemed] = await Promise.all([
+      d.collection("vouchers").find(ownedFilter)
+        .sort({ createdAt: -1 }).limit(50).toArray(),
+      d.collection("voucherRedemptions").find({
+        $or: [{ userId: u._id }, { phone: u.phone || "___none___" }],
+      }).sort({ createdAt: -1 }).limit(20).toArray(),
+    ]);
+    const usedCodes = new Set(redeemed.map((r) => r.code));
+    const now = new Date();
+    const vouchers = owned.map((v) => {
+      let state = "available";
+      if (usedCodes.has(v.code)) state = "used";
+      else if (v.maxUses > 0 && (v.uses || 0) >= v.maxUses) state = "used";
+      else if (!v.active) state = "paused";
+      else if (v.expiresAt && now > new Date(v.expiresAt)) state = "expired";
+      const source = v.kind === "birthday" ? "BIRTHDAY VOUCHER"
+        : v.kind === "referral_credit" ? "REFERRAL CREDIT"
+        : v.kind === "referral" ? "YOUR SHARE CODE"
+        : "CLUB OFFER";
+      return {
+        code: v.code,
+        label: v.label || v.code,
+        kind: v.kind || "club",
+        type: v.type,
+        value: v.value,
+        minSubtotalCentavos: v.minSubtotalCentavos || 0,
+        maxUses: v.maxUses || 0,
+        uses: v.uses || 0,
+        active: !!v.active,
+        expiresAt: v.expiresAt || null,
+        products: Array.isArray(v.products) ? v.products : [],
+        state,
+        source,
+        createdAt: v.createdAt,
+      };
+    });
+    /* labels for the redemption history — codes the member used */
+    const codes = redeemed.map((r) => r.code);
+    const labelRows = codes.length
+      ? await d.collection("vouchers").find(
+          { code: { $in: codes } },
+          { projection: { code: 1, label: 1 } }
+        ).toArray()
+      : [];
+    const labels = {};
+    labelRows.forEach((v) => { labels[v.code] = v.label || v.code; });
+    return send(res, 200, {
+      ok: true,
+      vouchers,
+      redemptions: redeemed.map((r) => ({
+        code: r.code,
+        label: labels[r.code] || r.code,
+        orderReference: r.orderReference || null,
+        at: r.createdAt,
+      })),
+    });
+  } catch (err) {
+    return mongoError(res, err, "voucher wallet failed");
   }
 }
 
@@ -2829,6 +3112,44 @@ async function handleAdminRole(req, res) {
   }
 }
 
+/* Shared voucher-term parsing — create and edit validate the same way so
+   an offer can never exist in a shape the checkout would refuse. */
+function parseVoucherTerms(body) {
+  const type = String(body.type || "").toLowerCase();
+  const rawValue = Number(body.value);
+  const minOrderPhp = Number(body.minOrderPhp || 0);
+  const maxUses = Math.floor(Number(body.maxUses || 0));
+  if (type !== "percent" && type !== "fixed") throw new Error("CHOOSE PERCENTAGE OR FIXED AMOUNT.");
+  if (!Number.isFinite(rawValue) || rawValue <= 0 ||
+      (type === "percent" && (!Number.isInteger(rawValue) || rawValue > 100)) ||
+      (type === "fixed" && rawValue > 100000)) {
+    throw new Error("ENTER A VALID VOUCHER VALUE.");
+  }
+  if (!Number.isFinite(minOrderPhp) || minOrderPhp < 0 || minOrderPhp > 1000000 ||
+      !Number.isFinite(maxUses) || maxUses < 0 || maxUses > 1000000) {
+    throw new Error("CHECK THE MINIMUM SPEND AND USE LIMIT.");
+  }
+  /* eligible pieces — an optional scope list. Empty means the voucher
+     rides the whole catalog; a list pins it to those pieces only. */
+  const products = (Array.isArray(body.products) ? body.products : [])
+    .map((x) => String(x ?? "").trim().toUpperCase().slice(0, 80))
+    .filter((x, i, a) => x && /^[A-Z0-9][A-Z0-9_-]*$/.test(x) && a.indexOf(x) === i)
+    .slice(0, 30);
+  return {
+    type,
+    value: type === "fixed" ? Math.round(rawValue * 100) : rawValue,
+    minSubtotalCentavos: Math.round(minOrderPhp * 100),
+    maxUses,
+    products,
+  };
+}
+
+function voucherOfferLabel(type, value) {
+  return type === "percent"
+    ? value + "% OFF"
+    : "₱" + (value / 100).toFixed(2) + " OFF";
+}
+
 async function handleAdminVoucherCreate(req, res) {
   const found = await userFromReq(req).catch(() => null);
   if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
@@ -2839,29 +3160,18 @@ async function handleAdminVoucherCreate(req, res) {
   try {
     const code = normalizeVoucherCode(body.code);
     const label = String(body.label || code).trim().slice(0, 80);
-    const type = String(body.type || "").toLowerCase();
-    const rawValue = Number(body.value);
-    const minOrderPhp = Number(body.minOrderPhp || 0);
-    const maxUses = Math.floor(Number(body.maxUses || 0));
-    if (type !== "percent" && type !== "fixed") return fail(res, 422, "invalid", "CHOOSE PERCENTAGE OR FIXED AMOUNT.");
-    if (!Number.isFinite(rawValue) || rawValue <= 0 ||
-        (type === "percent" && (!Number.isInteger(rawValue) || rawValue > 100)) ||
-        (type === "fixed" && rawValue > 100000)) {
-      return fail(res, 422, "invalid", "ENTER A VALID VOUCHER VALUE.");
-    }
-    if (!Number.isFinite(minOrderPhp) || minOrderPhp < 0 || minOrderPhp > 1000000 ||
-        !Number.isFinite(maxUses) || maxUses < 0 || maxUses > 1000000) {
-      return fail(res, 422, "invalid", "CHECK THE MINIMUM SPEND AND USE LIMIT.");
-    }
+    const terms = parseVoucherTerms(body);
     const expiresAt = body.expiresAt ? new Date(String(body.expiresAt).slice(0, 10) + "T23:59:59.999") : null;
     if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
       return fail(res, 422, "invalid", "EXPIRY MUST BE A FUTURE DATE.");
     }
     const doc = {
-      code, label, type,
-      value: type === "fixed" ? Math.round(rawValue * 100) : rawValue,
-      minSubtotalCentavos: Math.round(minOrderPhp * 100),
-      maxUses,
+      code, label,
+      type: terms.type,
+      value: terms.value,
+      minSubtotalCentavos: terms.minSubtotalCentavos,
+      maxUses: terms.maxUses,
+      products: terms.products,
       uses: 0,
       firstOrderOnly: body.firstOrderOnly !== false,
       active: true,
@@ -2875,14 +3185,94 @@ async function handleAdminVoucherCreate(req, res) {
     await d.collection("vouchers").insertOne(doc);
     await logActivity(d, found.user.email, "voucher_create", "voucher", code,
       "VOUCHER " + code,
-      (type === "percent" ? value + "% OFF" : "₱" + (value / 100).toFixed(2) + " OFF") +
-        " · MAX USES " + maxUses + (expiresAt ? " · EXPIRES " + expiresAt.toISOString().slice(0, 10) : ""));
+      voucherOfferLabel(terms.type, terms.value) +
+        " · MAX USES " + terms.maxUses +
+        (terms.products.length ? " · COVERED PIECES " + terms.products.join(", ") : "") +
+        (expiresAt ? " · EXPIRES " + expiresAt.toISOString().slice(0, 10) : ""));
     return send(res, 201, { ok: true, voucher: doc });
   } catch (err) {
     if (err && err.code === 11000) return fail(res, 409, "voucher_exists", "THAT VOUCHER CODE ALREADY EXISTS.");
     return fail(res, 422, "invalid", err.message || "COULD NOT CREATE VOUCHER.");
   }
 }
+
+/* EDIT A VOUCHER — the club tunes a live offer without killing it: a new
+   label, value, window or limit rides onto the same code and the
+   redemption history stays. Engine-owned vouchers (referral and birthday
+   credits) are off-limits — their math belongs to the retention engines. */
+async function handleAdminVoucherUpdate(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  try {
+    const code = normalizeVoucherCode(body.code);
+    const terms = parseVoucherTerms(body);
+    const expiresAt = body.expiresAt ? new Date(String(body.expiresAt).slice(0, 10) + "T23:59:59.999") : null;
+    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
+      return fail(res, 422, "invalid", "EXPIRY MUST BE A FUTURE DATE — CLEAR IT TO REMOVE THE EXPIRY.");
+    }
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const v = await d.collection("vouchers").findOne({ code });
+    if (!v) return fail(res, 404, "not_found", "VOUCHER NOT FOUND.");
+    if (["referral", "referral_credit", "birthday"].includes(v.kind || "")) {
+      return fail(res, 403, "engine_voucher",
+        "REFERRAL AND BIRTHDAY VOUCHERS BELONG TO THE CLUB'S ENGINES — THEY CANNOT BE EDITED HERE.");
+    }
+    const before = {
+      label: v.label || code, type: v.type, value: v.value,
+      min: v.minSubtotalCentavos || 0, maxUses: v.maxUses || 0,
+      products: Array.isArray(v.products) ? v.products : [],
+      expires: v.expiresAt ? new Date(v.expiresAt).toISOString().slice(0, 10) : null,
+    };
+    const after = {
+      label: String(body.label || code).trim().slice(0, 80),
+      type: terms.type, value: terms.value,
+      min: terms.minSubtotalCentavos, maxUses: terms.maxUses,
+      products: terms.products,
+      expires: expiresAt ? expiresAt.toISOString().slice(0, 10) : null,
+    };
+    const deltas = [];
+    if (before.label !== after.label) deltas.push("LABEL");
+    if (before.type !== after.type || before.value !== after.value) {
+      deltas.push("OFFER " + voucherOfferLabel(before.type, before.value) + " → " + voucherOfferLabel(after.type, after.value));
+    }
+    if (before.min !== after.min) deltas.push("MIN " + pesoOf(before.min) + " → " + pesoOf(after.min));
+    if (before.maxUses !== after.maxUses) deltas.push("MAX USES " + before.maxUses + " → " + after.maxUses);
+    if (before.expires !== after.expires) deltas.push("EXPIRY " + (before.expires || "NONE") + " → " + (after.expires || "NONE"));
+    if (JSON.stringify(before.products) !== JSON.stringify(after.products)) {
+      deltas.push("COVERED PIECES " + (after.products.length ? after.products.join(", ") : "WHOLE CATALOG"));
+    }
+    const upd = await d.collection("vouchers").updateOne(
+      { code },
+      { $set: {
+        label: after.label,
+        type: terms.type,
+        value: terms.value,
+        minSubtotalCentavos: terms.minSubtotalCentavos,
+        maxUses: terms.maxUses,
+        products: terms.products,
+        firstOrderOnly: body.firstOrderOnly !== false,
+        startsAt: body.startsAt !== undefined ? (body.startsAt ? new Date(body.startsAt) : null) : v.startsAt || null,
+        expiresAt,
+        updatedAt: new Date(),
+        updatedBy: found.user.email,
+      } }
+    );
+    if (!upd.matchedCount) return fail(res, 404, "not_found", "VOUCHER NOT FOUND.");
+    await logActivity(d, found.user.email, "voucher_edit", "voucher", code,
+      "VOUCHER " + code,
+      deltas.length ? deltas.join(" · ") : "TERMS SAVED — NO CHANGE");
+    return send(res, 200, { ok: true, code, message: "VOUCHER UPDATED — THE NEXT CLAIM FOLLOWS THE NEW TERMS." });
+  } catch (err) {
+    return fail(res, 422, "invalid", err.message || "COULD NOT UPDATE VOUCHER.");
+  }
+}
+
+function pesoOf(n) { return "₱" + (Number(n) / 100).toFixed(2); }
 
 async function handleAdminVoucherToggle(req, res) {
   const found = await userFromReq(req).catch(() => null);
@@ -3107,7 +3497,7 @@ async function handleCreateOrder(req, res) {
       return fail(res, 422, "voucher_needs_account", "VOUCHERS WORK WITH A CLUB ACCOUNT — LOG IN OR CREATE ONE AND YOUR BAG COMES WITH YOU.");
     }
     if (voucherCodeInput) {
-      voucherResult = await resolveVoucher(d, voucherCodeInput, found.user, phone, subtotalCentavos);
+      voucherResult = await resolveVoucher(d, voucherCodeInput, found.user, phone, subtotalCentavos, lines);
       const v = voucherResult.voucher;
       const claimFilter = v.maxUses > 0
         ? { _id: v._id, active: true, uses: { $lt: v.maxUses } }
@@ -3797,6 +4187,85 @@ async function handleMemberRestore(req, res) {
   }
 }
 
+/* SUSPEND A MEMBER — the reversible middle step between "active" and     */
+/* "removed". A paused member keeps their account, orders and vouchers on */
+/* record, but every session dies and sign-in is refused while paused.    */
+/* The club owner account and the logged-in admin can never be paused.    */
+async function handleMemberSuspend(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+  const reason = String(body.reason ?? "").trim().slice(0, 200);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+  const root = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  if (email === "ancel.claudio1@gmail.com") return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT CAN NEVER BE SUSPENDED.");
+  if (root && email === root) return fail(res, 403, "root_admin", "THE CLUB OWNER ACCOUNT CAN NEVER BE SUSPENDED.");
+  if (email === found.user.email) return fail(res, 422, "self_suspend", "YOU CANNOT SUSPEND THE ACCOUNT YOU ARE LOGGED INTO.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const target = await d.collection("users").findOne({ email });
+    if (!target) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+    if (target.status === "removed") return fail(res, 422, "already_removed", "THAT ACCOUNT IS REMOVED — RESTORE IT FIRST IF THE CLUB WANTS IT BACK.");
+    if (target.status === "suspended") return fail(res, 422, "already_suspended", "THAT ACCOUNT IS ALREADY SUSPENDED.");
+    const now = new Date();
+    await d.collection("users").updateOne(
+      { _id: target._id },
+      { $set: {
+        status: "suspended",
+        suspendedAt: now,
+        suspendedBy: found.user.email,
+        suspensionReason: reason || "PAUSED BY " + found.user.email,
+      } }
+    );
+    await d.collection("sessions").deleteMany({ userId: target._id });
+    console.log("[ipc-pay] member suspended:", email, "by", found.user.email);
+    await logActivity(d, found.user.email, "member_suspend", "member", email, email,
+      "ACCOUNT SUSPENDED — SESSIONS SIGNED OUT, SIGN-IN PAUSED" + (reason ? " · REASON: " + reason.slice(0, 120) : ""));
+    return send(res, 200, {
+      ok: true,
+      message: "MEMBER SUSPENDED — " + email.toUpperCase() + " IS PAUSED OUT OF THE CLUB. THEIR RECORD STAYS; UNSUSPEND LETS THEM BACK IN.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "member suspension failed");
+  }
+}
+
+/* UNSUSPEND — lift the pause. The account goes straight back to active. */
+async function handleMemberUnsuspend(req, res) {
+  const found = await userFromReq(req).catch(() => null);
+  if (!found) return fail(res, 401, "unauthorized", "LOG IN TO CONTINUE.");
+  if (found.user.role !== "admin") return fail(res, 403, "forbidden", "ADMIN ONLY.");
+  const body = await readBody(req, res, 20000);
+  if (body === null) return;
+  if (body === undefined) return fail(res, 400, "bad_request", "MALFORMED REQUEST BODY.");
+  const email = String(body.email ?? "").trim().toLowerCase().slice(0, 120);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 422, "invalid", "DROP THE MEMBER'S EMAIL.");
+  try {
+    const { connect } = require("./ipc-pay/mongo");
+    const d = await connect();
+    const target = await d.collection("users").findOne({ email });
+    if (!target) return fail(res, 404, "not_found", "NO IPC ACCOUNT WITH THAT EMAIL.");
+    if (target.status !== "suspended") return fail(res, 422, "not_suspended", "THAT ACCOUNT IS NOT SUSPENDED — NOTHING TO LIFT.");
+    await d.collection("users").updateOne(
+      { _id: target._id },
+      { $set: { status: "active" }, $unset: { suspendedAt: "", suspendedBy: "", suspensionReason: "" } }
+    );
+    console.log("[ipc-pay] member unsuspended:", email, "by", found.user.email);
+    await logActivity(d, found.user.email, "member_unsuspend", "member", email, email, "SUSPENSION LIFTED — ACCOUNT BACK TO ACTIVE");
+    return send(res, 200, {
+      ok: true,
+      message: "SUSPENSION LIFTED — " + email.toUpperCase() + " CAN LOG IN AND ORDER AGAIN.",
+    });
+  } catch (err) {
+    return mongoError(res, err, "member unsuspend failed");
+  }
+}
+
 /* ADMIN PASSWORD RESET — a member forgot theirs. The club sets a fresh  */
 /* one straight from the members tab: the scrypt hash rotates, every      */
 /* session of that member dies, and the next sign-in uses the new word.   */
@@ -4288,7 +4757,7 @@ async function handle2faVerify(req, res, ip) {
     });
     if (!rec) return fail(res, 422, "invalid", "THAT LOGIN CHALLENGE EXPIRED — START AGAIN.");
     const user = await findUserById(rec.userId);
-    if (!user || user.status === "removed" || !user.twoFAEnabled || !user.twoFASecret) {
+    if (!user || user.status === "removed" || user.status === "suspended" || !user.twoFAEnabled || !user.twoFASecret) {
       return fail(res, 422, "invalid", "START THE LOGIN AGAIN.");
     }
     if (!verifyTotp(user.twoFASecret, body.code)) {
@@ -4296,6 +4765,10 @@ async function handle2faVerify(req, res, ip) {
     }
     await d.collection("twoFALogins").deleteOne({ _id: rec._id });
     const token = await createSession(user);
+    /* durable last-login stamp for the members tab */
+    try {
+      await d.collection("users").updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+    } catch { /* the login still proceeds */ }
     console.log("[ipc-auth] 2FA login ok: " + user.email);
     return send(res, 200, { ok: true, token, user: publicUser(user) });
   } catch (err) {
@@ -4423,10 +4896,15 @@ async function handleAdminReviewModerate(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     const { ObjectId } = require("mongodb");
+    const rev = await d.collection("reviews").findOne({ _id: new ObjectId(String(body.id).trim()) });
+    if (!rev) return fail(res, 404, "not_found", "NO REVIEW WITH THAT ID.");
     await d.collection("reviews").updateOne(
-      { _id: new ObjectId(String(body.id).trim()) },
+      { _id: rev._id },
       { $set: { status: action === "approve" ? "approved" : "rejected", moderatedAt: new Date(), moderatedBy: found.user.email } }
     );
+    await logActivity(d, found.user.email, "review_moderate", "review", String(body.id).trim(),
+      (rev.productId || "PIECE").toUpperCase() + " · " + (rev.displayName || "MEMBER"),
+      action === "approve" ? "REVIEW APPROVED — LIVE ON THE PIECE PAGE" : "REVIEW REJECTED — HIDDEN");
     return send(res, 200, { ok: true, message: action === "approve" ? "REVIEW IS LIVE." : "REVIEW HIDDEN." });
   } catch (err) {
     return mongoError(res, err, "moderation failed");
@@ -4480,6 +4958,9 @@ async function handleAdminStreetAdd(req, res) {
       active: true,
       createdAt: new Date(),
     });
+    await logActivity(d, found.user.email, "street_add", "street", name,
+      name.toUpperCase(),
+      "COMMUNITY POST ADDED" + (city ? " · " + city.toUpperCase() : ""));
     return send(res, 200, { ok: true, message: "ON THE STREETS — THE POST IS LIVE." });
   } catch (err) {
     return mongoError(res, err, "streets save failed");
@@ -4499,10 +4980,14 @@ async function handleAdminStreetRemove(req, res) {
     const { connect } = require("./ipc-pay/mongo");
     const d = await connect();
     const { ObjectId } = require("mongodb");
+    const post = await d.collection("streets").findOne({ _id: new ObjectId(String(body.id).trim()) });
     await d.collection("streets").updateOne(
       { _id: new ObjectId(String(body.id).trim()) },
       { $set: { active: false } }
     );
+    await logActivity(d, found.user.email, "street_remove", "street", String(body.id).trim(),
+      post && post.name ? post.name.toUpperCase() : "COMMUNITY POST",
+      "COMMUNITY POST TAKEN DOWN");
     return send(res, 200, { ok: true, message: "POST TAKEN DOWN." });
   } catch (err) {
     return mongoError(res, err, "streets removal failed");
@@ -4733,6 +5218,7 @@ async function ensureBirthdayVoucher(d, user) {
     { $set: {
       code,
       kind: "birthday",
+      ownerEmail: user.email,
       label: "BIRTHDAY VOUCHER — " + String(user.birthMonth),
       type: "fixed",
       value: 15000,
