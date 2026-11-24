@@ -414,7 +414,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v30-20261124-receipt";
+const BUILD_STAMP = "ipc-v31-20261124-audit";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -1264,13 +1264,26 @@ async function autoVerifyPayment(d, pay) {
    stays OPEN — a closed store must never be a state the shop can't
    recover from. ---------------------------------------------------- */
 let maintCache = { at: 0, state: { enabled: false, allowMembers: true, message: "" } };
+/* The wall read is bounded: if Mongo can't answer within 1.5s the gate
+   uses the last known state (default open) instead of stalling every API
+   call behind a server-selection timeout. A closed store must never be a
+   state the shop can't recover from. */
+function boundedRead(promise, ms) {
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve("timeout"), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 async function maintenanceState() {
   const now = Date.now();
   if (maintCache.state && now - maintCache.at < 10000) return maintCache.state;
   try {
-    const { connect } = require("./ipc-pay/mongo");
-    const d = await connect();
-    const cfg = await d.collection("settings").findOne({ _id: "club" });
+    const read = (async () => {
+      const { connect } = require("./ipc-pay/mongo");
+      const d = await connect();
+      return d.collection("settings").findOne({ _id: "club" });
+    })();
+    const cfg = await boundedRead(read, 1500);
+    if (cfg === "timeout") return maintCache.state; /* Mongo slow/down — last known state */
     const m = (cfg && cfg.maintenance) || {};
     maintCache = {
       at: now,
@@ -1520,7 +1533,8 @@ async function route(req, res) {
     if (p === "/api/products") {
       try {
         const { connect } = require("./ipc-pay/mongo");
-        const d = await connect();
+        const d = await boundedRead(connect(), 1500);
+        if (d === "timeout") throw new Error("mongo_slow");
         const docs = await d.collection("products")
           .find({ active: { $ne: false } })
           .sort({ createdAt: -1 }).limit(200).toArray();
@@ -4035,7 +4049,8 @@ async function handleReviewsGet(req, res, p) {
   if (!productId) return fail(res, 422, "invalid", "MISSING productId.");
   try {
     const { connect } = require("./ipc-pay/mongo");
-    const d = await connect();
+    const d = await boundedRead(connect(), 1500);
+    if (d === "timeout") throw new Error("mongo_slow");
     const rows = await d.collection("reviews").find({ productId, status: "approved" })
       .sort({ createdAt: -1 }).limit(50).toArray();
     const agg = await d.collection("reviews").aggregate([
@@ -4161,7 +4176,8 @@ async function handleAdminReviewModerate(req, res) {
 async function handleStreetsGet(req, res) {
   try {
     const { connect } = require("./ipc-pay/mongo");
-    const d = await connect();
+    const d = await boundedRead(connect(), 1500);
+    if (d === "timeout") throw new Error("mongo_slow");
     const rows = await d.collection("streets").find({ active: { $ne: false } })
       .sort({ createdAt: -1 }).limit(24).toArray();
     return send(res, 200, {
@@ -4287,7 +4303,8 @@ async function handleConfigGet(req, res) {
   let maintenance = { enabled: false, allowMembers: true, message: "" };
   try {
     const { connect } = require("./ipc-pay/mongo");
-    const d = await connect();
+    const d = await boundedRead(connect(), 1500);
+    if (d === "timeout") throw new Error("mongo_slow");
     const cfg = await d.collection("settings").findOne({ _id: "club" });
     if (cfg && Number(cfg.usdPhpRate) > 0) usdPhpRate = Number(cfg.usdPhpRate);
     const m = (cfg && cfg.maintenance) || {};

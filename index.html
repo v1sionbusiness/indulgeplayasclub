@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-23 — v26 shipping rates · unique tracking · polish pass -->
+<!-- IPC BUILD 2026-11-24 — v31 audit pass: bounded mongo reads · rejected pay step · regression sweeps green -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -395,6 +395,9 @@ textarea.inp{min-height:110px;resize:vertical}
 .tr-step.paid{background:var(--white)}
 .tr-step.paid .tr-v{color:var(--black);font-weight:700}
 .tr-step.paid .tr-k{color:rgba(0,0,0,.55)}
+.tr-step.rejected{background:#f6e8e6}
+.tr-step.rejected .tr-v{color:#8c2f26;font-weight:700}
+.tr-step.rejected .tr-k{color:rgba(140,47,38,.65)}
 .pay-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:56px;align-items:start}
 .pay-panel{border:1px solid var(--line);background:var(--panel);padding:28px;position:sticky;top:100px}
 .qr-panel{background:var(--white);padding:18px;display:flex;align-items:center;justify-content:center}
@@ -2823,7 +2826,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v30-20261124-receipt';
+  var IPC_BUILD = 'ipc-v31-20261124-audit';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -4374,11 +4377,11 @@ img.tc-true{filter:none !important}
 
     /* tracker */
     var steps = $$('#poTracker .tr-step');
-    steps.forEach(function (s) { s.classList.remove('done', 'now', 'paid'); });
+    steps.forEach(function (s) { s.classList.remove('done', 'now', 'paid', 'rejected'); });
     if (pay.status === 'pending') { steps[0].classList.add('now'); }
     else if (pay.status === 'under_verification') { steps[0].classList.add('done'); steps[1].classList.add('now'); }
     else if (pay.status === 'paid') { steps.forEach(function (s) { s.classList.add('paid'); }); }
-    else if (pay.status === 'failed') { steps[0].classList.add('done'); steps[1].classList.add('now'); }
+    else if (pay.status === 'failed') { steps[0].classList.add('done'); steps[1].classList.add('now', 'rejected'); }
 
     var headline = $('#poHeadline');
     var copy = $('#poStatusCopy');
