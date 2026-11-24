@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- IPC BUILD 2026-11-24 — v31 audit pass: bounded mongo reads · rejected pay step · regression sweeps green -->
+<!-- IPC BUILD 2026-11-24 — v34 pay forensics: the auto reader now fingerprints proofs, flags edited screenshots, reads labeled amounts, and never overrides the club -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>INDULGE PLAYAS CLUB — Local Clothing Brand from the Philippines</title>
@@ -577,6 +577,22 @@ textarea.inp{min-height:110px;resize:vertical}
 .pc-ref{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em}
 .pc-meta{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;line-height:2}
 .pc-items{margin:14px 0;border-top:1px dashed var(--line);padding-top:10px}
+/* IPC PAY READ — the machine's verdict on a payment proof */
+.fx-panel{margin:14px 0 0;border:1px solid var(--line);border-left:3px solid var(--faint);background:var(--panel-2);padding:12px 14px}
+.fx-panel.fx-pass{border-left-color:var(--white)}
+.fx-panel.fx-review{border-left-color:var(--faint)}
+.fx-panel.fx-flagged{border-left-color:#e0392b}
+.fx-verdict{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px;color:var(--text)}
+.fx-gate{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);line-height:1.9}
+.fx-gate b{color:var(--text)}
+.fx-sig{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;line-height:1.8;margin-top:6px;display:flex;gap:10px;align-items:baseline}
+.fx-tag{flex:0 0 auto;border:1px solid var(--line-2);padding:1px 8px;font-size:9px;letter-spacing:.16em;color:var(--faint)}
+.fx-sig.sev-medium .fx-tag{border-color:var(--faint);color:var(--text)}
+.fx-sig.sev-high .fx-tag,.fx-sig.sev-critical .fx-tag{border-color:#e0392b;color:#e0392b}
+.fx-meta{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-top:10px;line-height:1.9}
+.fx-pending{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-top:12px}
+.fx-pending::after{content:'…';animation:fxblink 1.4s steps(3) infinite}
+@keyframes fxblink{50%{opacity:.2}}
 .pc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 .adm-table{width:100%;border:1px solid var(--line);border-collapse:collapse;font-size:13px}
 .adm-table th{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;text-align:left;padding:12px 14px;border-bottom:1px solid var(--line-2);background:var(--panel)}
@@ -2924,7 +2940,7 @@ img.tc-true{filter:none !important}
      differs from this one, the app refreshes itself so every visitor is
      always on the build the club shipped. Bump BOTH stamps together —
      this one and BUILD_STAMP in server.js. ---- */
-  var IPC_BUILD = 'ipc-v33-20261124-ui-cleanup';
+  var IPC_BUILD = 'ipc-v34-20261124-pay-forensics';
   IPC.BUILD = IPC_BUILD;
   var __ipcReloadGuard = 0;
   function __ipcBuildCheck() {
@@ -4841,6 +4857,44 @@ img.tc-true{filter:none !important}
     if (s.indexOf('@') >= 0 || s.indexOf('ADMIN:') === 0 || s === 'IPC PAY AUTO READER' || s === 'MAYA WEBHOOK') return 'IPC TEAM';
     return by;
   };
+  /* IPC PAY READ — the machine's verdict card on a proof. Every gate and
+     every forensic signal is shown straight; the club still makes the call. */
+  IPC.fxHTML = function (p) {
+    var a = p.autoRead;
+    if (!a) {
+      if (!p.proofDataUrl) return '';
+      return p.status === 'under_verification'
+        ? '<p class="fx-pending">IPC PAY IS READING THIS SCREENSHOT — VERDICT LANDS HERE</p>'
+        : '';
+    }
+    var sevRank = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
+    var sigs = (a.signals || []).slice().sort(function (x, y) { return (sevRank[y.severity] || 0) - (sevRank[x.severity] || 0); });
+    var top = sigs.length && sevRank[sigs[0].severity] >= 2 ? sigs[0] : null;
+    var cls = a.pass ? ' fx-pass' : (top ? ' fx-flagged' : ' fx-review');
+    var verdict = a.pass ? 'IPC PAY READ — CLEAN, AUTO-VERIFIED'
+      : (top ? 'IPC PAY READ — FLAGGED, DECIDE BY HAND'
+             : 'IPC PAY READ — NOT CONVINCED, YOUR CALL');
+    var check = function (ok, word) { return '<b>' + (ok ? word + ' ✓' : word + ' ✗') + '</b>'; };
+    var gates = check(a.mayaOk, 'MAYA MARKER') + ' — ' + check(a.refOk, 'REFERENCE' + (a.refFuzzy ? ' (OCR-FOLDED)' : '')) + ' — ' + check(a.amountOk, 'AMOUNT');
+    if (a.amountReadCentavos && !a.amountOk) {
+      gates += '<br />MACHINE READ ' + IPC.fmtP(a.amountReadCentavos) + ' VS ORDER ' + IPC.fmtP(p.amountCentavos) + (a.amountSource ? ' (' + a.amountSource.toUpperCase() + ')' : '');
+    }
+    var f = a.forensics || {};
+    var meta = [];
+    if (f.format) meta.push(f.format.toUpperCase() + (f.width ? ' · ' + f.width + '×' + f.height : ''));
+    if (f.editor) meta.push('EDITOR SIGNATURE: ' + f.editor.toUpperCase());
+    if (f.ela && f.ela.verdict) meta.push('SPLICE SCAN: ' + f.ela.verdict.toUpperCase() + (f.ela.ratio ? ' (RATIO ' + f.ela.ratio + ')' : ''));
+    if (f.reuse) meta.push('FINGERPRINT ' + (f.hashShort || '…') + (f.reuse === 'paid_elsewhere' ? ' — ALREADY PAID ANOTHER ORDER' : f.reuse === 'pending_elsewhere' ? ' — ON ANOTHER OPEN ORDER' : ' — UNIQUE'));
+    if (a.ocrPasses) meta.push('OCR PASSES: ' + a.ocrPasses + (a.prepPass ? ' (CLEANED COPY)' : ''));
+    return '<div class="fx-panel' + cls + '">' +
+      '<p class="fx-verdict">' + verdict + '</p>' +
+      '<p class="fx-gate">' + gates + '</p>' +
+      sigs.map(function (s) {
+        return '<p class="fx-sig sev-' + s.severity + '"><span class="fx-tag">' + s.severity.toUpperCase() + '</span><span>' + IPC.esc(s.label) + '</span></p>';
+      }).join('') +
+      (meta.length ? '<p class="fx-meta">' + meta.join('<br />') + '</p>' : '') +
+    '</div>';
+  };
   function payCardHTML(p) {
     var ord = p.order || {};
     var decided = p.status === 'paid' || p.status === 'failed';
@@ -4857,6 +4911,7 @@ img.tc-true{filter:none !important}
         '<div class="pc-items">' + (ord.items || []).map(function (it) {
           return '<p class="co-line"><span>' + IPC.esc(it.name) + ' · ' + IPC.esc(it.size) + ' × ' + it.qty + '</span><span>' + IPC.fmtP(it.priceCentavos * it.qty) + '</span></p>';
         }).join('') + '</div>' +
+        IPC.fxHTML(p) +
         (decided ? '' :
           '<div class="pc-actions">' +
             '<button type="button" class="btn-w btn-sm" data-decide="approve" data-pay="' + IPC.esc(p.paymentReference) + '">APPROVE — MARK PAID</button>' +

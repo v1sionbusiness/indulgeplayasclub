@@ -75,6 +75,9 @@ const {
   calculateVoucherDiscount,
 } = require("./ipc-pay/promotions");
 
+/* The tamper reader — fingerprints, editor signatures, splice analysis. */
+const forensics = require("./ipc-pay/forensics");
+
 const PORT = process.env.PORT || 3000;
 const EMAILJS_URL = "https://api.emailjs.com/api/v1.0/email/send";
 
@@ -415,7 +418,7 @@ const INDEX_FILE = path.join(__dirname, "index.html");
    pings /api/ipc-pay/health when its tab wakes up and reloads itself when
    this stamp changes — so no visitor can stay stuck on a stale build
    (e.g. an old login screen) after a deploy. Bump BOTH on every release. */
-const BUILD_STAMP = "ipc-v33-20261124-ui-cleanup";
+const BUILD_STAMP = "ipc-v34-20261124-pay-forensics";
 const HEALTH = { ok: true, service: "indulge playas club — contact api", build: BUILD_STAMP };
 
 /* ---- product share cards: /p/<id> unfurls with real product meta ---- */
@@ -990,7 +993,13 @@ function paymentView(p, order, includeProof) {
     /* customers read "IPC TEAM" — the reviewer's email stays admin-only */
     reviewedBy: includeProof ? (p.reviewedBy || null) : (p.reviewedBy ? "IPC TEAM" : null),
   };
-  if (includeProof) out.proofDataUrl = p.proofDataUrl || null;
+  if (includeProof) {
+    out.proofDataUrl = p.proofDataUrl || null;
+    /* the machine's full read — verdict, forensic signals and all — is
+       admin-only. Customer views never receive it. */
+    out.autoRead = p.autoRead || null;
+    out.proofHash = p.proofHash || null;
+  }
   else out.proofPresent = Boolean(p.proofDataUrl);
   if (order) {
     out.order = {
@@ -1117,17 +1126,32 @@ async function ensureTracking(d, orderReference, source) {
   console.log("[ipc-pay] tracking opened for " + orderReference + " — " + number);
 }
 
-/** IPC PAY AUTO READER — actually READS the screenshot a member submits.
-    A proof is only auto-approved when the OCR finds ALL THREE of:
+/** IPC PAY AUTO READER — reads the screenshot a member submits AND
+    reads the screenshot itself. Two layers now:
+
+    LAYER 1 — WHAT IT SAYS (OCR gates, all must hold to auto-approve):
       (1) a Maya/PayMaya marker in the screenshot,
-      (2) the exact order amount as a money figure,
-      (3) the Maya transaction reference the member typed in.
-    Anything else stays UNDER VERIFICATION for a human decision — a blurry
-    screenshot can never fail a customer, and a wrong screenshot can never
-    pass one. Reference-only claims never enter this path. The CAS guard
-    means the reader can never override an admin decision that lands
-    meanwhile. Runs in the background; on any error the payment simply
-    stays under_verification for manual review. */
+      (2) the exact order amount as a money figure (labeled line first),
+      (3) the Maya transaction reference the member typed in — with
+          OCR-confusion folding (O/0, I/1, S/5, B/8, Z/2) so an honest
+          screenshot is not failed over a misread character.
+      A blurry read gets a SECOND PASS on a cleaned copy of the image
+      (grayscale-stretched, 2x upscaled) before giving up.
+
+    LAYER 2 — IS IT HONEST (ipc-pay/forensics.js):
+      proof fingerprint reuse across orders, photo-editor signatures,
+      error-level splice analysis, and PNG metadata reads. ANY medium+
+      forensic signal blocks the auto decision — the payment stays
+      UNDER VERIFICATION for a human with the reasons pinned on the
+      admin card. A blurry screenshot can never fail a customer, and
+      an edited one can never breeze past the club.
+
+    The reader runs in the background and NEVER rejects by itself.
+    The CAS guard means it can never override an admin decision that
+    lands meanwhile. The full read (autoRead) is persisted even when
+    the auto switch is OFF — the club sees the machine's reading on
+    every manual review too. On any error the payment simply stays
+    under_verification for manual review. */
 let __ocrWorker = null;
 async function getOcrWorker() {
   if (__ocrWorker) return __ocrWorker;
@@ -1136,63 +1160,120 @@ async function getOcrWorker() {
   return __ocrWorker;
 }
 
-/** OCR + strict gates. Never throws: { pass:false, reason } on any problem. */
-async function readMayaProof(payment) {
-  const summary = { pass: false, mayaOk: false, refOk: false, amountOk: false,
-                    nameOk: false, ocrChars: 0, reason: "" };
+/** One OCR pass with a hard timeout — a slow reader falls back. */
+async function ocrPass(buf, ms) {
+  const work = (async () => {
+    const worker = await getOcrWorker();
+    const { data } = await worker.recognize(buf);
+    return String((data && data.text) || "");
+  })();
+  return Promise.race([
+    work,
+    new Promise((resolve, reject) => setTimeout(() => reject(new Error("ocr timeout")), ms)),
+  ]);
+}
+
+/** OCR + gates + forensics. Never throws: { pass:false, reason } on any problem. */
+async function readMayaProof(payment, d) {
+  const summary = {
+    pass: false, mayaOk: false, refOk: false, amountOk: false, nameOk: false,
+    cleanOk: true, ocrChars: 0, ocrPasses: 0, prepPass: false,
+    refFuzzy: false, amountReadCentavos: null, amountSource: null,
+    verdict: "NEEDS_REVIEW", signals: [], forensics: null, reason: "",
+  };
   try {
     const m = String(payment.proofDataUrl || "").match(/^data:image\/(?:jpeg|jpg|png);base64,([A-Za-z0-9+\/=\s]+)$/);
     if (!m) { summary.reason = "no readable image"; return summary; }
     const buf = Buffer.from(m[1], "base64");
     if (buf.length < 2048) { summary.reason = "image too small to read"; return summary; }
 
-    /* OCR with a hard timeout — a slow reader falls back to manual review */
-    const work = (async () => {
-      try {
-        const worker = await getOcrWorker();
-        const { data } = await worker.recognize(buf);
-        return String((data && data.text) || "");
-      } catch (err) {
-        try { if (__ocrWorker) await __ocrWorker.terminate(); } catch (e) {}
-        __ocrWorker = null;
-        throw err;
-      }
-    })();
-    const text = await Promise.race([
-      work,
-      new Promise((resolve, reject) => setTimeout(() => reject(new Error("ocr timeout")), 45000)),
-    ]).catch((err) => { summary.reason = "ocr unavailable: " + (err && err.message); return null; });
-    if (text === null) return summary;
-
-    const norm = text.toUpperCase().replace(/\s+/g, " ");
-    summary.ocrChars = norm.length;
-
-    /* gate 1 — it has to be a Maya screenshot at all */
-    summary.mayaOk = /MAYA|PAYMAYA/.test(norm);
-
-    /* gate 2 — the submitted reference must appear in the screenshot */
-    const refNorm = String(payment.refNo || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const textNorm = norm.replace(/[^A-Z0-9]/g, "");
-    summary.refOk = refNorm.length >= 4 && textNorm.indexOf(refNorm) >= 0;
-
-    /* gate 3 — the exact order amount must appear as a money figure
-       (handles 1250.00 / 1,250.00 / P1250 / PHP 1,250.00 forms) */
-    const target = Math.round(Number(payment.amountCentavos) || 0);
-    if (target > 0) {
-      const tokens = norm.match(/(?:\u20b1|PHP|P)?\s?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?/g) || [];
-      for (const t of tokens) {
-        const cents = Math.round(parseFloat(t.replace(/[^0-9.]/g, "")) * 100) || 0;
-        if (cents === target) { summary.amountOk = true; break; }
-      }
+    /* LAYER 2 first — the fingerprint and metadata reads are cheap and
+       deterministic; they gate the decision before OCR even runs. */
+    let scan = null;
+    try {
+      scan = forensics.scanProofImage(buf);
+      const reuse = await forensics.findProofReuse(d, payment._id, scan.hash);
+      summary.forensics = {
+        hashShort: scan.hashShort, format: scan.format,
+        width: scan.width, height: scan.height,
+        editor: scan.editor || null,
+        ela: scan.ela && scan.ela.verdict ? { verdict: scan.ela.verdict, ratio: scan.ela.ratio || null, hotBlocks: scan.ela.hotBlocks || 0, hotArea: scan.ela.hotArea || null, reason: scan.ela.reason || null } : null,
+        reuse,
+        notes: (scan.notes || []).slice(0, 4),
+      };
+      summary.signals = forensics.forensicSignals(scan, reuse);
+      summary.cleanOk = !summary.signals.some((s) => forensics.SEVERITY[s.severity] >= forensics.SEVERITY.medium);
+    } catch (err) {
+      summary.forensics = { reuse: "unknown", notes: ["forensic scan error: " + (err && err.message)] };
     }
 
-    /* extra signal for the admins — the account holder name on the QR */
-    summary.nameOk = /CLAUDIO|ANCEL JAMES/.test(norm);
+    /* LAYER 1 — OCR, pass 1 on the original, pass 2 on the cleaned copy */
+    const evaluate = (text) => {
+      const norm = String(text || "").toUpperCase().replace(/\s+/g, " ");
+      const ev = { ocrChars: norm.length, mayaOk: false, refOk: false, amountOk: false, nameOk: false, refFuzzy: false, amountReadCentavos: null, amountSource: null };
+      /* gate 1 — it has to be a Maya screenshot at all */
+      ev.mayaOk = /MAYA|PAYMAYA/.test(norm);
+      /* gate 2 — the submitted reference must appear in the screenshot
+         (exact first, then under OCR confusions, then inside long digit runs) */
+      const ref = forensics.refMatchesOCR(payment.refNo, norm);
+      ev.refOk = ref.found; ev.refFuzzy = ref.fuzzy;
+      /* gate 3 — the exact order amount must appear as a money figure.
+         The labeled line ("AMOUNT / TOTAL / PRICE") is read first; the
+         whole image is scanned as the fallback. */
+      const target = Math.round(Number(payment.amountCentavos) || 0);
+      if (target > 0) {
+        const labeled = forensics.labeledAmount(norm);
+        if (labeled && labeled.cents === target) {
+          ev.amountOk = true;
+          ev.amountReadCentavos = labeled.cents;
+          ev.amountSource = "labeled-line";
+        } else {
+          const toks = forensics.extractMoneyTokens(norm);
+          for (const t of toks) {
+            if (t.cents === target) { ev.amountOk = true; ev.amountReadCentavos = t.cents; ev.amountSource = "full-scan"; break; }
+          }
+          if (!ev.amountOk && labeled) ev.amountReadCentavos = labeled.cents;
+        }
+      }
+      /* extra signal for the admins — the account holder name on the QR */
+      ev.nameOk = /CLAUDIO|ANCEL JAMES/.test(norm);
+      return ev;
+    };
 
-    summary.pass = summary.mayaOk && summary.refOk && summary.amountOk;
+    let ev = null;
+    try {
+      const t1 = await ocrPass(buf, 45000);
+      ev = evaluate(t1);
+      summary.ocrPasses = 1;
+      if (!ev.mayaOk || !ev.refOk || !ev.amountOk) {
+        const fmt = summary.forensics && summary.forensics.format;
+        const prep = fmt === "unknown" ? null : forensics.preprocessForOCR(buf, fmt);
+        if (prep) {
+          const t2 = await ocrPass(prep.buffer, 30000);
+          const ev2 = evaluate(t2);
+          summary.ocrPasses = 2;
+          summary.prepPass = true;
+          const score = (e) => (e.mayaOk ? 4 : 0) + (e.refOk ? 2 : 0) + (e.amountOk ? 1 : 0) + (e.nameOk ? 1 : 0);
+          if (score(ev2) > score(ev)) ev = ev2;
+        }
+      }
+      summary.ocrChars = ev.ocrChars;
+      summary.mayaOk = ev.mayaOk; summary.refOk = ev.refOk; summary.amountOk = ev.amountOk;
+      summary.nameOk = ev.nameOk; summary.refFuzzy = ev.refFuzzy;
+      summary.amountReadCentavos = ev.amountReadCentavos; summary.amountSource = ev.amountSource;
+    } catch (err) {
+      summary.reason = "ocr unavailable: " + (err && err.message);
+    }
+
+    summary.pass = Boolean(summary.mayaOk && summary.refOk && summary.amountOk && summary.cleanOk);
+    summary.verdict = summary.pass ? "AUTO_VERIFIED" : "NEEDS_REVIEW";
     if (!summary.pass && !summary.reason) {
-      summary.reason = "mismatch: maya=" + summary.mayaOk + " ref=" + summary.refOk +
-                       " amount=" + summary.amountOk;
+      const failing = [];
+      if (!summary.mayaOk) failing.push("maya-marker");
+      if (!summary.refOk) failing.push("reference");
+      if (!summary.amountOk) failing.push("amount");
+      if (!summary.cleanOk) failing.push("forensics(" + summary.signals.filter((s) => forensics.SEVERITY[s.severity] >= forensics.SEVERITY.medium).map((s) => s.code).join(",") + ")");
+      summary.reason = "mismatch: " + failing.join(", ");
     }
     return summary;
   } catch (err) {
@@ -1203,24 +1284,32 @@ async function readMayaProof(payment) {
 
 async function autoVerifyPayment(d, pay) {
   try {
-    const settings = await getPaySettings(d);
-    if (!settings.autoVerify) return false;
-
     /* fresh read — the payment may already have been decided by an admin */
     const fresh = await d.collection("payments").findOne({ _id: pay._id });
-    if (!fresh || fresh.status !== "under_verification" || !fresh.proofDataUrl || !fresh.refNo) return false;
+    if (!fresh || !fresh.proofDataUrl || !fresh.refNo) return false;
 
-    /* READ the screenshot — every gate must hold before anything is marked */
-    const read = await readMayaProof(fresh);
+    /* READ the screenshot — the full read is persisted on EVERY proof
+       (even with the auto switch off, so the club sees the machine's
+       reading during manual reviews). */
+    const read = await readMayaProof(fresh, d);
     console.log("[ipc-pay] AUTO READER read " + fresh.paymentReference +
       " — pass=" + read.pass + " maya=" + read.mayaOk + " ref=" + read.refOk +
-      " amount=" + read.amountOk + " name=" + read.nameOk +
+      (read.refFuzzy ? "(fuzzy)" : "") + " amount=" + read.amountOk +
+      " clean=" + read.cleanOk + " passes=" + read.ocrPasses +
+      " verdict=" + read.verdict +
+      (read.forensics && read.forensics.reuse && read.forensics.reuse !== "none"
+        ? " REUSE=" + read.forensics.reuse : "") +
+      (read.forensics && read.forensics.editor ? " EDITOR=" + read.forensics.editor : "") +
       (read.reason ? " (" + read.reason + ")" : ""));
     await d.collection("payments").updateOne(
       { _id: fresh._id },
       { $set: { autoRead: { ...read, at: new Date() } } }
     ).catch(() => {});
-    if (!read.pass) return false;   /* stays UNDER VERIFICATION for a human */
+
+    const settings = await getPaySettings(d);
+    if (!settings.autoVerify) return false;   /* read recorded, human decides */
+    if (fresh.status !== "under_verification") return false;
+    if (!read.pass) return false;             /* stays UNDER VERIFICATION for a human */
 
     /* compare-and-set — never overrides an admin decision that landed meanwhile */
     const now = new Date();
@@ -3057,6 +3146,9 @@ async function handleProof(req, res) {
       return fail(res, 429, "proof_cap",
         "THIS ORDER HAS HIT ITS PROOF LIMIT — CONTACT THE CLUB AND WE'LL SORT IT OUT.");
     }
+    const proofHash = decoded
+      ? require("node:crypto").createHash("sha256").update(decoded).digest("hex")
+      : null;
     const proofUpdate = await d.collection("payments").updateOne(
       { _id: pay._id, status: { $nin: ["paid", "failed"] } },
       {
@@ -3065,8 +3157,11 @@ async function handleProof(req, res) {
           status: "under_verification",
           updatedAt: now,
           proofSubmittedAt: now,
-          ...(decoded ? { proofDataUrl: `data:${proofMime};base64,${decoded.toString("base64")}` } : {}),
+          ...(decoded ? { proofDataUrl: `data:${proofMime};base64,${decoded.toString("base64")}`, proofHash, proofMeta: { mime: proofMime, bytes: decoded.length } } : {}),
         },
+        /* a fresh screenshot wipes the previous machine read — the admin
+           card must never show a verdict for a proof that is gone */
+        $unset: { autoRead: "" },
         $inc: { proofSubmissions: 1 },
       }
     );
@@ -3108,6 +3203,19 @@ async function handleProof(req, res) {
 /* --------------------------------------------------------------- */
 /* ADMIN DECISION — the ONLY path that can mark a payment paid.     */
 /* --------------------------------------------------------------- */
+
+/* The machine's reading, in one short note, appended to the activity
+   log whenever a human decides — so the record shows what IPC Pay saw
+   before the call was made. */
+function readNote(pay) {
+  const a = pay && pay.autoRead;
+  if (!a) return "";
+  const top = Array.isArray(a.signals) && a.signals.length
+    ? a.signals.find((s) => forensics.SEVERITY[s.severity] >= forensics.SEVERITY.medium)
+    : null;
+  return " — IPC PAY READ: " + (a.verdict || (a.pass ? "CLEAN" : "NEEDS_REVIEW")) +
+    (top ? " (" + top.code.toUpperCase() + ")" : "");
+}
 
 async function handleDecision(req, res) {
   const found = await userFromReq(req).catch(() => null);
@@ -3163,8 +3271,8 @@ async function handleDecision(req, res) {
     );
     await logActivity(d, found.user.email, "order_status", "order", pay.orderReference,
       "ORDER " + pay.orderReference,
-      action === "approve" ? "PAYMENT " + paymentId + " VERIFIED — ORDER MARKED PAID (₱" + ((pay.amountCentavos || 0) / 100).toFixed(2) + ")"
-        : "PAYMENT " + paymentId + " REJECTED — ORDER MARKED " + newStatus.toUpperCase());
+      action === "approve" ? "PAYMENT " + paymentId + " VERIFIED — ORDER MARKED PAID (₱" + ((pay.amountCentavos || 0) / 100).toFixed(2) + ")" + readNote(pay)
+        : "PAYMENT " + paymentId + " REJECTED — ORDER MARKED " + newStatus.toUpperCase() + readNote(pay));
     if (action === "approve") {
       await ensureTracking(d, pay.orderReference, "IPC TEAM");
       await creditReferralIfAny(d, pay.orderReference);
